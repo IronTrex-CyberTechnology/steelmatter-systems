@@ -14,8 +14,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/db"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/dbtest"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/dbtest"
 )
 
 const insufficientPrivilege = "42501"

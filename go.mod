@@ -1,4 +1,4 @@
-module github.com/IronTrex-CyberTechnology/Steelmatter
+module github.com/IronTrex-CyberTechnology/steelmatter-systems
 
 go 1.27
 

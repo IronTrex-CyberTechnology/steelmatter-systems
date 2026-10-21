@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/failpoint"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/failpoint"
 )
 
 // Simulation answers what evaluate would do now (document 03). Its capacity

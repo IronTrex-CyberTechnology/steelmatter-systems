@@ -1,4 +1,4 @@
-# Steelmatter
+# Steelmatter Systems R0
 
 Steelmatter is an IronTrex CyberTechnology project. IronTrex builds action-trust technology for people, financial institutions and autonomous systems. This R0 source preview demonstrates bounded authority for a machine-initiated purchase order, exact-action admission and verifiable evidence in a local synthetic workflow. It is a developer reference, not a production deployment.
 

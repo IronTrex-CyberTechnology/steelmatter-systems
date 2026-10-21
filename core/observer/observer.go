@@ -25,7 +25,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/contract"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract"
 )
 
 // Observer reads with the observer role and signs with the observation key.

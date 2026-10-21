@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/examples/procurement"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/examples/procurement"
 )
 
 const accountingFixture = "../../fixtures/accounting/invoice-payment-v1.json"

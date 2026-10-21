@@ -8,9 +8,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/auth"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/contract"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/failpoint"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/auth"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/failpoint"
 )
 
 // EvaluateResult is either a permit (Decision PERMIT_ISSUED) or a policy

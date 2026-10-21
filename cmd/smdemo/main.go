@@ -23,8 +23,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/auth"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/examples/procurement"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/auth"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/examples/procurement"
 )
 
 const tenant = "synthetic-org"

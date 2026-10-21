@@ -10,7 +10,7 @@ import (
 
 	jose "github.com/go-jose/go-jose/v4"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/keys"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys"
 )
 
 // Signed payload kinds and their JWS typ values. Actions are digested and

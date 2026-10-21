@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/examples/procurement"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/examples/procurement"
 )
 
 // T43: the pinned demo results (fixtures/demo/reference-results-v1.json) must

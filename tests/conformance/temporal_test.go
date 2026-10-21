@@ -9,8 +9,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/contract"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/keys"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys"
 )
 
 // ADR-003 parity: Go reports exactly the fixture's broken time checks for

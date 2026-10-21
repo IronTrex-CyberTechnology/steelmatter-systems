@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/dbtest"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/dbtest"
 )
 
 const (

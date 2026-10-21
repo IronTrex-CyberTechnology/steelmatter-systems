@@ -18,9 +18,9 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/api"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/contract"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/httpapi"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/api"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/httpapi"
 )
 
 type doc = map[string]any

@@ -10,7 +10,7 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/schemas"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/schemas"
 )
 
 // Kind names one of the five payload types.
