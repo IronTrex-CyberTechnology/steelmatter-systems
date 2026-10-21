@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/contract"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract"
 )
 
 // ADR-003 / F-11: a validly signed observation dated before the execution it

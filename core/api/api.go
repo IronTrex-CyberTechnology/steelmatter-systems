@@ -19,10 +19,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/auth"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/contract"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/engine"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/httpapi"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/auth"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/engine"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/httpapi"
 )
 
 // Options configures the product endpoints.

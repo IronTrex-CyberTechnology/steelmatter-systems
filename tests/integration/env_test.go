@@ -18,14 +18,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/api"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/auth"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/contract"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/dbtest"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/engine"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/keys"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/observer"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/server"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/api"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/auth"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/dbtest"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/engine"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/observer"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/server"
 )
 
 const (

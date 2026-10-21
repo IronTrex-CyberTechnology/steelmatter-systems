@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/keys"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys"
 )
 
 func requireCode(t *testing.T, err *Error, want Code) {

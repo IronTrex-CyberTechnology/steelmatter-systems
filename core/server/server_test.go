@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/httpapi"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/httpapi"
 )
 
 type fakePinger struct{ err error }

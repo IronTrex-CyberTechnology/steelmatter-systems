@@ -11,52 +11,52 @@
       "required_tests": [
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenRequiredTestOmitted"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenAnyTestSkipped"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenRequiredPhaseMissing"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/keys",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys",
           "test": "TestProvisionWritesOwnerOnlyPrivateKeyAndPublicTrustEntry"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/server",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/server",
           "test": "TestReadyFailsClosedWhenDatabaseUnavailable"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessMigrationsApplyOnceAndAreIdempotent"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessPoolsUseDistinctRoles"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessExecutorCannotRunDDLOrReadMigrationHistory"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessObserverIsReadOnly"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessLoginRolesCannotConnectToOtherTestDatabases"
         }
       ],
@@ -73,202 +73,202 @@
       "required_tests": [
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenRequiredTestOmitted"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenAnyTestSkipped"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenRequiredPhaseMissing"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/keys",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys",
           "test": "TestProvisionWritesOwnerOnlyPrivateKeyAndPublicTrustEntry"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/server",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/server",
           "test": "TestReadyFailsClosedWhenDatabaseUnavailable"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessMigrationsApplyOnceAndAreIdempotent"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessPoolsUseDistinctRoles"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessExecutorCannotRunDDLOrReadMigrationHistory"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessObserverIsReadOnly"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessLoginRolesCannotConnectToOtherTestDatabases"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestParseStrictRejections"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestValidateRejections"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestSignVerifyRoundTrip"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestVerifyRejectsWrongKindAndPurpose"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestProposalOrderDoesNotChangeDigest"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPIEndpointsMatchDocument03"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPIErrorCodesEqualCatalogue"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPISchemasAreClosed"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPIReferencesResolve"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPIRequestsExcludeServerOwnedFields"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestCatalogueCoversEveryContractCode"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeRevocationBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAdmissionBeforeRevocation"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeCleanupBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAdmissionBeforeCleanup"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeExpiryAfterLockWait"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAmendmentBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAdmissionBeforeAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeLateSignatureAfterAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeSignatureBeforeAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeConcurrentReservations"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeConstraintsRejectInvariantBreaks"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeRolePrivileges"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceCanonicalVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformancePayloadNegativeVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceJWSPositiveVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceJWSNegativeVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformancePacketNegativeCases"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceVerifierSchemasMatchEngine"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceCrossRuntimeFreshSignatures"
         },
         {
@@ -300,202 +300,202 @@
       "required_tests": [
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenRequiredTestOmitted"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenAnyTestSkipped"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenRequiredPhaseMissing"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/keys",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys",
           "test": "TestProvisionWritesOwnerOnlyPrivateKeyAndPublicTrustEntry"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/server",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/server",
           "test": "TestReadyFailsClosedWhenDatabaseUnavailable"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessMigrationsApplyOnceAndAreIdempotent"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessPoolsUseDistinctRoles"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessExecutorCannotRunDDLOrReadMigrationHistory"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessObserverIsReadOnly"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessLoginRolesCannotConnectToOtherTestDatabases"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestParseStrictRejections"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestValidateRejections"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestSignVerifyRoundTrip"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestVerifyRejectsWrongKindAndPurpose"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestProposalOrderDoesNotChangeDigest"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPIEndpointsMatchDocument03"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPIErrorCodesEqualCatalogue"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPISchemasAreClosed"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPIReferencesResolve"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPIRequestsExcludeServerOwnedFields"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestCatalogueCoversEveryContractCode"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeRevocationBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAdmissionBeforeRevocation"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeCleanupBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAdmissionBeforeCleanup"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeExpiryAfterLockWait"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAmendmentBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAdmissionBeforeAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeLateSignatureAfterAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeSignatureBeforeAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeConcurrentReservations"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeConstraintsRejectInvariantBreaks"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeRolePrivileges"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceCanonicalVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformancePayloadNegativeVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceJWSPositiveVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceJWSNegativeVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformancePacketNegativeCases"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceVerifierSchemasMatchEngine"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceCrossRuntimeFreshSignatures"
         },
         {
@@ -515,207 +515,207 @@
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestFlagshipCommitAndReplay"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT09Replay"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT09ReplayAfterPermitExpiry"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT03MaterialTamper"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT04StaleSupplier"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT05ActorSubstitution"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT06AudienceSubstitution"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT11IDReroll"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT12ForgedSource"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT20NumericSchemaAbuse"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT22DirectBypass"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT23CrossScopeRead"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT39ObligationLinkage"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT40LineSemantics"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT41VersionAndTime"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestRevokeIdempotentAndReleases"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestEvaluateDenials"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT01ConcurrentAllowance"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT02LoadContentionFaultFree"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT07RevocationBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT07AdmissionBeforeRevocation"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT08ExpiryAfterLockWait"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10ChangedReplayAndAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10AmendmentBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10AdmissionBeforeAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10LateSignatureAfterAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT13LostResponse"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT14PrecommitFailureRollsBack"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT16SigningInterruptedThenRetried"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT16UnsignedExpiredIsReleasedByCleanup"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT16RecoveryWorkerSignsSamePayload"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT27UnavailableAuthority"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT28CleanupBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT28AdmissionHoldsLocksAcrossExpiry"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT28AdmissionCommitsThenCleanupSkips"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT02LoadContentionWithInjectedFailures"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT14PrecommitCrash"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT15PostcommitCrash"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT15OutboxRedeliverySameEventID"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT16SigningCrash"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/failpoint",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/failpoint",
           "test": "TestFailpointsDisabledInReleaseBuild"
         }
       ],
@@ -732,202 +732,202 @@
       "required_tests": [
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenRequiredTestOmitted"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenAnyTestSkipped"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenRequiredPhaseMissing"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/keys",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys",
           "test": "TestProvisionWritesOwnerOnlyPrivateKeyAndPublicTrustEntry"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/server",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/server",
           "test": "TestReadyFailsClosedWhenDatabaseUnavailable"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessMigrationsApplyOnceAndAreIdempotent"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessPoolsUseDistinctRoles"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessExecutorCannotRunDDLOrReadMigrationHistory"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessObserverIsReadOnly"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessLoginRolesCannotConnectToOtherTestDatabases"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestParseStrictRejections"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestValidateRejections"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestSignVerifyRoundTrip"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestVerifyRejectsWrongKindAndPurpose"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestProposalOrderDoesNotChangeDigest"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPIEndpointsMatchDocument03"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPIErrorCodesEqualCatalogue"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPISchemasAreClosed"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPIReferencesResolve"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPIRequestsExcludeServerOwnedFields"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestCatalogueCoversEveryContractCode"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeRevocationBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAdmissionBeforeRevocation"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeCleanupBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAdmissionBeforeCleanup"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeExpiryAfterLockWait"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAmendmentBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAdmissionBeforeAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeLateSignatureAfterAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeSignatureBeforeAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeConcurrentReservations"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeConstraintsRejectInvariantBreaks"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeRolePrivileges"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceCanonicalVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformancePayloadNegativeVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceJWSPositiveVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceJWSNegativeVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformancePacketNegativeCases"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceVerifierSchemasMatchEngine"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceCrossRuntimeFreshSignatures"
         },
         {
@@ -947,232 +947,232 @@
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestFlagshipCommitAndReplay"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT09Replay"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT09ReplayAfterPermitExpiry"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT03MaterialTamper"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT04StaleSupplier"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT05ActorSubstitution"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT06AudienceSubstitution"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT11IDReroll"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT12ForgedSource"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT20NumericSchemaAbuse"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT22DirectBypass"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT23CrossScopeRead"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT39ObligationLinkage"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT40LineSemantics"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT41VersionAndTime"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestRevokeIdempotentAndReleases"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestEvaluateDenials"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT01ConcurrentAllowance"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT02LoadContentionFaultFree"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT07RevocationBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT07AdmissionBeforeRevocation"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT08ExpiryAfterLockWait"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10ChangedReplayAndAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10AmendmentBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10AdmissionBeforeAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10LateSignatureAfterAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT13LostResponse"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT14PrecommitFailureRollsBack"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT16SigningInterruptedThenRetried"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT16UnsignedExpiredIsReleasedByCleanup"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT16RecoveryWorkerSignsSamePayload"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT27UnavailableAuthority"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT28CleanupBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT28AdmissionHoldsLocksAcrossExpiry"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT28AdmissionCommitsThenCleanupSkips"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT02LoadContentionWithInjectedFailures"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT14PrecommitCrash"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT15PostcommitCrash"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT15OutboxRedeliverySameEventID"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT16SigningCrash"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/failpoint",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/failpoint",
           "test": "TestFailpointsDisabledInReleaseBuild"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT24ObserverMismatch"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT25ObserverSeparation"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT23EvidenceAndReconcileScope"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestEvidenceExportVerifiesInStandaloneVerifier"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestEvidencePendingThenSigned"
         },
         {
@@ -1272,202 +1272,202 @@
       "required_tests": [
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenRequiredTestOmitted"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenAnyTestSkipped"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenRequiredPhaseMissing"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/keys",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys",
           "test": "TestProvisionWritesOwnerOnlyPrivateKeyAndPublicTrustEntry"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/server",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/server",
           "test": "TestReadyFailsClosedWhenDatabaseUnavailable"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessMigrationsApplyOnceAndAreIdempotent"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessPoolsUseDistinctRoles"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessExecutorCannotRunDDLOrReadMigrationHistory"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessObserverIsReadOnly"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessLoginRolesCannotConnectToOtherTestDatabases"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestParseStrictRejections"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestValidateRejections"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestSignVerifyRoundTrip"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestVerifyRejectsWrongKindAndPurpose"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestProposalOrderDoesNotChangeDigest"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPIEndpointsMatchDocument03"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPIErrorCodesEqualCatalogue"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPISchemasAreClosed"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPIReferencesResolve"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPIRequestsExcludeServerOwnedFields"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestCatalogueCoversEveryContractCode"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeRevocationBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAdmissionBeforeRevocation"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeCleanupBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAdmissionBeforeCleanup"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeExpiryAfterLockWait"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAmendmentBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAdmissionBeforeAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeLateSignatureAfterAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeSignatureBeforeAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeConcurrentReservations"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeConstraintsRejectInvariantBreaks"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeRolePrivileges"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceCanonicalVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformancePayloadNegativeVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceJWSPositiveVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceJWSNegativeVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformancePacketNegativeCases"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceVerifierSchemasMatchEngine"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceCrossRuntimeFreshSignatures"
         },
         {
@@ -1487,232 +1487,232 @@
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestFlagshipCommitAndReplay"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT09Replay"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT09ReplayAfterPermitExpiry"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT03MaterialTamper"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT04StaleSupplier"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT05ActorSubstitution"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT06AudienceSubstitution"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT11IDReroll"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT12ForgedSource"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT20NumericSchemaAbuse"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT22DirectBypass"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT23CrossScopeRead"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT39ObligationLinkage"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT40LineSemantics"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT41VersionAndTime"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestRevokeIdempotentAndReleases"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestEvaluateDenials"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT01ConcurrentAllowance"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT02LoadContentionFaultFree"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT07RevocationBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT07AdmissionBeforeRevocation"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT08ExpiryAfterLockWait"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10ChangedReplayAndAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10AmendmentBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10AdmissionBeforeAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10LateSignatureAfterAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT13LostResponse"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT14PrecommitFailureRollsBack"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT16SigningInterruptedThenRetried"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT16UnsignedExpiredIsReleasedByCleanup"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT16RecoveryWorkerSignsSamePayload"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT27UnavailableAuthority"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT28CleanupBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT28AdmissionHoldsLocksAcrossExpiry"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT28AdmissionCommitsThenCleanupSkips"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT02LoadContentionWithInjectedFailures"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT14PrecommitCrash"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT15PostcommitCrash"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT15OutboxRedeliverySameEventID"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT16SigningCrash"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/failpoint",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/failpoint",
           "test": "TestFailpointsDisabledInReleaseBuild"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT24ObserverMismatch"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT25ObserverSeparation"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT23EvidenceAndReconcileScope"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestEvidenceExportVerifiesInStandaloneVerifier"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestEvidencePendingThenSigned"
         },
         {
@@ -1797,137 +1797,137 @@
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT32AgentInjection"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestDemoScenarios"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT31CleanInstall"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenAnyTestFails"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenTestDoesNotFinish"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestRequiredCaseMustBePass"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestRealConfigurationEnumeratesRequiredCases"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestCommandForRunsExactlyTheMappedTests"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT05RemovedEntitlement"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT12AssignmentReasonsAreDistinct"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT22EveryWritePathDenied"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT23CrossTenantAdmitDisclosesNothing"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT27EvaluateLosesDatabaseOverHTTP"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/server",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/server",
           "test": "TestPanicReturnsErrorEnvelope"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/server",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/server",
           "test": "TestAbortHandlerStillDropsConnection"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestF17SignedHistoryImmutable"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestLateSignatureAfterRevocation"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestObserverSeparationCheck"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestEvidenceStatusChecksLinkageNotJustSignatures"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestMalleatedPermitSignatureCreatesNoSecondIdentity"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/keys",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys",
           "test": "TestParseTrustStoreIsStrict"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/keys",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys",
           "test": "TestReadPrivateKeyRejectsLoosePermissions"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestKeyringRejectsMixedPurposeObservationKey"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestSplitObserverKeepsObservationKeyOutOfEngine"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestObserverExactReadSetFreshDatabase"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestObserverExactReadSetAfterUpgrade"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceTrustStoreParsing"
         },
         {
@@ -2147,72 +2147,72 @@
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/keys",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys",
           "test": "TestProvisionRejectsInvalidPurposes"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestKnownPurposesMatchSignedTypes"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT30SimulationIsolation"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestSimulatePermissions"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestAdapterAssurance"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPIEveryOperationIsRouted"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestRetrySucceedsWithSameIdentities"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestRetriesExhaustedKeepOperationID"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestRetriesExhaustedBeforeReservationHasNoOperationID"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestRetryBackoffSpecification"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestAmendmentNegativeRequestFixtures"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestHistoricalTrustKeys"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/keys",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys",
           "test": "TestRetireKeepsHistoricalValidity"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestKeyringRefusesRetiredSigningKey"
         },
         {
@@ -2262,17 +2262,17 @@
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestParseStrictDepthBoundary"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestI03MandateCreateAndRevokeWithoutAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10ChangedDuplicateConflictsWithoutMutation"
         },
         {
@@ -2342,7 +2342,7 @@
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT29AccountingContinuity"
         },
         {
@@ -2362,47 +2362,47 @@
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/examples/procurement",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/examples/procurement",
           "test": "TestT43ReferenceMatchesCommittedFixtures"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/examples/procurement",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/examples/procurement",
           "test": "TestT43CheckDetectsFixtureDrift"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/examples/procurement",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/examples/procurement",
           "test": "TestT43CheckDetectsOutcomeDrift"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/examples/procurement",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/examples/procurement",
           "test": "TestBuildReferenceRefusesFailedRun"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT43DemoEvidenceConsistency"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/api",
           "test": "TestLimiterBurstThenRefillPerPrincipal"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/api",
           "test": "TestNewLimiterZeroDisables"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestQuotaReturns429WithoutEffect"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestSimulateMatchesEvaluateForLiveIssuances"
         },
         {
@@ -2542,12 +2542,12 @@
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestSDKEndToEnd"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestSDKRateLimitRetry"
         },
         {
@@ -2622,7 +2622,7 @@
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestMCPAgentEndToEnd"
         },
         {
@@ -2727,22 +2727,22 @@
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestTemporalLinkageRules"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestTemporalLinkageMissingRecords"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceTemporalEvidenceVectors"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestEvidenceTemporalLinkageEnforced"
         },
         {
@@ -2962,12 +2962,12 @@
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestADR002IssuerLosesReadAccessWhenEntitlementRemoved"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestADR002NewlyEntitledIssuerGainsReadAccessWithoutCreatingInstruction"
         }
       ],
@@ -3030,202 +3030,202 @@
       "required_tests": [
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenRequiredTestOmitted"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenAnyTestSkipped"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenRequiredPhaseMissing"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/keys",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys",
           "test": "TestProvisionWritesOwnerOnlyPrivateKeyAndPublicTrustEntry"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/server",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/server",
           "test": "TestReadyFailsClosedWhenDatabaseUnavailable"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessMigrationsApplyOnceAndAreIdempotent"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessPoolsUseDistinctRoles"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessExecutorCannotRunDDLOrReadMigrationHistory"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessObserverIsReadOnly"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestHarnessLoginRolesCannotConnectToOtherTestDatabases"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestParseStrictRejections"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestValidateRejections"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestSignVerifyRoundTrip"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestVerifyRejectsWrongKindAndPurpose"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestProposalOrderDoesNotChangeDigest"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPIEndpointsMatchDocument03"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPIErrorCodesEqualCatalogue"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPISchemasAreClosed"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPIReferencesResolve"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPIRequestsExcludeServerOwnedFields"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestCatalogueCoversEveryContractCode"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeRevocationBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAdmissionBeforeRevocation"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeCleanupBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAdmissionBeforeCleanup"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeExpiryAfterLockWait"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAmendmentBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAdmissionBeforeAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeLateSignatureAfterAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeSignatureBeforeAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeConcurrentReservations"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeConstraintsRejectInvariantBreaks"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeRolePrivileges"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceCanonicalVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformancePayloadNegativeVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceJWSPositiveVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceJWSNegativeVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformancePacketNegativeCases"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceVerifierSchemasMatchEngine"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceCrossRuntimeFreshSignatures"
         },
         {
@@ -3245,232 +3245,232 @@
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestFlagshipCommitAndReplay"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT09Replay"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT09ReplayAfterPermitExpiry"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT03MaterialTamper"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT04StaleSupplier"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT05ActorSubstitution"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT06AudienceSubstitution"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT11IDReroll"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT12ForgedSource"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT20NumericSchemaAbuse"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT22DirectBypass"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT23CrossScopeRead"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT39ObligationLinkage"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT40LineSemantics"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT41VersionAndTime"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestRevokeIdempotentAndReleases"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestEvaluateDenials"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT01ConcurrentAllowance"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT02LoadContentionFaultFree"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT07RevocationBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT07AdmissionBeforeRevocation"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT08ExpiryAfterLockWait"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10ChangedReplayAndAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10AmendmentBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10AdmissionBeforeAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10LateSignatureAfterAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT13LostResponse"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT14PrecommitFailureRollsBack"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT16SigningInterruptedThenRetried"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT16UnsignedExpiredIsReleasedByCleanup"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT16RecoveryWorkerSignsSamePayload"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT27UnavailableAuthority"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT28CleanupBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT28AdmissionHoldsLocksAcrossExpiry"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT28AdmissionCommitsThenCleanupSkips"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT02LoadContentionWithInjectedFailures"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT14PrecommitCrash"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT15PostcommitCrash"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT15OutboxRedeliverySameEventID"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT16SigningCrash"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/failpoint",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/failpoint",
           "test": "TestFailpointsDisabledInReleaseBuild"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT24ObserverMismatch"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT25ObserverSeparation"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT23EvidenceAndReconcileScope"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestEvidenceExportVerifiesInStandaloneVerifier"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestEvidencePendingThenSigned"
         },
         {
@@ -3555,137 +3555,137 @@
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT32AgentInjection"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestDemoScenarios"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT31CleanInstall"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenAnyTestFails"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenTestDoesNotFinish"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestRequiredCaseMustBePass"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestRealConfigurationEnumeratesRequiredCases"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestCommandForRunsExactlyTheMappedTests"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT05RemovedEntitlement"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT12AssignmentReasonsAreDistinct"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT22EveryWritePathDenied"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT23CrossTenantAdmitDisclosesNothing"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT27EvaluateLosesDatabaseOverHTTP"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/server",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/server",
           "test": "TestPanicReturnsErrorEnvelope"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/server",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/server",
           "test": "TestAbortHandlerStillDropsConnection"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestF17SignedHistoryImmutable"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestLateSignatureAfterRevocation"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestObserverSeparationCheck"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestEvidenceStatusChecksLinkageNotJustSignatures"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestMalleatedPermitSignatureCreatesNoSecondIdentity"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/keys",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys",
           "test": "TestParseTrustStoreIsStrict"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/keys",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys",
           "test": "TestReadPrivateKeyRejectsLoosePermissions"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestKeyringRejectsMixedPurposeObservationKey"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestSplitObserverKeepsObservationKeyOutOfEngine"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestObserverExactReadSetFreshDatabase"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestObserverExactReadSetAfterUpgrade"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceTrustStoreParsing"
         },
         {
@@ -3905,72 +3905,72 @@
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/keys",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys",
           "test": "TestProvisionRejectsInvalidPurposes"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestKnownPurposesMatchSignedTypes"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT30SimulationIsolation"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestSimulatePermissions"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestAdapterAssurance"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestOpenAPIEveryOperationIsRouted"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestRetrySucceedsWithSameIdentities"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestRetriesExhaustedKeepOperationID"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestRetriesExhaustedBeforeReservationHasNoOperationID"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestRetryBackoffSpecification"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestAmendmentNegativeRequestFixtures"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestHistoricalTrustKeys"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/keys",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys",
           "test": "TestRetireKeepsHistoricalValidity"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestKeyringRefusesRetiredSigningKey"
         },
         {
@@ -4020,17 +4020,17 @@
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestParseStrictDepthBoundary"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestI03MandateCreateAndRevokeWithoutAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10ChangedDuplicateConflictsWithoutMutation"
         },
         {
@@ -4100,7 +4100,7 @@
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT29AccountingContinuity"
         },
         {
@@ -4120,47 +4120,47 @@
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/examples/procurement",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/examples/procurement",
           "test": "TestT43ReferenceMatchesCommittedFixtures"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/examples/procurement",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/examples/procurement",
           "test": "TestT43CheckDetectsFixtureDrift"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/examples/procurement",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/examples/procurement",
           "test": "TestT43CheckDetectsOutcomeDrift"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/examples/procurement",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/examples/procurement",
           "test": "TestBuildReferenceRefusesFailedRun"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT43DemoEvidenceConsistency"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/api",
           "test": "TestLimiterBurstThenRefillPerPrincipal"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/api",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/api",
           "test": "TestNewLimiterZeroDisables"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestQuotaReturns429WithoutEffect"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestSimulateMatchesEvaluateForLiveIssuances"
         },
         {
@@ -4300,12 +4300,12 @@
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestSDKEndToEnd"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestSDKRateLimitRetry"
         },
         {
@@ -4380,7 +4380,7 @@
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestMCPAgentEndToEnd"
         },
         {
@@ -4485,22 +4485,22 @@
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestTemporalLinkageRules"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestTemporalLinkageMissingRecords"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceTemporalEvidenceVectors"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestEvidenceTemporalLinkageEnforced"
         },
         {
@@ -4720,12 +4720,12 @@
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestADR002IssuerLosesReadAccessWhenEntitlementRemoved"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestADR002NewlyEntitledIssuerGainsReadAccessWithoutCreatingInstruction"
         }
       ],
@@ -4774,17 +4774,17 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeConcurrentReservations"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT01ConcurrentAllowance"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestDemoScenarios"
         }
       ]
@@ -4794,32 +4794,32 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeRevocationBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAdmissionBeforeRevocation"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT07RevocationBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT07AdmissionBeforeRevocation"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestRevokeIdempotentAndReleases"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestLateSignatureAfterRevocation"
         }
       ]
@@ -4829,12 +4829,12 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeExpiryAfterLockWait"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT08ExpiryAfterLockWait"
         }
       ]
@@ -4844,52 +4844,52 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAmendmentBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAdmissionBeforeAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeLateSignatureAfterAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeSignatureBeforeAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10ChangedReplayAndAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10AmendmentBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10AdmissionBeforeAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10LateSignatureAfterAmendment"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestAmendmentNegativeRequestFixtures"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT10ChangedDuplicateConflictsWithoutMutation"
         }
       ]
@@ -4899,22 +4899,22 @@
       "tests": [
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestParseStrictRejections"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestValidateRejections"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformancePayloadNegativeVectors"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT20NumericSchemaAbuse"
         }
       ]
@@ -4924,17 +4924,17 @@
       "tests": [
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceJWSPositiveVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceJWSNegativeVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceCrossRuntimeFreshSignatures"
         },
         {
@@ -4944,7 +4944,7 @@
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestEvidenceExportVerifiesInStandaloneVerifier"
         },
         {
@@ -5189,12 +5189,12 @@
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestMalleatedPermitSignatureCreatesNoSecondIdentity"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceTrustStoreParsing"
         },
         {
@@ -5414,17 +5414,17 @@
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/keys",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys",
           "test": "TestProvisionRejectsInvalidPurposes"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestKnownPurposesMatchSignedTypes"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestHistoricalTrustKeys"
         },
         {
@@ -5464,22 +5464,22 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeRolePrivileges"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT22DirectBypass"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT22EveryWritePathDenied"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestF17SignedHistoryImmutable"
         }
       ]
@@ -5489,27 +5489,27 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeRolePrivileges"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT25ObserverSeparation"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestObserverSeparationCheck"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestObserverExactReadSetFreshDatabase"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/db",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db",
           "test": "TestObserverExactReadSetAfterUpgrade"
         }
       ]
@@ -5519,27 +5519,27 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeCleanupBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/prototypes/locking",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/prototypes/locking",
           "test": "TestPrototypeAdmissionBeforeCleanup"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT28CleanupBeforeAdmission"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT28AdmissionHoldsLocksAcrossExpiry"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT28AdmissionCommitsThenCleanupSkips"
         }
       ]
@@ -5549,17 +5549,17 @@
       "tests": [
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestProposalOrderDoesNotChangeDigest"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformancePayloadNegativeVectors"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT40LineSemantics"
         }
       ]
@@ -5569,17 +5569,17 @@
       "tests": [
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceCanonicalVectors"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformancePayloadNegativeVectors"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT41VersionAndTime"
         },
         {
@@ -5869,12 +5869,12 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT02LoadContentionFaultFree"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT02LoadContentionWithInjectedFailures"
         }
       ],
@@ -5885,7 +5885,7 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT03MaterialTamper"
         }
       ]
@@ -5895,12 +5895,12 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT04StaleSupplier"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestDemoScenarios"
         }
       ]
@@ -5910,12 +5910,12 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT05ActorSubstitution"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT05RemovedEntitlement"
         }
       ]
@@ -5925,7 +5925,7 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT06AudienceSubstitution"
         }
       ]
@@ -5935,17 +5935,17 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT09Replay"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT09ReplayAfterPermitExpiry"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestDemoScenarios"
         }
       ]
@@ -5955,7 +5955,7 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT11IDReroll"
         }
       ]
@@ -5965,12 +5965,12 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT12ForgedSource"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT12AssignmentReasonsAreDistinct"
         }
       ]
@@ -5980,12 +5980,12 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT13LostResponse"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestDemoScenarios"
         }
       ]
@@ -5995,12 +5995,12 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT14PrecommitCrash"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT14PrecommitFailureRollsBack"
         }
       ]
@@ -6010,12 +6010,12 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT15PostcommitCrash"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT15OutboxRedeliverySameEventID"
         }
       ]
@@ -6025,22 +6025,22 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT16SigningCrash"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT16SigningInterruptedThenRetried"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT16UnsignedExpiredIsReleasedByCleanup"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT16RecoveryWorkerSignsSamePayload"
         }
       ]
@@ -6050,17 +6050,17 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT23CrossScopeRead"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT23EvidenceAndReconcileScope"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT23CrossTenantAdmitDisclosesNothing"
         }
       ]
@@ -6070,27 +6070,27 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT27UnavailableAuthority"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT27EvaluateLosesDatabaseOverHTTP"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestRetrySucceedsWithSameIdentities"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestRetriesExhaustedKeepOperationID"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestRetriesExhaustedBeforeReservationHasNoOperationID"
         }
       ]
@@ -6100,12 +6100,12 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT39ObligationLinkage"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestEvidencePendingThenSigned"
         }
       ]
@@ -6115,7 +6115,7 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT24ObserverMismatch"
         }
       ]
@@ -6125,7 +6125,7 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestEvidenceExportVerifiesInStandaloneVerifier"
         },
         {
@@ -6145,7 +6145,7 @@
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestEvidenceStatusChecksLinkageNotJustSignatures"
         },
         {
@@ -6155,22 +6155,22 @@
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestTemporalLinkageRules"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/core/contract",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
           "test": "TestTemporalLinkageMissingRecords"
         },
         {
           "phase": "conformance",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/conformance",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceTemporalEvidenceVectors"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestEvidenceTemporalLinkageEnforced"
         },
         {
@@ -6265,7 +6265,7 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT31CleanInstall"
         }
       ]
@@ -6275,7 +6275,7 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT32AgentInjection"
         }
       ]
@@ -6285,42 +6285,42 @@
       "tests": [
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenRequiredTestOmitted"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenAnyTestSkipped"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenAnyTestFails"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenTestDoesNotFinish"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenRequiredPhaseMissing"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestRequiredCaseMustBePass"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestRealConfigurationEnumeratesRequiredCases"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tools/ciagg",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestCommandForRunsExactlyTheMappedTests"
         }
       ]
@@ -6330,17 +6330,17 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT30SimulationIsolation"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestSimulatePermissions"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestSimulateMatchesEvaluateForLiveIssuances"
         }
       ]
@@ -6350,7 +6350,7 @@
       "tests": [
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT29AccountingContinuity"
         }
       ]
@@ -6385,32 +6385,32 @@
       "tests": [
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/examples/procurement",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/examples/procurement",
           "test": "TestT43ReferenceMatchesCommittedFixtures"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/examples/procurement",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/examples/procurement",
           "test": "TestT43CheckDetectsFixtureDrift"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/examples/procurement",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/examples/procurement",
           "test": "TestT43CheckDetectsOutcomeDrift"
         },
         {
           "phase": "unit",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/examples/procurement",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/examples/procurement",
           "test": "TestBuildReferenceRefusesFailedRun"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT43DemoEvidenceConsistency"
         },
         {
           "phase": "integration",
-          "package": "github.com/IronTrex-CyberTechnology/Steelmatter/tests/integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestT31CleanInstall"
         },
         {

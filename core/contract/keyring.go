@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/keys"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys"
 )
 
 // LoadKeyring reads dir/trust-store.json and every dir/<name>.key.pem that

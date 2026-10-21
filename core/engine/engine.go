@@ -27,9 +27,9 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/contract"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/keys"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/observer"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/observer"
 )
 
 // Config holds engine settings.

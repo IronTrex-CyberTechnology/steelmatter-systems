@@ -29,14 +29,14 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/api"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/auth"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/contract"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/db"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/engine"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/failpoint"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/observer"
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/server"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/api"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/auth"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/engine"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/failpoint"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/observer"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/server"
 )
 
 // version is set at build time by scripts/package.

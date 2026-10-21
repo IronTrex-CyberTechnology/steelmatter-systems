@@ -9,7 +9,7 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/httpapi"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/httpapi"
 )
 
 // Pinger reports whether the service can admit work (database reachable and,

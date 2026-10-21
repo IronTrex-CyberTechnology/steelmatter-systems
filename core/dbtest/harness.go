@@ -20,7 +20,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/db"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/db"
 )
 
 const (

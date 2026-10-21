@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/examples/procurement"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/examples/procurement"
 )
 
 func (e *env) demoEnv(out *bytes.Buffer) *procurement.Env {

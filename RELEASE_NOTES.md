@@ -1,4 +1,4 @@
-# Steelmatter R0 source preview
+# Steelmatter Systems R0 source preview
 
 This preview demonstrates exact-action control for a synthetic purchase-order workflow. It is not a production deployment or a universal agent-security guarantee.
 

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/IronTrex-CyberTechnology/Steelmatter/core/api"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/api"
 )
 
 // runSDK runs the TypeScript SDK's live test (packages/sdk/test/live) against
