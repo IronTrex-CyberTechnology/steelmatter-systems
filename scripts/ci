@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Run every phase required by the active stage in ci/required.json, then the
+# aggregate gate. The gate, not individual phase exit codes, decides success:
+# a missing, skipped or failed required result fails CI.
+source "$(dirname "$0")/lib.sh"
+require_go
+rm -f "$OUT"/*.json
+
+go build ./...
+go vet ./...
+go vet -tags integration,failpoints ./...
+go vet -tags conformance ./...
+unformatted="$(gofmt -l $(git ls-files '*.go' 2>/dev/null; git ls-files --others --exclude-standard '*.go' 2>/dev/null))"
+[[ -z "$unformatted" ]] || die "gofmt needed: $unformatted"
+
+for phase in $(go run ./cmd/smci phases -config ci/required.json); do
+  "$ROOT/scripts/test-$phase" || warn "phase $phase reported failures; the aggregate will decide"
+done
+
+status=0
+go run ./cmd/smci aggregate -config ci/required.json -catalogue ci/acceptance-cases.json -results "$OUT" -report "$OUT/results.json" || status=$?
+# Day-4 checkpoint report (31 sprint cases) from the same aggregate.
+go run ./cmd/smci report -stage sprint-day4 -results "$OUT/results.json" -json "$OUT/sprint-day4-results.json" -md "$OUT/sprint-day4-report.md" || warn "report generation failed"
+exit "$status"

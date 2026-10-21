@@ -1,0 +1,260 @@
+{
+  "note": "Shape checks plus one semantic gap demonstration. Not product conformance or signed vectors.",
+  "cases": [
+    {
+      "name": "premature-obligation",
+      "payload_type": "action",
+      "expected": "SCHEMA_REJECT",
+      "payload": {
+        "schema_version": "1",
+        "crypto_profile": "SM-JWS-ES256-1",
+        "tenant_id": "synthetic-org",
+        "instruction_id": "inst-001",
+        "action_revision": 1,
+        "actor_id": "agent-a",
+        "audience": "synthetic-procurement",
+        "operation": "purchase_order.issue",
+        "supplier_id": "supplier-a",
+        "supplier_revision": 1,
+        "delivery_id": "warehouse-a",
+        "currency": "INR",
+        "lines": [
+          {
+            "item_id": "item-a",
+            "quantity": 3,
+            "unit_price_minor": 20000000
+          }
+        ],
+        "amount_minor": 60000000,
+        "obligation_id": "premature"
+      }
+    },
+    {
+      "name": "fractional-money",
+      "payload_type": "action",
+      "expected": "SCHEMA_REJECT",
+      "payload": {
+        "schema_version": "1",
+        "crypto_profile": "SM-JWS-ES256-1",
+        "tenant_id": "synthetic-org",
+        "instruction_id": "inst-001",
+        "action_revision": 1,
+        "actor_id": "agent-a",
+        "audience": "synthetic-procurement",
+        "operation": "purchase_order.issue",
+        "supplier_id": "supplier-a",
+        "supplier_revision": 1,
+        "delivery_id": "warehouse-a",
+        "currency": "INR",
+        "lines": [
+          {
+            "item_id": "item-a",
+            "quantity": 3,
+            "unit_price_minor": 20000000
+          }
+        ],
+        "amount_minor": 0.5
+      }
+    },
+    {
+      "name": "unsupported-currency",
+      "payload_type": "action",
+      "expected": "SCHEMA_REJECT",
+      "payload": {
+        "schema_version": "1",
+        "crypto_profile": "SM-JWS-ES256-1",
+        "tenant_id": "synthetic-org",
+        "instruction_id": "inst-001",
+        "action_revision": 1,
+        "actor_id": "agent-a",
+        "audience": "synthetic-procurement",
+        "operation": "purchase_order.issue",
+        "supplier_id": "supplier-a",
+        "supplier_revision": 1,
+        "delivery_id": "warehouse-a",
+        "currency": "USD",
+        "lines": [
+          {
+            "item_id": "item-a",
+            "quantity": 3,
+            "unit_price_minor": 20000000
+          }
+        ],
+        "amount_minor": 60000000
+      }
+    },
+    {
+      "name": "unsupported-schema",
+      "payload_type": "action",
+      "expected": "SCHEMA_REJECT",
+      "payload": {
+        "schema_version": "2",
+        "crypto_profile": "SM-JWS-ES256-1",
+        "tenant_id": "synthetic-org",
+        "instruction_id": "inst-001",
+        "action_revision": 1,
+        "actor_id": "agent-a",
+        "audience": "synthetic-procurement",
+        "operation": "purchase_order.issue",
+        "supplier_id": "supplier-a",
+        "supplier_revision": 1,
+        "delivery_id": "warehouse-a",
+        "currency": "INR",
+        "lines": [
+          {
+            "item_id": "item-a",
+            "quantity": 3,
+            "unit_price_minor": 20000000
+          }
+        ],
+        "amount_minor": 60000000
+      }
+    },
+    {
+      "name": "unsupported-profile",
+      "payload_type": "action",
+      "expected": "SCHEMA_REJECT",
+      "payload": {
+        "schema_version": "1",
+        "crypto_profile": "other",
+        "tenant_id": "synthetic-org",
+        "instruction_id": "inst-001",
+        "action_revision": 1,
+        "actor_id": "agent-a",
+        "audience": "synthetic-procurement",
+        "operation": "purchase_order.issue",
+        "supplier_id": "supplier-a",
+        "supplier_revision": 1,
+        "delivery_id": "warehouse-a",
+        "currency": "INR",
+        "lines": [
+          {
+            "item_id": "item-a",
+            "quantity": 3,
+            "unit_price_minor": 20000000
+          }
+        ],
+        "amount_minor": 60000000
+      }
+    },
+    {
+      "name": "overflow-money",
+      "payload_type": "action",
+      "expected": "SCHEMA_REJECT",
+      "payload": {
+        "schema_version": "1",
+        "crypto_profile": "SM-JWS-ES256-1",
+        "tenant_id": "synthetic-org",
+        "instruction_id": "inst-001",
+        "action_revision": 1,
+        "actor_id": "agent-a",
+        "audience": "synthetic-procurement",
+        "operation": "purchase_order.issue",
+        "supplier_id": "supplier-a",
+        "supplier_revision": 1,
+        "delivery_id": "warehouse-a",
+        "currency": "INR",
+        "lines": [
+          {
+            "item_id": "item-a",
+            "quantity": 3,
+            "unit_price_minor": 20000000
+          }
+        ],
+        "amount_minor": 9007199254740992
+      }
+    },
+    {
+      "name": "invalid-calendar-date",
+      "payload_type": "mandate",
+      "expected": "SCHEMA_REJECT",
+      "payload": {
+        "schema_version": "1",
+        "crypto_profile": "SM-JWS-ES256-1",
+        "mandate_id": "mandate-001",
+        "tenant_id": "synthetic-org",
+        "issuer_id": "owner-a",
+        "revision": 1,
+        "control_epoch": 1,
+        "actor_ids": [
+          "agent-a",
+          "agent-b"
+        ],
+        "audience": "synthetic-procurement",
+        "operation": "purchase_order.issue",
+        "supplier_ids": [
+          "supplier-a"
+        ],
+        "delivery_ids": [
+          "warehouse-a"
+        ],
+        "currency": "INR",
+        "limit_minor": 100000000,
+        "issued_at": "2026-10-09T10:00:00Z",
+        "expires_at": "2026-02-30T10:00:00Z"
+      }
+    },
+    {
+      "name": "non-Z-timestamp",
+      "payload_type": "mandate",
+      "expected": "SCHEMA_REJECT",
+      "payload": {
+        "schema_version": "1",
+        "crypto_profile": "SM-JWS-ES256-1",
+        "mandate_id": "mandate-001",
+        "tenant_id": "synthetic-org",
+        "issuer_id": "owner-a",
+        "revision": 1,
+        "control_epoch": 1,
+        "actor_ids": [
+          "agent-a",
+          "agent-b"
+        ],
+        "audience": "synthetic-procurement",
+        "operation": "purchase_order.issue",
+        "supplier_ids": [
+          "supplier-a"
+        ],
+        "delivery_ids": [
+          "warehouse-a"
+        ],
+        "currency": "INR",
+        "limit_minor": 100000000,
+        "issued_at": "2026-10-09T10:00:00Z",
+        "expires_at": "2026-10-09T10:00:00+00:00"
+      }
+    },
+    {
+      "name": "duplicate-item-id",
+      "payload_type": "action",
+      "expected": "SCHEMA_ACCEPT_BUT_APPLICATION_MUST_REJECT",
+      "payload": {
+        "schema_version": "1",
+        "crypto_profile": "SM-JWS-ES256-1",
+        "tenant_id": "synthetic-org",
+        "instruction_id": "inst-001",
+        "action_revision": 1,
+        "actor_id": "agent-a",
+        "audience": "synthetic-procurement",
+        "operation": "purchase_order.issue",
+        "supplier_id": "supplier-a",
+        "supplier_revision": 1,
+        "delivery_id": "warehouse-a",
+        "currency": "INR",
+        "lines": [
+          {
+            "item_id": "item-a",
+            "quantity": 3,
+            "unit_price_minor": 20000000
+          },
+          {
+            "item_id": "item-a",
+            "quantity": 3,
+            "unit_price_minor": 20000000
+          }
+        ],
+        "amount_minor": 120000000
+      }
+    }
+  ]
+}

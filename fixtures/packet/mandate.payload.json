@@ -1,0 +1,25 @@
+{
+  "schema_version": "1",
+  "crypto_profile": "SM-JWS-ES256-1",
+  "mandate_id": "mandate-001",
+  "tenant_id": "synthetic-org",
+  "issuer_id": "owner-a",
+  "revision": 1,
+  "control_epoch": 1,
+  "actor_ids": [
+    "agent-a",
+    "agent-b"
+  ],
+  "audience": "synthetic-procurement",
+  "operation": "purchase_order.issue",
+  "supplier_ids": [
+    "supplier-a"
+  ],
+  "delivery_ids": [
+    "warehouse-a"
+  ],
+  "currency": "INR",
+  "limit_minor": 100000000,
+  "issued_at": "2026-10-09T10:00:00Z",
+  "expires_at": "2026-10-09T11:00:00Z"
+}

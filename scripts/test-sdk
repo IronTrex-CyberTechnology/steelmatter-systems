@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# TypeScript SDK (packages/sdk): strict typecheck, unit, contract, type and
+# installed-package tests. The live end-to-end SDK tests run in the
+# integration phase (tests/integration/sdk_test.go) against real PostgreSQL.
+# Dependencies install with lifecycle scripts disabled (.npmrc ignore-scripts).
+source "$(dirname "$0")/lib.sh"
+ensure_sdk_deps
+[[ "$(node -v)" == "v$NODE_VERSION" ]] || warn "node $(node -v) found; versions.env pins v$NODE_VERSION"
+cd "$ROOT/packages/sdk"
+file="$OUT/sdk.json"; status=0
+log "phase sdk: node --test (includes tsc typecheck)"
+node --test --test-reporter="$ROOT/packages/sdk/test/gojson-reporter.mjs" --test-reporter-destination="$file" test/*.test.ts || status=$?
+cd "$ROOT"
+go run ./cmd/smci summary "$file" || status=1
+exit "$status"

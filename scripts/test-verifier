@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Standalone TypeScript verifier tests against the golden vectors.
+# Dependencies install with lifecycle scripts disabled (.npmrc ignore-scripts).
+source "$(dirname "$0")/lib.sh"
+ensure_verifier_deps
+[[ "$(node -v)" == "v$NODE_VERSION" ]] || warn "node $(node -v) found; versions.env pins v$NODE_VERSION"
+cd "$ROOT/packages/verifier"
+file="$OUT/verifier.json"; status=0
+log "phase verifier: node --test"
+node --test --test-reporter="$ROOT/packages/verifier/test/gojson-reporter.mjs" --test-reporter-destination="$file" test/*.test.ts || status=$?
+cd "$ROOT"
+go run ./cmd/smci summary "$file" || status=1
+exit "$status"

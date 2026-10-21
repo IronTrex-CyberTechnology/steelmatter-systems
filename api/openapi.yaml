@@ -1,0 +1,805 @@
+openapi: 3.1.0
+info:
+  title: Steelmatter R0 reference API
+  version: 0.6.0-i02
+  summary: Closed request/response contract for baseline 0.6 (I02).
+  description: |
+    Every request body is UTF-8 JSON parsed by the strict input profile
+    (docs/contracts/I02-contract.md section 2): duplicate keys, unknown fields,
+    non-integer numbers, integers outside ±(2^53-1), byte-order marks and
+    unpaired surrogates are rejected before any authorisation, capacity or
+    signing work. All schemas are closed (additionalProperties: false).
+
+    Identity fields (tenant, actor, issuer, source entitlement) are derived
+    from authentication and trusted configuration, never from request bodies.
+    x-steelmatter-principals lists the principal kinds allowed per operation;
+    scope checks (tenant, instruction assignment, source workflow) apply in
+    addition and fail with 403/404 without disclosure.
+
+    The action payload is digested; mandate, permit, execution and observation
+    payloads are signed (SM-JWS-ES256-1). Payload schemas are the packet
+    schemas in ../schemas, referenced unchanged.
+servers:
+  - url: http://127.0.0.1:8080
+    description: Local synthetic reference only.
+security:
+  - principalToken: []
+tags:
+  - name: mandates
+  - name: instructions
+  - name: actions
+  - name: operations
+  - name: adapters
+paths:
+  /v1/mandates:
+    post:
+      tags: [mandates]
+      operationId: createMandate
+      summary: Owner creates a bounded mandate.
+      x-steelmatter-principals: [owner]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MandateCreateRequest' }
+      responses:
+        '201':
+          description: Mandate created with immutable revision and digest.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MandateResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unsupported' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/mandates/{mandate_id}/revoke:
+    post:
+      tags: [mandates]
+      operationId: revokeMandate
+      summary: Owner revokes under lock and increments the control epoch. Idempotent.
+      x-steelmatter-principals: [owner]
+      parameters:
+        - $ref: '#/components/parameters/MandateId'
+      responses:
+        '200':
+          description: Mandate is revoked (first or repeated call). Unused reservations are released.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RevokeResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/instructions:
+    post:
+      tags: [instructions]
+      operationId: createInstruction
+      summary: Trusted issuer submits a source instruction; the server assigns the actor.
+      description: |
+        201 for a new instruction; 200 for an identical repeated creation
+        request (returns the current revision, never rolling an amendment
+        back); 409 SOURCE_CONFLICT when the same (tenant, source_system,
+        source_record_id) arrives with different content.
+      x-steelmatter-principals: [issuer]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InstructionCreateRequest' }
+      responses:
+        '201':
+          description: Instruction created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InstructionResponse' }
+        '200':
+          description: Identical creation request; existing instruction at its current revision.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InstructionResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unsupported' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/instructions/{instruction_id}/revisions:
+    post:
+      tags: [instructions]
+      operationId: amendInstruction
+      summary: Authorised issuer appends an uncommitted action revision.
+      description: |
+        Exact retry of an amendment_id returns its recorded result with 200.
+        Changed reuse, outdated expected_action_revision or a committed
+        instruction return 409. A new revision has no reservation or permit;
+        the assigned actor must evaluate it again.
+      x-steelmatter-principals: [issuer]
+      parameters:
+        - $ref: '#/components/parameters/InstructionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AmendmentRequest' }
+      responses:
+        '201':
+          description: New revision appended; prior issuance invalidated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AmendmentResponse' }
+        '200':
+          description: Exact retry; recorded result (may be historical).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AmendmentResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unsupported' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/actions/evaluate:
+    post:
+      tags: [actions]
+      operationId: evaluateAction
+      summary: Assigned actor requests a permit. Changes state; not a dry run.
+      description: |
+        201 PERMIT_ISSUED after reservation and signature persistence. 200 for
+        an identical retry returning the existing issuance (never extended,
+        re-reserved or reactivated) or for a policy DENY with a reason. 409 for
+        a stale or changed revision.
+      x-steelmatter-principals: [actor]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EvaluateRequest' }
+      responses:
+        '201':
+          description: New permit issued.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PermitIssued' }
+        '200':
+          description: Identical retry (existing issuance) or policy denial.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/PermitIssued'
+                  - $ref: '#/components/schemas/Denied'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/actions/simulate:
+    post:
+      tags: [actions]
+      operationId: simulateAction
+      summary: Operator requests a nonbinding simulation. Creates no permit, reservation or target write.
+      x-steelmatter-principals: [operator]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EvaluateRequest' }
+      responses:
+        '200':
+          description: Simulation result; always labelled simulation=true.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimulationResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/operations:
+    post:
+      tags: [operations]
+      operationId: admitOperation
+      summary: Assigned actor presents the exact action and permit through the gate.
+      description: |
+        201 COMMITTED for a new order. 200 returns the stored result for an
+        authorised identical instruction/action already committed, even after
+        the historical permit expired. A changed digest conflicts. The actor
+        cannot choose a destination; the audience comes from the mandate.
+      x-steelmatter-principals: [actor]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OperationRequest' }
+      responses:
+        '201':
+          description: Order, obligation, accounting, consumption, result and outbox committed together.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperationResult' }
+        '200':
+          description: Identical already-committed operation; stored result, no new effect.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperationResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unsupported' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/operations/{operation_id}:
+    get:
+      tags: [operations]
+      operationId: getOperation
+      summary: Authorised reader retrieves the four status fields and a scoped target reference.
+      x-steelmatter-principals: [actor, issuer, owner, observer, operator]
+      parameters:
+        - $ref: '#/components/parameters/OperationId'
+      responses:
+        '200':
+          description: Operation status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperationStatus' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/operations/{operation_id}/reconcile:
+    post:
+      tags: [operations]
+      operationId: reconcileOperation
+      summary: Worker/operator performs readback. Cannot invent success or create a replacement order.
+      description: |
+        Document 03 allows 202 queued or 200 resolved. R0 always performs the
+        read-only readback synchronously and returns 200 RESOLVED; each call
+        records a new observer-signed observation. 202 is reserved for R1.
+      x-steelmatter-principals: [observer, operator]
+      parameters:
+        - $ref: '#/components/parameters/OperationId'
+      responses:
+        '200':
+          description: Readback resolved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReconcileResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/operations/{operation_id}/evidence:
+    get:
+      tags: [operations]
+      operationId: getEvidence
+      summary: Authorised reader retrieves signed records, linkage and incomplete status, without secrets.
+      x-steelmatter-principals: [actor, issuer, owner, observer, operator]
+      parameters:
+        - $ref: '#/components/parameters/OperationId'
+      responses:
+        '200':
+          description: Evidence bundle (may be incomplete; see evidence_status and incomplete).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EvidenceBundle' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/adapters/{adapter_id}/assurance:
+    get:
+      tags: [adapters]
+      operationId: getAdapterAssurance
+      summary: Authorised reader retrieves supported paths, limitations, version and test/evidence references.
+      x-steelmatter-principals: [actor, issuer, owner, observer, operator]
+      parameters:
+        - $ref: '#/components/parameters/AdapterId'
+      responses:
+        '200':
+          description: Adapter assurance statement.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdapterAssurance' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+components:
+  securitySchemes:
+    principalToken:
+      type: http
+      scheme: bearer
+      description: |
+        Synthetic local principal credential. The token maps to one principal
+        (kind owner, issuer, actor, observer or operator) and one tenant in the
+        server's principal table; the exact credential format is pinned in I03.
+
+  parameters:
+    MandateId:
+      name: mandate_id
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Identifier' }
+    InstructionId:
+      name: instruction_id
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Identifier' }
+    OperationId:
+      name: operation_id
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Identifier' }
+    AdapterId:
+      name: adapter_id
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Identifier' }
+
+  responses:
+    BadRequest:
+      description: Invalid input (strict JSON profile, schema, semantic rules, presented permit form).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthenticated:
+      description: Missing or invalid credentials.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Not entitled, wrong actor/audience, revoked/expired authority or untrusted permit. No mutation.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Absent or inaccessible; no disclosure of which.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Digest, revision or state conflict. No mutation.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unsupported:
+      description: Unsupported version, profile, currency, adapter path, supplier or actor assignment.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: |
+        Per-principal quota exceeded (RATE_LIMITED, retryable). Checked after
+        authentication and before the body is read; the request has no effect.
+        A Retry-After header gives whole seconds until the next request is
+        allowed. Configured by STEELMATTER_RATE_LIMIT_PER_MINUTE and
+        STEELMATTER_RATE_LIMIT_BURST.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Internal:
+      description: Unexpected server-side failure, logged with the request ID. Not retryable.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unavailable:
+      description: Authoritative service, clock or retries unavailable. Non-success; identities are kept for lookup.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Identifier:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]*$'
+    Digest:
+      type: string
+      pattern: '^[a-f0-9]{64}$'
+    Timestamp:
+      type: string
+      format: date-time
+      pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$'
+    PositiveInteger:
+      type: integer
+      minimum: 1
+      maximum: 9007199254740991
+    NonNegativeInteger:
+      type: integer
+      minimum: 0
+      maximum: 9007199254740991
+    CompactJWS:
+      type: string
+      maxLength: 1402197
+      pattern: '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
+
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error_code, message, request_id, retryable]
+      properties:
+        error_code: { $ref: '#/components/schemas/ErrorCode' }
+        message: { type: string, maxLength: 1024 }
+        request_id: { type: string, pattern: '^req_[a-f0-9]{24}$' }
+        retryable: { type: boolean }
+        operation_id: { $ref: '#/components/schemas/Identifier' }
+    ErrorCode:
+      description: Stable codes; core/httpapi/codes.go is the single source and a test keeps this list equal to it.
+      type: string
+      enum:
+        - ACTION_CHANGED
+        - ACTOR_ASSIGNMENT_INVALID
+        - ACTOR_MISMATCH
+        - ADAPTER_UNSUPPORTED
+        - ALREADY_COMMITTED
+        - AMENDMENT_ID_CONFLICT
+        - AMOUNT_MISMATCH
+        - ARITHMETIC_OVERFLOW
+        - AUDIENCE_MISMATCH
+        - AUTHORITY_REVOKED
+        - CLOCK_UNHEALTHY
+        - DUPLICATE_KEY
+        - DUPLICATE_LINE_ITEM
+        - FORBIDDEN
+        - INTERNAL_ERROR
+        - INVALID_ENCODING
+        - INVALID_JSON
+        - INVALID_TIMESTAMP
+        - INVALID_TIME_RANGE
+        - JWS_ALG_UNSUPPORTED
+        - JWS_HEADER_UNSUPPORTED
+        - JWS_KEY_UNTRUSTED
+        - JWS_MALFORMED
+        - JWS_PAYLOAD_NOT_CANONICAL
+        - JWS_SIGNATURE_INVALID
+        - JWS_TYPE_MISMATCH
+        - LINES_NOT_CANONICAL
+        - MANDATE_EXPIRED
+        - NON_INTEGER_NUMBER
+        - NOT_FOUND
+        - NUMBER_OUT_OF_RANGE
+        - OBSERVATION_INCONSISTENT
+        - PAYLOAD_TOO_LARGE
+        - PERMIT_EXPIRED
+        - PERMIT_NOT_ACTIVE
+        - RATE_LIMITED
+        - RETRIES_EXHAUSTED
+        - REVISION_STALE
+        - SCHEMA_VIOLATION
+        - SERVICE_UNAVAILABLE
+        - SOURCE_CONFLICT
+        - SUPPLIER_REVISION_STALE
+        - SUPPLIER_UNAVAILABLE
+        - UNAUTHENTICATED
+        - UNKNOWN_FIELD
+        - UNSUPPORTED_CURRENCY
+        - UNSUPPORTED_PROFILE
+        - UNSUPPORTED_VERSION
+    DenyReason:
+      type: string
+      enum:
+        - AUTHORITY_REVOKED
+        - CAPACITY_EXHAUSTED
+        - DELIVERY_NOT_PERMITTED
+        - MANDATE_EXPIRED
+        - SUPPLIER_NOT_PERMITTED
+
+    Line:
+      type: object
+      additionalProperties: false
+      required: [item_id, quantity, unit_price_minor]
+      properties:
+        item_id: { $ref: '#/components/schemas/Identifier' }
+        quantity: { $ref: '#/components/schemas/PositiveInteger' }
+        unit_price_minor: { $ref: '#/components/schemas/NonNegativeInteger' }
+    ProposedAction:
+      description: |
+        Material fields an issuer may propose. Server-owned fields are not
+        accepted: tenant_id, instruction_id, action_revision, actor_id,
+        audience, operation, supplier_revision (read from the protected
+        supplier record) and amount_minor (computed with checked arithmetic).
+        Lines are normalised before authorisation: duplicate item_id rejects,
+        order is sorted by item_id bytes.
+      type: object
+      additionalProperties: false
+      required: [supplier_id, delivery_id, currency, lines]
+      properties:
+        supplier_id: { $ref: '#/components/schemas/Identifier' }
+        delivery_id: { $ref: '#/components/schemas/Identifier' }
+        currency: { const: INR }
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { $ref: '#/components/schemas/Line' }
+
+    MandateCreateRequest:
+      description: tenant_id, issuer_id (the authenticated owner), mandate_id, revision, control_epoch and issued_at are server-owned.
+      type: object
+      additionalProperties: false
+      required: [actor_ids, audience, supplier_ids, delivery_ids, currency, limit_minor, expires_at]
+      properties:
+        actor_ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Identifier' }
+        audience: { $ref: '#/components/schemas/Identifier' }
+        supplier_ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Identifier' }
+        delivery_ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Identifier' }
+        currency: { const: INR }
+        limit_minor: { $ref: '#/components/schemas/PositiveInteger' }
+        expires_at: { $ref: '#/components/schemas/Timestamp' }
+    MandateResponse:
+      type: object
+      additionalProperties: false
+      required: [mandate, mandate_digest, mandate_jws, status, buckets]
+      properties:
+        mandate: { $ref: '../schemas/mandate.schema.json' }
+        mandate_digest: { $ref: '#/components/schemas/Digest' }
+        mandate_jws: { $ref: '#/components/schemas/CompactJWS' }
+        status: { type: string, enum: [ACTIVE, REVOKED] }
+        buckets: { $ref: '#/components/schemas/Buckets' }
+    Buckets:
+      description: limit = available + reserved + committed + unresolved, all integer paise.
+      type: object
+      additionalProperties: false
+      required: [limit_minor, available_minor, reserved_minor, committed_minor, unresolved_minor]
+      properties:
+        limit_minor: { $ref: '#/components/schemas/PositiveInteger' }
+        available_minor: { $ref: '#/components/schemas/NonNegativeInteger' }
+        reserved_minor: { $ref: '#/components/schemas/NonNegativeInteger' }
+        committed_minor: { $ref: '#/components/schemas/NonNegativeInteger' }
+        unresolved_minor: { $ref: '#/components/schemas/NonNegativeInteger' }
+    RevokeResponse:
+      type: object
+      additionalProperties: false
+      required: [mandate_id, status, control_epoch, revoked_at, buckets]
+      properties:
+        mandate_id: { $ref: '#/components/schemas/Identifier' }
+        status: { const: REVOKED }
+        control_epoch: { $ref: '#/components/schemas/PositiveInteger' }
+        revoked_at: { $ref: '#/components/schemas/Timestamp' }
+        buckets: { $ref: '#/components/schemas/Buckets' }
+
+    InstructionCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [source_system, source_record_id, mandate_id, proposed_action]
+      properties:
+        source_system: { $ref: '#/components/schemas/Identifier' }
+        source_record_id: { $ref: '#/components/schemas/Identifier' }
+        mandate_id: { $ref: '#/components/schemas/Identifier' }
+        proposed_action: { $ref: '#/components/schemas/ProposedAction' }
+        client_request_id:
+          description: Correlation only; never part of identity or idempotency.
+          allOf: [{ $ref: '#/components/schemas/Identifier' }]
+    InstructionResponse:
+      type: object
+      additionalProperties: false
+      required: [instruction_id, source_system, source_record_id, mandate_id, actor_id, action_revision, action, action_digest, status]
+      properties:
+        instruction_id: { $ref: '#/components/schemas/Identifier' }
+        source_system: { $ref: '#/components/schemas/Identifier' }
+        source_record_id: { $ref: '#/components/schemas/Identifier' }
+        mandate_id: { $ref: '#/components/schemas/Identifier' }
+        actor_id: { $ref: '#/components/schemas/Identifier' }
+        action_revision: { $ref: '#/components/schemas/PositiveInteger' }
+        action: { $ref: '../schemas/action.schema.json' }
+        action_digest: { $ref: '#/components/schemas/Digest' }
+        status: { type: string, enum: [OPEN, COMMITTED] }
+    AmendmentRequest:
+      type: object
+      additionalProperties: false
+      required: [amendment_id, expected_action_revision, proposed_action]
+      properties:
+        amendment_id: { $ref: '#/components/schemas/Identifier' }
+        expected_action_revision: { $ref: '#/components/schemas/PositiveInteger' }
+        proposed_action: { $ref: '#/components/schemas/ProposedAction' }
+    AmendmentResponse:
+      type: object
+      additionalProperties: false
+      required: [amendment_id, instruction_id, previous_action_revision, action_revision, action, action_digest, invalidated_permit_ids, released_minor]
+      properties:
+        amendment_id: { $ref: '#/components/schemas/Identifier' }
+        instruction_id: { $ref: '#/components/schemas/Identifier' }
+        previous_action_revision: { $ref: '#/components/schemas/PositiveInteger' }
+        action_revision: { $ref: '#/components/schemas/PositiveInteger' }
+        action: { $ref: '../schemas/action.schema.json' }
+        action_digest: { $ref: '#/components/schemas/Digest' }
+        invalidated_permit_ids:
+          type: array
+          items: { $ref: '#/components/schemas/Identifier' }
+        released_minor: { $ref: '#/components/schemas/NonNegativeInteger' }
+
+    EvaluateRequest:
+      type: object
+      additionalProperties: false
+      required: [instruction_id, action_revision]
+      properties:
+        instruction_id: { $ref: '#/components/schemas/Identifier' }
+        action_revision: { $ref: '#/components/schemas/PositiveInteger' }
+    PermitIssued:
+      type: object
+      additionalProperties: false
+      required: [decision, permit, permit_jws, permit_digest, action, action_digest]
+      properties:
+        decision: { const: PERMIT_ISSUED }
+        permit: { $ref: '../schemas/permit.schema.json' }
+        permit_jws: { $ref: '#/components/schemas/CompactJWS' }
+        permit_digest: { $ref: '#/components/schemas/Digest' }
+        action: { $ref: '../schemas/action.schema.json' }
+        action_digest: { $ref: '#/components/schemas/Digest' }
+    Denied:
+      type: object
+      additionalProperties: false
+      required: [decision, reason, message, instruction_id, action_revision]
+      properties:
+        decision: { const: DENY }
+        reason: { $ref: '#/components/schemas/DenyReason' }
+        message: { type: string, maxLength: 1024 }
+        instruction_id: { $ref: '#/components/schemas/Identifier' }
+        action_revision: { $ref: '#/components/schemas/PositiveInteger' }
+    SimulationResult:
+      type: object
+      additionalProperties: false
+      required: [simulation, decision]
+      properties:
+        simulation: { const: true }
+        decision: { type: string, enum: [PERMIT_WOULD_ISSUE, DENY] }
+        reason: { $ref: '#/components/schemas/DenyReason' }
+
+    OperationRequest:
+      description: The exact permitted action (canonical form) and its permit. No destination field exists.
+      type: object
+      additionalProperties: false
+      required: [action, permit_jws]
+      properties:
+        action: { $ref: '../schemas/action.schema.json' }
+        permit_jws: { $ref: '#/components/schemas/CompactJWS' }
+    TargetRef:
+      type: object
+      additionalProperties: false
+      required: [adapter_id, order_id]
+      properties:
+        adapter_id: { $ref: '#/components/schemas/Identifier' }
+        order_id: { $ref: '#/components/schemas/Identifier' }
+    OperationResult:
+      type: object
+      additionalProperties: false
+      required: [operation_id, instruction_id, action_revision, action_digest, execution, obligation_id, target_ref, committed_at]
+      properties:
+        operation_id: { $ref: '#/components/schemas/Identifier' }
+        instruction_id: { $ref: '#/components/schemas/Identifier' }
+        action_revision: { $ref: '#/components/schemas/PositiveInteger' }
+        action_digest: { $ref: '#/components/schemas/Digest' }
+        execution: { const: COMMITTED }
+        obligation_id: { $ref: '#/components/schemas/Identifier' }
+        target_ref: { $ref: '#/components/schemas/TargetRef' }
+        committed_at: { $ref: '#/components/schemas/Timestamp' }
+    OperationStatus:
+      description: |
+        Four independent status fields (document 03). OUTCOME_UNKNOWN is R1.
+        R0 derivation: authorisation is PERMITTED for an active or consumed
+        permit; REVOKED when released by revocation or withdrawn by an
+        amendment; EXPIRED when expired (cleaned up or not) or released as an
+        unused unsigned issuance. DENIED is unreachable in R0 because policy
+        denials create no operation. Execution REJECTED is unreachable because
+        rejected admissions persist nothing.
+      type: object
+      additionalProperties: false
+      required: [operation_id, instruction_id, authorisation, execution, observation, evidence]
+      properties:
+        operation_id: { $ref: '#/components/schemas/Identifier' }
+        instruction_id: { $ref: '#/components/schemas/Identifier' }
+        authorisation: { type: string, enum: [PERMITTED, DENIED, REVOKED, EXPIRED] }
+        execution: { type: string, enum: [NOT_ADMITTED, COMMITTED, REJECTED] }
+        observation: { type: string, enum: [NOT_OBSERVED, MATCH, MISMATCH, INSUFFICIENT_EVIDENCE] }
+        evidence: { type: string, enum: [PENDING, AVAILABLE, INVALID] }
+        target_ref: { $ref: '#/components/schemas/TargetRef' }
+    ReconcileResult:
+      type: object
+      additionalProperties: false
+      required: [operation_id, state, observation]
+      properties:
+        operation_id: { $ref: '#/components/schemas/Identifier' }
+        state: { type: string, enum: [QUEUED, RESOLVED] }
+        observation: { type: string, enum: [NOT_OBSERVED, MATCH, MISMATCH, INSUFFICIENT_EVIDENCE] }
+    EvidenceBundle:
+      type: object
+      additionalProperties: false
+      description: |
+        Signed records exactly as issued, the action they bind, and the
+        service's linkage claims. No secrets and no trust anchors: verifiers
+        supply their own and recompute every link from the signed payloads.
+      required: [operation_id, evidence, records, action, links, incomplete]
+      properties:
+        operation_id: { $ref: '#/components/schemas/Identifier' }
+        evidence: { type: string, enum: [PENDING, AVAILABLE, INVALID] }
+        action: { $ref: '../schemas/action.schema.json' }
+        records:
+          type: object
+          additionalProperties: false
+          properties:
+            mandate_jws: { $ref: '#/components/schemas/CompactJWS' }
+            permit_jws: { $ref: '#/components/schemas/CompactJWS' }
+            execution_jws: { $ref: '#/components/schemas/CompactJWS' }
+            observation_jws: { $ref: '#/components/schemas/CompactJWS' }
+        links:
+          type: object
+          additionalProperties: false
+          required: [instruction_id, action_digest]
+          properties:
+            instruction_id: { $ref: '#/components/schemas/Identifier' }
+            action_digest: { $ref: '#/components/schemas/Digest' }
+            mandate_digest: { $ref: '#/components/schemas/Digest' }
+            permit_digest: { $ref: '#/components/schemas/Digest' }
+            execution_digest: { $ref: '#/components/schemas/Digest' }
+            obligation_id: { $ref: '#/components/schemas/Identifier' }
+        incomplete:
+          description: Missing records or links, e.g. "execution_jws", "observation_jws". Empty when complete.
+          type: array
+          items: { type: string, maxLength: 128 }
+    AdapterAssurance:
+      type: object
+      additionalProperties: false
+      required: [adapter_id, version, simulation, supported_operations, supported_paths, limitations, test_references]
+      properties:
+        adapter_id: { $ref: '#/components/schemas/Identifier' }
+        version: { type: string, maxLength: 64 }
+        simulation: { type: boolean, description: true for the co-located synthetic R0 target. }
+        supported_operations:
+          type: array
+          items: { const: purchase_order.issue }
+        supported_paths:
+          type: array
+          items: { type: string, maxLength: 256 }
+        limitations:
+          type: array
+          items: { type: string, maxLength: 1024 }
+        test_references:
+          type: array
+          items: { type: string, maxLength: 256 }

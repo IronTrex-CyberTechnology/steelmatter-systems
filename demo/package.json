@@ -1,0 +1,22 @@
+{
+  "name": "@irontrex/steelmatter-demo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Browser scenario demonstrator for the Steelmatter R0 reference: playback of the pinned demo run, with evidence checked in the browser by the standalone verifier. Simulation with synthetic data only.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=26.11.0"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "@noble/hashes": "2.4.0",
+    "@types/node": "26.6.5",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
+  }
+}

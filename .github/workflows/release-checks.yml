@@ -1,0 +1,139 @@
+# steelmatter-release-checks: release-candidate evidence on a fresh runner (D08).
+# A clean machine clones the repository, installs from scratch with no caches,
+# and must reach one protected action with offline-verified evidence within
+# 15 minutes. The full CI suite is timed separately, Go dependencies are
+# scanned with govulncheck, and all logs are scanned for secret material.
+# Unprivileged: read-only token, no secrets, no model API. Run it on the
+# release-candidate commit: push a tag named rc-check-* on it, or use
+# Actions > steelmatter-release-checks > Run workflow.
+name: steelmatter-release-checks
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [dev]
+    tags: ['rc-check-*']
+
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: local
+  INSTALL_TARGET_SECONDS: "900" # 15 minutes: clone to one protected action with verified evidence
+
+jobs:
+  clean-install:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    services:
+      postgres:
+        # Keep in sync with versions.env POSTGRES_IMAGE and ci.yml.
+        image: postgres:17.10@sha256:7958605b474b3d264a969cb3a123d6aa00ad1e1fe9da8a69984dabb704d93317
+        env:
+          POSTGRES_PASSWORD: ci-disposable # disposable per-job container; not a secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Start the install clock
+        run: echo "T0=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Fresh clone
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go (no cache)
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.3" # keep in sync with versions.env GO_VERSION
+          cache: false
+
+      - name: Set up Node (no cache)
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26.11.0" # keep in sync with versions.env NODE_VERSION
+
+      - name: Install from scratch
+        run: |
+          mkdir -p .out/release
+          scripts/bootstrap 2>&1 | tee .out/release/bootstrap.log
+          (cd packages/verifier && npm ci --ignore-scripts --no-audit --no-fund) 2>&1 | tee .out/release/verifier-install.log
+
+      - name: One protected action with offline-verified evidence (target 15 minutes)
+        env:
+          STEELMATTER_ADMIN_URL: postgres://postgres:ci-disposable@localhost:5432/postgres?sslmode=disable
+          DEMO_SCENARIO: flagship
+        run: |
+          set -o pipefail
+          scripts/demo 2>&1 | tee .out/release/first-protected-action.log
+          grep -q "verifying the flagship evidence offline with the standalone verifier" .out/release/first-protected-action.log \
+            || { echo "evidence was not verified offline"; exit 1; }
+          t=$(( $(date +%s) - T0 ))
+          echo "INSTALL_SECONDS=$t" >> "$GITHUB_ENV"
+          echo "clone to one protected action with verified evidence: ${t}s (target ${INSTALL_TARGET_SECONDS}s)"
+          [[ "$t" -le "$INSTALL_TARGET_SECONDS" ]] || { echo "install target exceeded"; exit 1; }
+
+      - name: Full CI suite (timed separately)
+        env:
+          STEELMATTER_TEST_ADMIN_URL: postgres://postgres:ci-disposable@localhost:5432/postgres?sslmode=disable
+        run: |
+          set -o pipefail
+          s=$(date +%s)
+          scripts/ci 2>&1 | tee .out/release/full-ci.log
+          echo "CI_SECONDS=$(( $(date +%s) - s ))" >> "$GITHUB_ENV"
+
+      - name: Go vulnerability scan
+        # @latest: older govulncheck releases (v1.1.4, x/tools v0.29) cannot parse
+        # Go 1.27 sources and panic; the version used is printed into the log.
+        run: |
+          set -o pipefail
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          { "$(go env GOPATH)/bin/govulncheck" -version; "$(go env GOPATH)/bin/govulncheck" ./...; } 2>&1 | tee .out/release/govulncheck.log
+
+      - name: Secret scan of all logs and results
+        if: success() || failure()
+        run: |
+          shopt -s nullglob
+          files=(.out/*.json .out/release/*.log .local/demo_*/service.log)
+          if grep -nIE 'BEGIN [A-Z ]*PRIVATE KEY|smt_[0-9a-f]{64}|"d" *: *"[A-Za-z0-9_-]{40,}"|ghp_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}' "${files[@]}"; then
+            echo "secret material found in logs"; exit 1
+          fi
+          echo "no secret material in ${#files[@]} log and result files" | tee .out/release/secret-scan.log
+
+      - name: Build the audited public source bundle (excludes internal/)
+        if: success() || failure()
+        run: scripts/release-bundle 2>&1 | tee .out/release/bundle.log
+
+      - name: Record release-check results
+        if: always()
+        run: |
+          mkdir -p .out/release
+          cat > .out/release/release-checks.json <<JSON
+          {
+            "commit": "${GITHUB_SHA}",
+            "runner": "${RUNNER_OS} ${RUNNER_ARCH} (fresh GitHub-hosted runner, no caches)",
+            "install_target_seconds": ${INSTALL_TARGET_SECONDS},
+            "install_seconds_to_verified_protected_action": ${INSTALL_SECONDS:-null},
+            "full_ci_seconds": ${CI_SECONDS:-null},
+            "job_status": "${{ job.status }}"
+          }
+          JSON
+          cat .out/release/release-checks.json
+
+      - name: Upload release-check evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: steelmatter-release-checks-${{ github.sha }}
+          path: |
+            .out/*.json
+            .out/release/
+            dist/release/
+          include-hidden-files: true
+          retention-days: 90
+          if-no-files-found: error

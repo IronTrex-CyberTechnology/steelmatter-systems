@@ -1,0 +1,16 @@
+{
+  "schema_version": "1",
+  "crypto_profile": "SM-JWS-ES256-1",
+  "execution_id": "exec-001",
+  "operation_id": "op-001",
+  "tenant_id": "synthetic-org",
+  "instruction_id": "inst-001",
+  "obligation_id": "obligation-001",
+  "action_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+  "permit_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+  "target_order_id": "po-001",
+  "currency": "INR",
+  "amount_minor": 60000000,
+  "status": "COMMITTED",
+  "committed_at": "2026-10-09T10:02:00Z"
+}

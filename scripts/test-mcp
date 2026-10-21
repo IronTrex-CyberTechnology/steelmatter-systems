@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Thin MCP adapter (adapters/mcp): strict typecheck, build, protocol and tool
+# tests, and the stdio process against a stub server. The live agent flow
+# against real PostgreSQL runs in the integration phase
+# (tests/integration/mcp_test.go). Dependencies install with lifecycle scripts
+# disabled (.npmrc ignore-scripts).
+source "$(dirname "$0")/lib.sh"
+ensure_mcp_ready
+[[ "$(node -v)" == "v$NODE_VERSION" ]] || warn "node $(node -v) found; versions.env pins v$NODE_VERSION"
+cd "$ROOT/adapters/mcp"
+file="$OUT/mcp.json"; status=0
+log "phase mcp: node --test (includes tsc typecheck and build)"
+node --test --test-reporter="$ROOT/adapters/mcp/test/gojson-reporter.mjs" --test-reporter-destination="$file" test/*.test.ts || status=$?
+cd "$ROOT"
+go run ./cmd/smci summary "$file" || status=1
+exit "$status"

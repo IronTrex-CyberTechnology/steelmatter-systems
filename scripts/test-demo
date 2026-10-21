@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Browser demo (demo/): strict typecheck, static build, the browser verifier
+# bundle checked against the Node verifier on every golden vector and evidence
+# chain, and the T43 page checks (what each screen shows matches the pinned
+# recording). Dependencies install with lifecycle scripts disabled
+# (.npmrc ignore-scripts).
+source "$(dirname "$0")/lib.sh"
+ensure_demo_deps
+[[ "$(node -v)" == "v$NODE_VERSION" ]] || warn "node $(node -v) found; versions.env pins v$NODE_VERSION"
+cd "$ROOT/demo"
+file="$OUT/demo.json"; status=0
+log "phase demo: node --test (includes tsc typecheck and build)"
+node --test --test-reporter="$ROOT/demo/test/gojson-reporter.mjs" --test-reporter-destination="$file" test/*.test.ts || status=$?
+cd "$ROOT"
+go run ./cmd/smci summary "$file" || status=1
+exit "$status"

@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# Build the audited public source bundle for the release repository.
+#   scripts/release-bundle            # bundle of HEAD (working tree must be clean)
+# Writes dist/release/: steelmatter-<commit>.tar.gz, SHA256SUMS, MANIFEST.sha256
+# (every file in the bundle) and AUDIT.txt. The bundle is `git archive` of the
+# commit, restricted to the reviewed exact-file allowlist below.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+ALLOWLIST=ci/public-export-files.txt
+EXCLUDE=(internal CLAUDE.md AGENTS.md)
+
+[[ -z "$(git status --porcelain)" ]] || { echo "ERROR: working tree is not clean; commit first" >&2; exit 1; }
+commit="$(git rev-parse HEAD)"; short="${commit:0:12}"
+name="steelmatter-$short"
+[[ -f "$ALLOWLIST" ]] || { echo "ERROR: missing public export allowlist" >&2; exit 1; }
+paths=(); pathspec=()
+while IFS= read -r p || [[ -n "$p" ]]; do
+  [[ -z "$p" || "$p" == \#* ]] && continue
+  if [[ ! "$p" =~ ^[A-Za-z0-9._/-]+$ || "$p" == /* || "$p" == *..* || "$p" == */ ]]; then
+    echo "ERROR: unsafe allowlist path: $p" >&2; exit 1
+  fi
+  case "$p" in
+    internal/*|internal|CLAUDE.md|AGENTS.md|*/CLAUDE.md|*/AGENTS.md)
+      echo "ERROR: private instructions or records in allowlist: $p" >&2; exit 1 ;;
+  esac
+  entry="$(git ls-tree "$commit" -- "$p")"
+  [[ "$entry" == 100644\ blob\ * || "$entry" == 100755\ blob\ * ]] || {
+    echo "ERROR: allowlist entry is not a committed regular file: $p" >&2; exit 1;
+  }
+  paths+=("$p"); pathspec+=(":(literal)$p")
+done < "$ALLOWLIST"
+[[ ${#paths[@]} -gt 0 ]] || { echo "ERROR: empty public export allowlist" >&2; exit 1; }
+duplicates="$(printf '%s\n' "${paths[@]}" | sort | uniq -d)"
+[[ -z "$duplicates" ]] || { echo "ERROR: duplicate allowlist paths: $duplicates" >&2; exit 1; }
+out="$ROOT/dist/release"; rm -rf "$out"; mkdir -p "$out"
+work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+
+git archive --format=tar --prefix="$name/" "$commit" -- "${pathspec[@]}" | tar -x -C "$work"
+
+fail=0; audit="$out/AUDIT.txt"
+{
+  echo "Steelmatter release bundle audit"
+  echo "commit:    $commit"
+  echo "generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "excluded:  ${EXCLUDE[*]}"
+  echo "allowlist: $ALLOWLIST (exact files; additions need review)"
+  echo "files:     $(find "$work/$name" -type f | wc -l)"
+  echo
+  printf '%s\n' "${paths[@]}" | LC_ALL=C sort > "$work/expected-files"
+  (cd "$work/$name" && find . -type f | sed 's#^./##' | LC_ALL=C sort) > "$work/actual-files"
+  if diff -u "$work/expected-files" "$work/actual-files"; then
+    echo "ok   exported files exactly match reviewed allowlist"
+  else
+    echo "FAIL export differs from reviewed allowlist"; fail=1
+  fi
+  for p in "${EXCLUDE[@]}"; do
+    if [[ -e "$work/$name/$p" ]]; then echo "FAIL excluded path present: $p"; fail=1; else echo "ok   excluded path absent: $p"; fi
+  done
+  for f in LICENSE NOTICE THIRD_PARTY_NOTICES.md README.md RELEASE_NOTES.md; do
+    if [[ -f "$work/$name/$f" ]]; then echo "ok   present: $f"; else echo "FAIL missing: $f"; fail=1; fi
+  done
+  if grep -q "Apache License" "$work/$name/LICENSE" && grep -q "Version 2.0, January 2004" "$work/$name/LICENSE"; then echo "ok   LICENSE is Apache-2.0"; else echo "FAIL LICENSE is not Apache-2.0"; fail=1; fi
+  for pj in packages/sdk packages/verifier adapters/mcp demo; do
+    if grep -q '"license": "Apache-2.0"' "$work/$name/$pj/package.json"; then echo "ok   $pj/package.json licence Apache-2.0"; else echo "FAIL $pj/package.json licence"; fail=1; fi
+  done
+  hits="$(grep -rlIE 'BEGIN [A-Z ]*PRIVATE KEY|smt_[0-9a-f]{64}|ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|"d" *: *"[A-Za-z0-9_-]{40,}"' "$work/$name" || true)"
+  if [[ -n "$hits" ]]; then echo "FAIL possible secret material in files (values redacted):"; echo "$hits" | sed "s#$work/##"; fail=1; else echo "ok   no matches for scanned secret patterns (private keys, bearer tokens, cloud/VCS tokens, JWK private members)"; fi
+  sens="$(cd "$work/$name" && find . -type f \( -name '.env' -o -name '*.env.local' -o -name '*.pem' -o -name '*.key' -o -name '*.p12' -o -name 'id_rsa*' \) | sort)"
+  if [[ -n "$sens" ]]; then echo "FAIL sensitive file names:"; echo "$sens"; fail=1; else echo "ok   no .env, .pem, .key, .p12 or SSH key files"; fi
+  refs="$(grep -rnI 'internal/' "$work/$name" --include='*.md' --include='*.ts' --include='*.go' | grep -v 'excluded from public export' || true)"
+  if [[ -n "$refs" ]]; then echo "FAIL references to excluded internal/:"; echo "$refs" | sed "s#$work/##"; fail=1; else echo "ok   no links into excluded internal/"; fi
+  big="$(find "$work/$name" -type f -size +5M | sed "s#$work/##")"
+  if [[ -n "$big" ]]; then echo "WARN files over 5 MiB:"; echo "$big"; else echo "ok   no files over 5 MiB"; fi
+} > "$audit"
+
+cat "$audit"
+[[ "$fail" == 0 ]] || { echo "ERROR: audit failed; no source archive produced" >&2; exit 1; }
+(cd "$work/$name" && find . -type f -print0 | sort -z | xargs -0 sha256sum) > "$out/MANIFEST.sha256"
+tar -C "$work" -czf "$out/$name.tar.gz" "$name"
+(cd "$out" && sha256sum "$name.tar.gz" MANIFEST.sha256 AUDIT.txt > SHA256SUMS)
+echo
+cat "$out/SHA256SUMS"
+echo "bundle ready: dist/release/$name.tar.gz"

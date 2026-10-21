@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Unit tests: no database, no network.
+source "$(dirname "$0")/lib.sh"
+require_go
+run_go_phase unit ./...

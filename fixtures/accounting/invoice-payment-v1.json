@@ -1,0 +1,16 @@
+{
+  "schema": "steelmatter-accounting-fixture/1",
+  "synthetic": true,
+  "label": "SYNTHETIC invoice/payment-reference fixture: not a real invoice or payment; no bank call",
+  "case": "T29",
+  "invoice_reference": {
+    "invoice_ref_id": "inv-synthetic-0001",
+    "currency": "INR",
+    "amount_minor": 60000000
+  },
+  "payment_request": {
+    "payment_request_id": "payreq-synthetic-0001",
+    "currency": "INR",
+    "amount_minor": 60000000
+  }
+}

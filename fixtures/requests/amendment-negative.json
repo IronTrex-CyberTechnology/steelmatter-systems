@@ -1,0 +1,150 @@
+{
+  "fixture_set": "steelmatter-amendment-requests-negative-v1",
+  "note": "Malformed POST /v1/instructions/{id}/revisions bodies (I02 checklist item 4; examples/README). Each is sent by an entitled issuer against a valid instruction at revision 1 with an active permit; each must fail with the listed status and code and change nothing.",
+  "cases": [
+    {
+      "name": "unknown-top-level-field",
+      "body": "{\"amendment_id\":\"amend-neg\",\"expected_action_revision\":1,\"proposed_action\":{\"supplier_id\":\"supplier-a\",\"delivery_id\":\"warehouse-a\",\"currency\":\"INR\",\"lines\":[{\"item_id\":\"item-a\",\"quantity\":2,\"unit_price_minor\":20000000}]},\"actor_id\":\"agent-b\"}",
+      "status": 400,
+      "code": "UNKNOWN_FIELD"
+    },
+    {
+      "name": "server-owned-tenant",
+      "body": "{\"amendment_id\":\"amend-neg\",\"expected_action_revision\":1,\"proposed_action\":{\"supplier_id\":\"supplier-a\",\"delivery_id\":\"warehouse-a\",\"currency\":\"INR\",\"lines\":[{\"item_id\":\"item-a\",\"quantity\":2,\"unit_price_minor\":20000000}]},\"tenant_id\":\"other-org\"}",
+      "status": 400,
+      "code": "UNKNOWN_FIELD"
+    },
+    {
+      "name": "missing-amendment-id",
+      "body": "{\"expected_action_revision\":1,\"proposed_action\":{\"supplier_id\":\"supplier-a\",\"delivery_id\":\"warehouse-a\",\"currency\":\"INR\",\"lines\":[{\"item_id\":\"item-a\",\"quantity\":2,\"unit_price_minor\":20000000}]}}",
+      "status": 400,
+      "code": "SCHEMA_VIOLATION"
+    },
+    {
+      "name": "missing-expected-revision",
+      "body": "{\"amendment_id\":\"amend-neg\",\"proposed_action\":{\"supplier_id\":\"supplier-a\",\"delivery_id\":\"warehouse-a\",\"currency\":\"INR\",\"lines\":[{\"item_id\":\"item-a\",\"quantity\":2,\"unit_price_minor\":20000000}]}}",
+      "status": 400,
+      "code": "SCHEMA_VIOLATION"
+    },
+    {
+      "name": "missing-proposed-action",
+      "body": "{\"amendment_id\":\"amend-neg\",\"expected_action_revision\":1}",
+      "status": 400,
+      "code": "SCHEMA_VIOLATION"
+    },
+    {
+      "name": "expected-revision-zero",
+      "body": "{\"amendment_id\":\"amend-neg\",\"expected_action_revision\":0,\"proposed_action\":{\"supplier_id\":\"supplier-a\",\"delivery_id\":\"warehouse-a\",\"currency\":\"INR\",\"lines\":[{\"item_id\":\"item-a\",\"quantity\":2,\"unit_price_minor\":20000000}]}}",
+      "status": 400,
+      "code": "SCHEMA_VIOLATION"
+    },
+    {
+      "name": "expected-revision-negative",
+      "body": "{\"amendment_id\":\"amend-neg\",\"expected_action_revision\":-1,\"proposed_action\":{\"supplier_id\":\"supplier-a\",\"delivery_id\":\"warehouse-a\",\"currency\":\"INR\",\"lines\":[{\"item_id\":\"item-a\",\"quantity\":2,\"unit_price_minor\":20000000}]}}",
+      "status": 400,
+      "code": "SCHEMA_VIOLATION"
+    },
+    {
+      "name": "expected-revision-string",
+      "body": "{\"amendment_id\":\"amend-neg\",\"expected_action_revision\":\"1\",\"proposed_action\":{\"supplier_id\":\"supplier-a\",\"delivery_id\":\"warehouse-a\",\"currency\":\"INR\",\"lines\":[{\"item_id\":\"item-a\",\"quantity\":2,\"unit_price_minor\":20000000}]}}",
+      "status": 400,
+      "code": "SCHEMA_VIOLATION"
+    },
+    {
+      "name": "expected-revision-fraction",
+      "body": "{\"amendment_id\":\"amend-neg\",\"expected_action_revision\":1.5,\"proposed_action\":{\"supplier_id\":\"supplier-a\",\"delivery_id\":\"warehouse-a\",\"currency\":\"INR\",\"lines\":[{\"item_id\":\"item-a\",\"quantity\":2,\"unit_price_minor\":20000000}]}}",
+      "status": 400,
+      "code": "NON_INTEGER_NUMBER"
+    },
+    {
+      "name": "expected-revision-overflow",
+      "body": "{\"amendment_id\":\"amend-neg\",\"expected_action_revision\":9007199254740992,\"proposed_action\":{\"supplier_id\":\"supplier-a\",\"delivery_id\":\"warehouse-a\",\"currency\":\"INR\",\"lines\":[{\"item_id\":\"item-a\",\"quantity\":2,\"unit_price_minor\":20000000}]}}",
+      "status": 400,
+      "code": "NUMBER_OUT_OF_RANGE"
+    },
+    {
+      "name": "amendment-id-invalid-characters",
+      "body": "{\"amendment_id\":\"amend neg\",\"expected_action_revision\":1,\"proposed_action\":{\"supplier_id\":\"supplier-a\",\"delivery_id\":\"warehouse-a\",\"currency\":\"INR\",\"lines\":[{\"item_id\":\"item-a\",\"quantity\":2,\"unit_price_minor\":20000000}]}}",
+      "status": 400,
+      "code": "SCHEMA_VIOLATION"
+    },
+    {
+      "name": "amendment-id-empty",
+      "body": "{\"amendment_id\":\"\",\"expected_action_revision\":1,\"proposed_action\":{\"supplier_id\":\"supplier-a\",\"delivery_id\":\"warehouse-a\",\"currency\":\"INR\",\"lines\":[{\"item_id\":\"item-a\",\"quantity\":2,\"unit_price_minor\":20000000}]}}",
+      "status": 400,
+      "code": "SCHEMA_VIOLATION"
+    },
+    {
+      "name": "amendment-id-too-long",
+      "body": "{\"amendment_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_action_revision\":1,\"proposed_action\":{\"supplier_id\":\"supplier-a\",\"delivery_id\":\"warehouse-a\",\"currency\":\"INR\",\"lines\":[{\"item_id\":\"item-a\",\"quantity\":2,\"unit_price_minor\":20000000}]}}",
+      "status": 400,
+      "code": "SCHEMA_VIOLATION"
+    },
+    {
+      "name": "proposed-amount-server-owned",
+      "body": "{\"amendment_id\":\"amend-neg\",\"expected_action_revision\":1,\"proposed_action\":{\"supplier_id\":\"supplier-a\",\"delivery_id\":\"warehouse-a\",\"currency\":\"INR\",\"lines\":[{\"item_id\":\"item-a\",\"quantity\":2,\"unit_price_minor\":20000000}],\"amount_minor\":40000000}}",
+      "status": 400,
+      "code": "UNKNOWN_FIELD"
+    },
+    {
+      "name": "proposed-supplier-revision-server-owned",
+      "body": "{\"amendment_id\":\"amend-neg\",\"expected_action_revision\":1,\"proposed_action\":{\"supplier_id\":\"supplier-a\",\"delivery_id\":\"warehouse-a\",\"currency\":\"INR\",\"lines\":[{\"item_id\":\"item-a\",\"quantity\":2,\"unit_price_minor\":20000000}],\"supplier_revision\":1}}",
+      "status": 400,
+      "code": "UNKNOWN_FIELD"
+    },
+    {
+      "name": "proposed-line-extra-field",
+      "body": "{\"amendment_id\":\"amend-neg\",\"expected_action_revision\":1,\"proposed_action\":{\"supplier_id\":\"supplier-a\",\"delivery_id\":\"warehouse-a\",\"currency\":\"INR\",\"lines\":[{\"item_id\":\"item-a\",\"quantity\":2,\"unit_price_minor\":20000000,\"discount_minor\":1}]}}",
+      "status": 400,
+      "code": "UNKNOWN_FIELD"
+    },
+    {
+      "name": "proposed-currency-usd",
+      "body": "{\"amendment_id\":\"amend-neg\",\"expected_action_revision\":1,\"proposed_action\":{\"supplier_id\":\"supplier-a\",\"delivery_id\":\"warehouse-a\",\"currency\":\"USD\",\"lines\":[{\"item_id\":\"item-a\",\"quantity\":2,\"unit_price_minor\":20000000}]}}",
+      "status": 422,
+      "code": "UNSUPPORTED_CURRENCY"
+    },
+    {
+      "name": "proposed-duplicate-item",
+      "body": "{\"amendment_id\":\"amend-neg\",\"expected_action_revision\":1,\"proposed_action\":{\"supplier_id\":\"supplier-a\",\"delivery_id\":\"warehouse-a\",\"currency\":\"INR\",\"lines\":[{\"item_id\":\"item-a\",\"quantity\":1,\"unit_price_minor\":1},{\"item_id\":\"item-a\",\"quantity\":2,\"unit_price_minor\":1}]}}",
+      "status": 400,
+      "code": "DUPLICATE_LINE_ITEM"
+    },
+    {
+      "name": "proposed-empty-lines",
+      "body": "{\"amendment_id\":\"amend-neg\",\"expected_action_revision\":1,\"proposed_action\":{\"supplier_id\":\"supplier-a\",\"delivery_id\":\"warehouse-a\",\"currency\":\"INR\",\"lines\":[]}}",
+      "status": 400,
+      "code": "SCHEMA_VIOLATION"
+    },
+    {
+      "name": "proposed-zero-quantity",
+      "body": "{\"amendment_id\":\"amend-neg\",\"expected_action_revision\":1,\"proposed_action\":{\"supplier_id\":\"supplier-a\",\"delivery_id\":\"warehouse-a\",\"currency\":\"INR\",\"lines\":[{\"item_id\":\"item-a\",\"quantity\":0,\"unit_price_minor\":1}]}}",
+      "status": 400,
+      "code": "SCHEMA_VIOLATION"
+    },
+    {
+      "name": "proposed-line-total-overflow",
+      "body": "{\"amendment_id\":\"amend-neg\",\"expected_action_revision\":1,\"proposed_action\":{\"supplier_id\":\"supplier-a\",\"delivery_id\":\"warehouse-a\",\"currency\":\"INR\",\"lines\":[{\"item_id\":\"item-a\",\"quantity\":9007199254740991,\"unit_price_minor\":2}]}}",
+      "status": 400,
+      "code": "ARITHMETIC_OVERFLOW"
+    },
+    {
+      "name": "duplicate-json-key",
+      "body": "{\"amendment_id\":\"x\",\"amendment_id\":\"amend-neg\",\"expected_action_revision\":1,\"proposed_action\":{\"supplier_id\":\"supplier-a\",\"delivery_id\":\"warehouse-a\",\"currency\":\"INR\",\"lines\":[{\"item_id\":\"item-a\",\"quantity\":2,\"unit_price_minor\":20000000}]}}",
+      "status": 400,
+      "code": "DUPLICATE_KEY"
+    },
+    {
+      "name": "body-not-object",
+      "body": "[{\"amendment_id\":\"amend-neg\",\"expected_action_revision\":1,\"proposed_action\":{\"supplier_id\":\"supplier-a\",\"delivery_id\":\"warehouse-a\",\"currency\":\"INR\",\"lines\":[{\"item_id\":\"item-a\",\"quantity\":2,\"unit_price_minor\":20000000}]}}]",
+      "status": 400,
+      "code": "SCHEMA_VIOLATION"
+    },
+    {
+      "name": "body-empty",
+      "body": "",
+      "status": 400,
+      "code": "INVALID_JSON"
+    }
+  ]
+}

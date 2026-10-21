@@ -1,0 +1,17 @@
+{
+  "description": "CLR-01 JSON nesting-depth boundary (I02 §2). The top-level value has depth 0; a value inside an object or array has the container's depth + 1; input is rejected with INVALID_JSON if any value has depth greater than 32. Each case builds its input as prefix + '[' x arrays + inner + ']' x arrays + suffix. Go (core/contract) and TypeScript (packages/verifier) must agree on every case.",
+  "max_depth": 32,
+  "cases": [
+    {"name": "33-arrays-innermost-empty", "prefix": "", "arrays": 33, "inner": "", "suffix": "", "deepest": 32, "expect": "accept"},
+    {"name": "34-arrays-innermost-empty", "prefix": "", "arrays": 34, "inner": "", "suffix": "", "deepest": 33, "expect": "INVALID_JSON"},
+    {"name": "32-arrays-containing-scalar", "prefix": "", "arrays": 32, "inner": "1", "suffix": "", "deepest": 32, "expect": "accept"},
+    {"name": "33-arrays-containing-scalar", "prefix": "", "arrays": 33, "inner": "1", "suffix": "", "deepest": 33, "expect": "INVALID_JSON"},
+    {"name": "object-then-32-arrays-empty", "prefix": "{\"a\":", "arrays": 32, "inner": "", "suffix": "}", "deepest": 32, "expect": "accept"},
+    {"name": "object-then-33-arrays-empty", "prefix": "{\"a\":", "arrays": 33, "inner": "", "suffix": "}", "deepest": 33, "expect": "INVALID_JSON"},
+    {"name": "object-then-31-arrays-containing-scalar", "prefix": "{\"a\":", "arrays": 31, "inner": "1", "suffix": "}", "deepest": 32, "expect": "accept"},
+    {"name": "object-then-32-arrays-containing-scalar", "prefix": "{\"a\":", "arrays": 32, "inner": "1", "suffix": "}", "deepest": 33, "expect": "INVALID_JSON"},
+    {"name": "top-level-scalar", "prefix": "", "arrays": 0, "inner": "1", "suffix": "", "deepest": 0, "expect": "accept"},
+    {"name": "object-then-31-arrays-containing-empty-string", "prefix": "{\"a\":", "arrays": 31, "inner": "\"\"", "suffix": "}", "deepest": 32, "expect": "accept"},
+    {"name": "object-then-32-arrays-containing-empty-object", "prefix": "{\"a\":", "arrays": 32, "inner": "{}", "suffix": "}", "deepest": 33, "expect": "INVALID_JSON"}
+  ]
+}

@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Probe the Claude runner environment for D04-D06 (document 12). Run INSIDE the
+# isolated runner. This records observations; it is evidence input, not proof
+# that a control is enforced. D01-D03, D07 and D08 need separate human checks.
+#
+#   STEELMATTER_CANARY_PATH   harmless file placed OUTSIDE the project by a human (D04)
+#   STEELMATTER_BLOCKED_URL   endpoint that policy should block (D05, default https://example.com)
+#   STEELMATTER_ALLOWED_URLS  space-separated endpoints that must work (D05)
+set -uo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+fails=0; results=()
+record() { results+=("$1 $2 $3"); [[ "$1" == FAIL ]] && fails=$((fails+1)); printf '%-8s %-4s %s\n' "$1" "$2" "$3"; }
+
+# D04 filesystem: canary outside the project must not be readable.
+if [[ -z "${STEELMATTER_CANARY_PATH:-}" ]]; then
+  record BLOCKED D04 "STEELMATTER_CANARY_PATH not set; place a harmless canary outside the project"
+elif cat "$STEELMATTER_CANARY_PATH" >/dev/null 2>&1; then
+  record FAIL D04 "canary outside the project is readable: $STEELMATTER_CANARY_PATH"
+else
+  record PASS D04 "canary outside the project is not readable"
+fi
+for p in "$HOME/Documents" "$HOME/Desktop" "$HOME/Library/Application Support/Google/Chrome"; do
+  [[ "$p" == "$ROOT"* ]] && continue
+  if ls "$p" >/dev/null 2>&1; then record FAIL D04 "personal directory listable: $p"; fi
+done
+
+# D05 network: blocked endpoint fails, allowed endpoints work.
+blocked="${STEELMATTER_BLOCKED_URL:-https://example.com}"
+if curl -sS -m 8 -o /dev/null "$blocked" 2>/dev/null; then
+  record FAIL D05 "disallowed endpoint reachable: $blocked"
+else
+  record PASS D05 "disallowed endpoint blocked: $blocked"
+fi
+for u in ${STEELMATTER_ALLOWED_URLS:-https://proxy.golang.org https://registry.npmjs.org}; do
+  if curl -sS -m 8 -o /dev/null "$u" 2>/dev/null; then record PASS D05 "allowed endpoint works: $u"
+  else record FAIL D05 "allowed endpoint unreachable: $u"; fi
+done
+
+# D06 credentials: no GitHub/SSH/cloud credentials or host Docker socket.
+[[ -n "${GITHUB_TOKEN:-}${GH_TOKEN:-}" ]] && record FAIL D06 "GitHub token present in environment"
+[[ -n "${SSH_AUTH_SOCK:-}" ]] && record FAIL D06 "SSH agent socket forwarded (SSH_AUTH_SOCK)"
+compgen -G "$HOME/.ssh/id_*" >/dev/null && record FAIL D06 "SSH private keys present in ~/.ssh"
+command -v gh >/dev/null && gh auth status >/dev/null 2>&1 && record FAIL D06 "gh CLI is logged in"
+[[ -n "$(git config --get credential.helper 2>/dev/null)" ]] && record FAIL D06 "git credential helper configured"
+for f in "$HOME/.aws/credentials" "$HOME/.config/gcloud" "$HOME/.azure" "$HOME/.npmrc"; do
+  [[ -e "$f" ]] && record FAIL D06 "cloud/package credential path present: $f"
+done
+for s in /var/run/docker.sock "$HOME/.docker/run/docker.sock"; do
+  [[ -S "$s" ]] && record FAIL D06 "host Docker socket present: $s"
+done
+(( ${#results[@]} )) && printf '%s\n' "${results[@]}" | grep -q ' D06 ' || record PASS D06 "no GitHub/SSH/cloud credentials or Docker socket detected"
+
+echo
+echo "D07 (bypass mode / managed settings) and D01-D03, D08 require separate human evidence (recorded in the team's private D-check record)."
+(( fails == 0 )) || { echo "env-check: $fails FAIL observation(s)"; exit 1; }

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Integration tests against real PostgreSQL. Each test creates and drops its
+# own database and login roles.
+#   STEELMATTER_TEST_ADMIN_URL=postgres://user@localhost:5432/postgres?sslmode=disable scripts/test-integration
+source "$(dirname "$0")/lib.sh"
+require_go
+ensure_verifier_deps # tests run the TypeScript verifier CLI as a subprocess (and the SDK live test imports it)
+ensure_mcp_ready     # the live MCP agent test runs the adapter, which loads the built SDK
+[[ -n "${STEELMATTER_TEST_ADMIN_URL:-}" ]] || die "STEELMATTER_TEST_ADMIN_URL is not set (see scripts/dev-postgres)"
+run_go_phase integration -tags integration,failpoints ./...

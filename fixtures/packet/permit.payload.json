@@ -1,0 +1,21 @@
+{
+  "schema_version": "1",
+  "crypto_profile": "SM-JWS-ES256-1",
+  "permit_id": "permit-001",
+  "reservation_id": "res-001",
+  "operation_id": "op-001",
+  "tenant_id": "synthetic-org",
+  "instruction_id": "inst-001",
+  "action_revision": 1,
+  "action_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+  "mandate_id": "mandate-001",
+  "mandate_revision": 1,
+  "mandate_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+  "control_epoch": 1,
+  "actor_id": "agent-a",
+  "audience": "synthetic-procurement",
+  "currency": "INR",
+  "amount_minor": 60000000,
+  "issued_at": "2026-10-09T10:01:00Z",
+  "expires_at": "2026-10-09T10:06:00Z"
+}

@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Prepare a fresh checkout: verify pinned tools, fetch and verify modules,
+# generate synthetic signing keys and (optionally) create a dev database.
+#   STEELMATTER_ADMIN_URL=postgres://... scripts/bootstrap   # also creates steelmatter_dev
+source "$(dirname "$0")/lib.sh"
+
+require_go
+command -v node >/dev/null && [[ "$(node -v)" != "v$NODE_VERSION" ]] && warn "node $(node -v) found; versions.env pins v$NODE_VERSION (verifier work, I07)"
+if command -v psql >/dev/null; then
+  pg="$(psql --version | awk '{print $3}')"
+  [[ "$pg" == "$POSTGRES_VERSION" ]] || warn "psql $pg found; versions.env pins $POSTGRES_VERSION"
+fi
+
+log "downloading and verifying Go modules"
+go mod download
+go mod verify
+
+KEYS="$ROOT/.local/keys"
+# name:purpose[,purpose] (purposes = JWS typ values the key may sign; I02 contract §5)
+for spec in "steelmatter-service:SM-PERMIT+JWS,SM-EXECUTION+JWS" "steelmatter-observer:SM-OBSERVATION+JWS" "synthetic-owner:SM-MANDATE+JWS"; do
+  name="${spec%%:*}"; purposes="${spec#*:}"
+  if [[ -f "$KEYS/$name.key.pem" ]]; then
+    log "synthetic key $name exists"
+  else
+    args=(); IFS=, read -ra ps <<< "$purposes"; for p in "${ps[@]}"; do args+=(-purpose "$p"); done
+    go run ./cmd/smkeys generate -dir "$KEYS" -name "$name" "${args[@]}"
+  fi
+done
+
+if [[ -n "${STEELMATTER_ADMIN_URL:-}" ]]; then
+  if [[ -f "$ROOT/.local/dev.env" ]]; then
+    log "dev database already initialised (.local/dev.env)"
+  else
+    go run ./cmd/steelmatter db-init -name steelmatter_dev -env-out "$ROOT/.local/dev.env"
+  fi
+else
+  log "STEELMATTER_ADMIN_URL not set; skipping dev database (tests create their own)"
+fi
+
+log "bootstrap complete"

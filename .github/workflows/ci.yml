@@ -1,0 +1,73 @@
+# steelmatter-ci: the single required status check for main (document 12).
+# Unprivileged pull_request only; read-only token; no secrets; no model API.
+# Third-party actions are pinned to reviewed full commit SHAs.
+name: steelmatter-ci
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: steelmatter-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  steelmatter-ci:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        # Keep in sync with versions.env POSTGRES_IMAGE.
+        image: postgres:17.10@sha256:7958605b474b3d264a969cb3a123d6aa00ad1e1fe9da8a69984dabb704d93317
+        env:
+          # Disposable per-job container on a private network; not a secret.
+          POSTGRES_PASSWORD: ci-disposable
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.3" # keep in sync with versions.env GO_VERSION
+          cache: true
+
+      - name: Set up Node (TypeScript verifier, SDK, MCP adapter, browser demo and cross-runtime vectors)
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26.11.0" # keep in sync with versions.env NODE_VERSION
+          cache: npm
+          cache-dependency-path: |
+            packages/verifier/package-lock.json
+            packages/sdk/package-lock.json
+            adapters/mcp/package-lock.json
+            demo/package-lock.json
+
+      - name: Run required phases and aggregate gate
+        env:
+          STEELMATTER_TEST_ADMIN_URL: postgres://postgres:ci-disposable@localhost:5432/postgres?sslmode=disable
+          GOTOOLCHAIN: local
+        run: scripts/ci
+
+      - name: Upload sanitised results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: steelmatter-ci-results-${{ github.sha }}
+          path: .out/*.json
+          include-hidden-files: true # .out is a dot-directory; upload-artifact skips those by default
+          retention-days: 30
+          if-no-files-found: error

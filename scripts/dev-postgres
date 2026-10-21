@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Start a disposable pinned PostgreSQL container for local tests (needs Docker).
+# Prints the STEELMATTER_TEST_ADMIN_URL to export. Stop with: docker rm -f steelmatter-pg
+source "$(dirname "$0")/lib.sh"
+command -v docker >/dev/null || die "docker is not installed"
+docker info >/dev/null 2>&1 || die "docker daemon is not running"
+PORT="${STEELMATTER_PG_PORT:-55432}"
+ENVF="$ROOT/.local/postgres.env"
+mkdir -p "$ROOT/.local"; chmod 700 "$ROOT/.local"
+if [[ ! -f "$ENVF" ]]; then
+  ( umask 077; printf 'PGPASS=%s\n' "$(openssl rand -hex 24)" > "$ENVF" )
+fi
+source "$ENVF"
+if ! docker ps --format '{{.Names}}' | grep -qx steelmatter-pg; then
+  docker run -d --name steelmatter-pg -e POSTGRES_PASSWORD="$PGPASS" \
+    -p "127.0.0.1:$PORT:5432" --tmpfs /var/lib/postgresql/data "$POSTGRES_IMAGE" >/dev/null
+  for _ in $(seq 1 30); do docker exec steelmatter-pg pg_isready -U postgres >/dev/null 2>&1 && break; sleep 1; done
+fi
+log "PostgreSQL $POSTGRES_VERSION on 127.0.0.1:$PORT (data in tmpfs; lost on stop)"
+echo "export STEELMATTER_TEST_ADMIN_URL='postgres://postgres:${PGPASS}@127.0.0.1:${PORT}/postgres?sslmode=disable'"

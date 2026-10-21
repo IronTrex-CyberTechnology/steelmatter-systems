@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Contract conformance: schemas, strict parsing and golden vectors (I02).
+source "$(dirname "$0")/lib.sh"
+require_go
+ensure_verifier_deps # tests run the TypeScript verifier CLI as a subprocess
+if [[ ! -d tests/conformance ]]; then
+  log "NOT_RUN: no conformance suite yet (arrives with I02); no phase result written"
+  exit 0
+fi
+run_go_phase conformance -tags conformance ./tests/conformance/...

@@ -1,0 +1,192 @@
+{
+  "schema": "steelmatter-demo-reference/1",
+  "simulation": true,
+  "synthetic": true,
+  "note": "Simulation with synthetic data. Pinned demo outcomes; regenerate only through review.",
+  "generated_at_commit": "e688aef664e9e6ec3d9f5e62cccf94a2cd810528-dirty",
+  "generated_by": "STEELMATTER_UPDATE_DEMO_REFERENCE=1 go test -tags integration,failpoints -run '^TestT43DemoEvidenceConsistency$' ./tests/integration",
+  "fixtures": {
+    "fixtures/demo/supplier-message.txt": "04ef050190bd3e76748b6d3e05f7dac539f85bdec3a278fd7f66b4e16091001e"
+  },
+  "scenarios": [
+    {
+      "scenario": "flagship",
+      "case": "T01/T09",
+      "test_ids": [
+        "TestDemoScenarios",
+        "TestT01ConcurrentAllowance",
+        "TestT09Replay"
+      ],
+      "fixtures": [],
+      "status": "PASS",
+      "ledger": "available INR 4,00,000 | reserved INR 0 | committed INR 6,00,000 | unresolved INR 0 | orders 1",
+      "steps": [
+        {
+          "name": "owner grants mandate",
+          "ok": true
+        },
+        {
+          "name": "trusted workflows create two instructions",
+          "ok": true
+        },
+        {
+          "name": "concurrent INR 6,00,000 requests",
+          "ok": true
+        },
+        {
+          "name": "one reservation held",
+          "ok": true
+        },
+        {
+          "name": "winner presents the exact action and permit",
+          "ok": true
+        },
+        {
+          "name": "committed, nothing reserved",
+          "ok": true
+        },
+        {
+          "name": "retry returns the same order",
+          "ok": true
+        },
+        {
+          "name": "no second charge",
+          "ok": true
+        },
+        {
+          "name": "observer reads the stored order back",
+          "ok": true
+        },
+        {
+          "name": "signed evidence exported",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "scenario": "stale-supplier",
+      "case": "T04",
+      "test_ids": [
+        "TestDemoScenarios",
+        "TestT04StaleSupplier"
+      ],
+      "fixtures": [],
+      "status": "PASS",
+      "ledger": "available INR 4,00,000 | reserved INR 0 | committed INR 6,00,000 | unresolved INR 0 | orders 1",
+      "steps": [
+        {
+          "name": "permit issued for supplier revision",
+          "ok": true
+        },
+        {
+          "name": "stale permit rejected",
+          "ok": true
+        },
+        {
+          "name": "old revision cannot be re-permitted",
+          "ok": true
+        },
+        {
+          "name": "issuer re-authorises via amendment",
+          "ok": true
+        },
+        {
+          "name": "new revision evaluated and committed",
+          "ok": true
+        },
+        {
+          "name": "one order at the current supplier revision",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "scenario": "lost-response",
+      "case": "T13",
+      "test_ids": [
+        "TestDemoScenarios",
+        "TestT13LostResponse"
+      ],
+      "fixtures": [],
+      "status": "PASS",
+      "ledger": "available INR 4,00,000 | reserved INR 0 | committed INR 6,00,000 | unresolved INR 0 | orders 1",
+      "steps": [
+        {
+          "name": "permit issued",
+          "ok": true
+        },
+        {
+          "name": "response lost in transit",
+          "ok": true
+        },
+        {
+          "name": "database truth: committed once",
+          "ok": true
+        },
+        {
+          "name": "client looks up the operation",
+          "ok": true
+        },
+        {
+          "name": "retry returns the original result",
+          "ok": true
+        },
+        {
+          "name": "no release, no second charge",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "scenario": "agent-injection",
+      "case": "T32",
+      "test_ids": [
+        "TestDemoScenarios",
+        "TestT32AgentInjection"
+      ],
+      "fixtures": [
+        "fixtures/demo/supplier-message.txt"
+      ],
+      "status": "PASS",
+      "ledger": "available INR 4,00,000 | reserved INR 0 | committed INR 6,00,000 | unresolved INR 0 | orders 1",
+      "steps": [
+        {
+          "name": "permit issued for the authorised order",
+          "ok": true
+        },
+        {
+          "name": "switch supplier with the issued permit",
+          "ok": true
+        },
+        {
+          "name": "inflate the order to INR 30,00,000",
+          "ok": true
+        },
+        {
+          "name": "raise its own allowance",
+          "ok": true
+        },
+        {
+          "name": "create a follow-up order itself",
+          "ok": true
+        },
+        {
+          "name": "amend the instruction to supplier-b",
+          "ok": true
+        },
+        {
+          "name": "no unauthorised effect",
+          "ok": true
+        },
+        {
+          "name": "only the exact authorised order can commit",
+          "ok": true
+        },
+        {
+          "name": "one authorised order",
+          "ok": true
+        }
+      ]
+    }
+  ]
+}

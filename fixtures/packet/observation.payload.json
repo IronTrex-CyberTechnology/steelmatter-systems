@@ -1,0 +1,15 @@
+{
+  "schema_version": "1",
+  "crypto_profile": "SM-JWS-ES256-1",
+  "observation_id": "obs-001",
+  "observer_id": "observer-a",
+  "operation_id": "op-001",
+  "tenant_id": "synthetic-org",
+  "instruction_id": "inst-001",
+  "execution_digest": "3333333333333333333333333333333333333333333333333333333333333333",
+  "expected_action_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+  "observed_action_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+  "target_order_id": "po-001",
+  "status": "MATCH",
+  "observed_at": "2026-10-09T10:03:00Z"
+}

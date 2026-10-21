@@ -1,0 +1,22 @@
+{
+  "schema_version": "1",
+  "crypto_profile": "SM-JWS-ES256-1",
+  "tenant_id": "synthetic-org",
+  "instruction_id": "inst-001",
+  "action_revision": 1,
+  "actor_id": "agent-a",
+  "audience": "synthetic-procurement",
+  "operation": "purchase_order.issue",
+  "supplier_id": "supplier-a",
+  "supplier_revision": 1,
+  "delivery_id": "warehouse-a",
+  "currency": "INR",
+  "lines": [
+    {
+      "item_id": "item-a",
+      "quantity": 3,
+      "unit_price_minor": 20000000
+    }
+  ],
+  "amount_minor": 60000000
+}

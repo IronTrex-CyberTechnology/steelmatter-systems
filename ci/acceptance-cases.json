@@ -1,0 +1,314 @@
+{
+  "baseline": "0.6",
+  "status": "Specifications only; no product tests executed",
+  "cases": [
+    {
+      "id": "T01",
+      "release": "R0",
+      "name": "Concurrent allowance",
+      "given_when": "Two actors concurrently reserve 60,000,000 paise each from 100,000,000.",
+      "assertion": "Exactly one reservation; all accounting buckets sum to limit; no negative values."
+    },
+    {
+      "id": "T02",
+      "release": "R0",
+      "name": "Load contention",
+      "given_when": "100 concurrent valid distinct instructions each request 10,000,000 paise from 100,000,000, with a fault-free run and a separate failure-injection run.",
+      "assertion": "With valid distinct instructions, no injected failures, no expiry and sufficient time/bounded retries: exactly ten reservations succeed and the rest are denied for exhausted capacity. Under injected failures, at most ten succeed. In both runs, capacity stays conserved, nonnegative and within limit; inspect persisted reservations/effects as well as status codes."
+    },
+    {
+      "id": "T03",
+      "release": "R0",
+      "name": "Material tamper",
+      "given_when": "Change amount, supplier, line item or delivery ID after permit.",
+      "assertion": "Reject each mutation; zero new target orders."
+    },
+    {
+      "id": "T04",
+      "release": "R0",
+      "name": "Stale supplier",
+      "given_when": "Change protected supplier revision before admission.",
+      "assertion": "Reject stale action; new revision needs reauthorisation."
+    },
+    {
+      "id": "T05",
+      "release": "R0",
+      "name": "Actor substitution",
+      "given_when": "Create an instruction through a trusted issuer with a distinct mapped actor. Try evaluation/admission as the issuer, as another actor and with conflicting body identity.",
+      "assertion": "The server stores the mapped executing actor, not the issuer identity. Only the assigned actor with current entitlement can evaluate/admit. Reject all substitutions without changing the binding or creating a target effect."
+    },
+    {
+      "id": "T06",
+      "release": "R0",
+      "name": "Audience substitution",
+      "given_when": "Present permit to different adapter/destination.",
+      "assertion": "Reject before target mutation."
+    },
+    {
+      "id": "T07",
+      "release": "R0",
+      "name": "Revocation ordering",
+      "given_when": "Race revocation and admission using controlled transaction barriers.",
+      "assertion": "Revocation first blocks; admission first yields one committed historical effect."
+    },
+    {
+      "id": "T08",
+      "release": "R0",
+      "name": "Expiry after wait",
+      "given_when": "Block admission on row lock until permit expiry.",
+      "assertion": "Reject after lock acquisition; no new effect."
+    },
+    {
+      "id": "T09",
+      "release": "R0",
+      "name": "Replay",
+      "given_when": "Submit identical permitted operation repeatedly.",
+      "assertion": "One order and one committed charge; authorised callers retrieve original result."
+    },
+    {
+      "id": "T10",
+      "release": "R0",
+      "name": "Changed replay and authorised amendment",
+      "given_when": "Reuse a trusted instruction with changed material through create/evaluate/admit; separately use the authorised revision endpoint before commit. Exercise stale expected revision, amendment-ID retry/conflict, amendment versus admission and late signature persistence.",
+      "assertion": "Changed replay conflicts without mutation. Only an entitled issuer can append an uncommitted revision, under the global locks. Invalidate old issuance, release only unused reservation once, preserve actor/source/mandate and require re-evaluation. Exact amendment retry retrieves its recorded result; changed ID reuse and stale expected revision conflict. If admission commits first amendment conflicts; if amendment wins old admission fails. A late signature cannot reactivate old issuance. Post-commit new amendments conflict. Never create a second order or double-release/charge capacity."
+    },
+    {
+      "id": "T11",
+      "release": "R0",
+      "name": "ID reroll",
+      "given_when": "Change client request/operation IDs for same trusted source instruction.",
+      "assertion": "Service resolves original instruction; no second effect."
+    },
+    {
+      "id": "T12",
+      "release": "R0",
+      "name": "Forged source",
+      "given_when": "An agent attempts trusted instruction creation/amendment or source-system impersonation. A trusted issuer uses a missing, ambiguous, disabled or out-of-mandate actor assignment.",
+      "assertion": "Reject without effect or sensitive disclosure. Derive issuer source entitlement and tenant from authentication, and actor from the trusted workflow mapping. No caller-selected identity can grant itself authority."
+    },
+    {
+      "id": "T13",
+      "release": "R0",
+      "name": "Lost HTTP response",
+      "given_when": "Commit order then drop response before client receives it.",
+      "assertion": "Retry/lookup returns original order; no release of committed capacity."
+    },
+    {
+      "id": "T14",
+      "release": "R0",
+      "name": "Precommit crash",
+      "given_when": "Kill process after target insert but before transaction commit.",
+      "assertion": "Rollback leaves no order/consumption; retry can create exactly one."
+    },
+    {
+      "id": "T15",
+      "release": "R0",
+      "name": "Postcommit crash",
+      "given_when": "Kill process after commit before outbox delivery.",
+      "assertion": "Restart publishes same event ID; order remains one."
+    },
+    {
+      "id": "T16",
+      "release": "R0",
+      "name": "Signing crash",
+      "given_when": "Crash after reservation before permit signing.",
+      "assertion": "Recover same issuance or expire unused reservation under lock; never double reserve."
+    },
+    {
+      "id": "T17",
+      "release": "R1",
+      "name": "Approval drift",
+      "given_when": "Approve old digest after action/supplier/mandate changed.",
+      "assertion": "Reject stale approval and request fresh decision."
+    },
+    {
+      "id": "T18",
+      "release": "R1",
+      "name": "Approver authority",
+      "given_when": "Requestor self-approves or approver entitlement is removed.",
+      "assertion": "Forbidden under separation-of-duty rule; no permit."
+    },
+    {
+      "id": "T19",
+      "release": "R1",
+      "name": "Approval capacity race",
+      "given_when": "Two approvals complete with insufficient remaining shared allowance.",
+      "assertion": "At most permitted cumulative amount reserved; approval alone grants no capacity."
+    },
+    {
+      "id": "T20",
+      "release": "R0",
+      "name": "Numeric/schema abuse",
+      "given_when": "Negative, float, overflow, duplicate JSON key, extra field, unsupported currency.",
+      "assertion": "Reject before signature/capacity/effect processing."
+    },
+    {
+      "id": "T21",
+      "release": "R0",
+      "name": "Crypto profile",
+      "given_when": "Exercise fixed canonical payload/digest/signing-input vectors, stored signatures, fresh Java-to-TypeScript and TypeScript-to-Java signatures, plus wrong algorithm/key/issuer, malformed signatures/headers and forged digests.",
+      "assertion": "Canonical bytes, expected digest and signing input match across runtimes. Both verify fixed positive signatures and reject negative cases; fresh signatures verify across runtimes without requiring byte equality. Persist only the signature for the still-active immutable issuance."
+    },
+    {
+      "id": "T22",
+      "release": "R0",
+      "name": "Direct bypass",
+      "given_when": "Use actor identity to call protected target writes directly or alter ledger.",
+      "assertion": "Network/database permission denial on every covered write path."
+    },
+    {
+      "id": "T23",
+      "release": "R0",
+      "name": "Cross-scope read",
+      "given_when": "Query operation/evidence with unmapped or wrong tenant identity.",
+      "assertion": "No sensitive data disclosed."
+    },
+    {
+      "id": "T24",
+      "release": "R0",
+      "name": "Observer mismatch",
+      "given_when": "Readback returns changed supplier/amount or missing target fields.",
+      "assertion": "MISMATCH or INSUFFICIENT_EVIDENCE; never verified success."
+    },
+    {
+      "id": "T25",
+      "release": "R0",
+      "name": "Observer separation",
+      "given_when": "Observer attempts destination mutation or budget update.",
+      "assertion": "Permission denial; observer credentials cannot execute."
+    },
+    {
+      "id": "T26",
+      "release": "R0",
+      "name": "Evidence tamper",
+      "given_when": "Change signed evidence field or remove required chain/version data.",
+      "assertion": "Verifier rejects tampering and reports missing linkage as incomplete evidence."
+    },
+    {
+      "id": "T27",
+      "release": "R0",
+      "name": "Unavailable authority",
+      "given_when": "Drop database connectivity during evaluation/admission.",
+      "assertion": "Non-success; no cache-only allow; no new retry identity."
+    },
+    {
+      "id": "T28",
+      "release": "R0",
+      "name": "Cleanup race",
+      "given_when": "Race unused reservation expiry with admission.",
+      "assertion": "One serial outcome; no released-and-committed double use."
+    },
+    {
+      "id": "T29",
+      "release": "R0",
+      "name": "Accounting continuity",
+      "given_when": "Link order, invoice-reference fixture and payment-request fixture.",
+      "assertion": "One procurement obligation; no threefold charge or capacity restoration."
+    },
+    {
+      "id": "T30",
+      "release": "R0",
+      "name": "Simulation isolation",
+      "given_when": "Call simulation repeatedly then inspect ledger/target.",
+      "assertion": "No reservation, permit or target effect."
+    },
+    {
+      "id": "T31",
+      "release": "R0",
+      "name": "Fresh install",
+      "given_when": "Outsider follows quickstart with generated synthetic keys.",
+      "assertion": "Runs flagship scenario without production services or model API."
+    },
+    {
+      "id": "T32",
+      "release": "R0",
+      "name": "Agent injection",
+      "given_when": "Untrusted supplier text asks agent to change account/raise allowance.",
+      "assertion": "Even if model proposes it, deterministic gate rejects unauthorised mutation."
+    },
+    {
+      "id": "T33",
+      "release": "R1",
+      "name": "External timeout",
+      "given_when": "External target accepts operation but response is lost.",
+      "assertion": "OUTCOME_UNKNOWN holds exclusive exposure; lookup reconciles original operation."
+    },
+    {
+      "id": "T34",
+      "release": "R1",
+      "name": "Provider idempotency expiry",
+      "given_when": "Retry after target idempotency retention has elapsed.",
+      "assertion": "No automatic fresh write; unresolved until authoritative disposition."
+    },
+    {
+      "id": "T35",
+      "release": "R1",
+      "name": "Restore/fencing",
+      "given_when": "Restore stale DB snapshot while destination has later operations.",
+      "assertion": "New writes disabled until reconciliation and new fencing/control epoch verified."
+    },
+    {
+      "id": "T36",
+      "release": "R2",
+      "name": "Risk signal outage",
+      "given_when": "Configured mandatory external security signal absent or stale.",
+      "assertion": "Hold under policy; optional signal cannot grant extra authority."
+    },
+    {
+      "id": "T37",
+      "release": "R2",
+      "name": "Delegation narrowing",
+      "given_when": "Child asks wider scope, longer expiry or excess parent budget.",
+      "assertion": "Reject; child and parent reservations account once under tested semantics."
+    },
+    {
+      "id": "T38",
+      "release": "R2",
+      "name": "Tenant isolation",
+      "given_when": "Two customer tenants reuse IDs and race writes.",
+      "assertion": "No cross-tenant state, keys, results or capacity contamination."
+    },
+    {
+      "id": "T39",
+      "release": "R0",
+      "name": "Obligation linkage",
+      "given_when": "Inspect action before commit and execution evidence after commit.",
+      "assertion": "Action has no obligation_id; one committed obligation links instruction, action digest and operation without rewriting signed action."
+    },
+    {
+      "id": "T40",
+      "release": "R0",
+      "name": "Line semantics",
+      "given_when": "Submit identical item_id twice with different quantities; submit same valid lines in differing proposal order.",
+      "assertion": "Duplicates reject; valid proposals normalise before authorisation to identical order/digest; signed material changes reject."
+    },
+    {
+      "id": "T41",
+      "release": "R0",
+      "name": "Version and time semantics",
+      "given_when": "Use unsupported schema/profile, non-UTC timestamp, invalid date, fractional or overflow numeric.",
+      "assertion": "Reject all unsupported inputs; positive fixtures validate on Java and TypeScript."
+    },
+    {
+      "id": "T42",
+      "release": "R0",
+      "name": "Verifier distribution",
+      "given_when": "Install verifier package into fresh Node project with no engine/database/model API.",
+      "assertion": "Golden valid/invalid vectors reproduce; explicit trust anchors required; no unintended network calls."
+    },
+    {
+      "id": "T43",
+      "release": "R0",
+      "name": "Demo evidence consistency",
+      "given_when": "Change reference outcome or fixture without regenerating demo results.",
+      "assertion": "CI detects mismatch; displayed trace records exact fixture/test ID, commit and simulated status."
+    },
+    {
+      "id": "T44",
+      "release": "R0",
+      "name": "Required-result reporting",
+      "given_when": "Omit a required test result or return skipped/neutral for a required phase.",
+      "assertion": "Aggregate CI fails if any required case is absent, skipped, neutral or unsuccessful; the report enumerates all applicable IDs."
+    }
+  ]
+}
