@@ -25,7 +25,7 @@ The source baseline tested by the release-check workflow is `515fa1f52c828aa7837
 
 These figures describe that baseline and runner, not every installation or the final public artifact. Subsequent closure changes concern documentation, export packaging and the reviewed full-R0 gate configuration. Product code, test assertions and dependency pins are unchanged. The release record supplies final-commit workflow links and the exact source/archive checksums.
 
-Independent QA reports 214 execution passes and one review closure on that baseline. Codex separately reviewed the 35 R0 catalogue assertions, test implementations and 297 passing raw-result references at the project owner's direction. The active `full-R0` profile now enforces those reviewed cases plus all 340 I08 checks across seven phases, including demo. Nine R1/R2 cases remain out of scope; this is not a claim that they passed.
+Independent QA reports 214 execution passes and one review closure on that baseline. Separately, the 35 R0 catalogue assertions and test implementations were checked against 297 passing raw-result references. This mapping check does not replace independent QA. The active `full-R0` profile now enforces those reviewed cases plus all 340 I08 checks across seven phases, including demo. Nine R1/R2 cases remain out of scope; this is not a claim that they passed.
 
 ## Limits and distribution
 
