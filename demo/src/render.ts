@@ -359,7 +359,7 @@ export function quickstart(data: DemoData): string {
   return `<main id="main" tabindex="-1">
     <h1>Developer quickstart</h1>
     <section aria-labelledby="run-local"><h2 id="run-local">Run the reference locally</h2>
-      <p>Needs Go, Node and a local PostgreSQL. No Claude or model API key is needed for any deterministic test.</p>
+      <p>Needs Go, Node and a local PostgreSQL. No external model API key is required for deterministic tests.</p>
       <pre><code>STEELMATTER_ADMIN_URL='postgres://user@localhost:5432/postgres?sslmode=disable' scripts/demo</code></pre>
       <p>Runs every scenario from a clean state (fresh keys, fresh database), verifies the flagship evidence offline, then tears everything down. Full test run with the aggregate gate: ${code('scripts/ci')}.</p>
     </section>
