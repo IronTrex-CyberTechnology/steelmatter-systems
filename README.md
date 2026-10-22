@@ -14,7 +14,7 @@ Developer preview / reference implementation. The service is written in Go ([ADR
 - **SDK:** `packages/sdk` is a zero-dependency typed client for all 11 endpoints with timeouts and contract-aware retries; see [packages/sdk/README.md](packages/sdk/README.md). 
 - **MCP adapter:** `adapters/mcp` is a thin stdio MCP server forwarding authenticated calls through the SDK; the service enforces assigned-actor execution and ADR-002 read access; see [adapters/mcp/README.md](adapters/mcp/README.md).
 - **Browser demo:** implemented as recorded playback with browser-side evidence verification; see [demo/README.md](demo/README.md).
-- **Acceptance reporting:** the active `full-R0` gate enforces all 35 reviewed R0 case mappings and retains all 340 required I08 checks across seven phases. Case-mapping review was completed by Codex at the project owner's direction; Sindhu's independent regression is recorded separately. Nine later-release cases remain out of scope.
+- **Acceptance reporting:** the active `full-R0` gate enforces all 35 reviewed R0 case mappings and retains all 340 required I08 checks across seven phases. Case-mapping checks covered the catalogue assertions, test implementations and recorded results; Sindhu's independent regression is documented separately. Nine later-release cases remain out of scope.
 - **Distribution:** source preview only. npm packages remain `private: true`. See [RELEASE_NOTES.md](RELEASE_NOTES.md) for measured checks and limitations.
 
 ## Requirements
