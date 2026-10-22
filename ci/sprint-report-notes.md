@@ -1,6 +1,6 @@
 ## Scope and interpretation
 
-The generated tables report the commit, environment, mapped tests and outcomes of this run. Automated test results and reviewed acceptance-case completion are separate: a case remains NOT_RUN until its mapping is reviewed and marked complete. The active full-R0 stage enforces the 35 reviewed R0 mappings and all 340 retained I08 checks across seven phases. Review was completed by Codex under the project owner's instruction; independent QA is attributed separately in the release notes.
+The generated tables report the commit, environment, mapped tests and outcomes of this run. Automated test results and reviewed acceptance-case completion are separate: a case remains NOT_RUN until its mapping is reviewed and marked complete. The active full-R0 stage enforces the 35 reviewed R0 mappings and all 340 retained I08 checks across seven phases. The case mappings were checked against catalogue assertions, test implementations and recorded results; independent QA is attributed separately in the release notes.
 
 ## Reproduction
 
