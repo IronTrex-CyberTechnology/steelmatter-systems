@@ -16,3 +16,4 @@ Implementation review:
 Acceptance reproduction on candidate commit:
 Author cannot approve own PR. New commits invalidate prior acceptance as configured.
 No credentials, customer data, private correspondence or internal-only records included.
+Keep the public summary focused on scope, impact and verification rather than internal process notes.
