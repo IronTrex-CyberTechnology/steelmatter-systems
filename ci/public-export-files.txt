@@ -111,6 +111,8 @@ demo/tsconfig.json
 docs/adr/ADR-001-go-service.md
 docs/adr/ADR-002-authorised-readers.md
 docs/adr/ADR-003-evidence-temporal-linkage.md
+docs/articles/irontrex-steelmatter-action-safety.md
+docs/articles/irontrex-steelmatter-capacity-to-do-more.md
 docs/contracts/I02-contract.md
 docs/engine.md
 docs/evidence.md

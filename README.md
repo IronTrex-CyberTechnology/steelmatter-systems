@@ -83,8 +83,15 @@ tests/conformance/   cross-language conformance suite
 tools/ciagg          aggregate gate logic
 ci/                  required results per stage, acceptance catalogue
 scripts/             entry points
-docs/                public technical docs, ADRs and contracts
+docs/                public technical docs, ADRs, contracts and articles
 ```
+
+## Articles
+
+Articles on Steelmatter's purpose, public benefit and potential business applications. They distinguish the current R0 reference implementation from the broader product direction.
+
+- [IronTrex Steelmatter and the Future of Action Safety](docs/articles/irontrex-steelmatter-action-safety.md) — human authority, open infrastructure and the technology direction.
+- [IronTrex Steelmatter and the Capacity to Do More](docs/articles/irontrex-steelmatter-capacity-to-do-more.md) — practical delegation, shared limits and the value we aim to deliver for smaller teams.
 
 ## Licence
 This source preview is distributed under the unmodified [Apache License 2.0](LICENSE), [NOTICE](NOTICE) and [third-party notices](THIRD_PARTY_NOTICES.md). Names and marks are governed by Apache-2.0 section 6.
