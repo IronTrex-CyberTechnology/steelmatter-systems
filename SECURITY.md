@@ -2,7 +2,7 @@
 
 Steelmatter Systems R0 is a source-only developer preview. It runs locally with synthetic data, synthetic signing keys and a simulated purchase-order destination. It is not a production deployment and must not be used to authorise real purchases (see [NOTICE](NOTICE) and [RELEASE_NOTES.md](RELEASE_NOTES.md)).
 
-We still want to hear about weaknesses in its design and code, because R0 is the reference for later releases.
+We still want to hear about vulnerabilities in its design and code, because R0 is the reference for later releases.
 
 ## Supported versions
 
@@ -34,7 +34,6 @@ Never include real credentials, personal data or production keys. Use the synthe
 - An initial assessment within 15 working days.
 - Coordinated disclosure: we agree a publication date with you once a fix is available, normally within 90 days of the report. We credit reporters unless you ask us not to.
 
-This is a preview maintained by a small team; these are targets, not guarantees.
 
 ## Scope
 
