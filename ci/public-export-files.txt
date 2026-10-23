@@ -1,5 +1,5 @@
 # Reviewed source-export paths. Exact regular files only; new paths require review.
-# Excludes private records, agent instructions and Git history.
+# Excludes private records and internal development instructions; Git history is not exported.
 .gitattributes
 .github/ISSUE_TEMPLATE/bug.md
 .github/ISSUE_TEMPLATE/issue.md

@@ -58,5 +58,5 @@ The response does not reveal whether the operation exists.
 ## Review
 - Author: Uday
 - Kaif: approved, 2026-10-21 (non-author approval 1 of 2)
-- Aakhil: approved, 2026-10-21 (non-author approval 2 of 2), recorded by Codex under his explicit instruction to complete the ADR-002 approval. The previously requested entitlement-transition tests and tenant-wide observer/operator rationale were reviewed before recording this approval.
+- Aakhil: approved, 2026-10-21 (non-author approval 2 of 2). The entitlement-transition tests and tenant-wide observer/operator rationale were reviewed before this approval was recorded.
 - Verification: both `TestADR002*` tests and the three T23 scope tests passed in the release-check artifact for source commit `515fa1f52c828aa7837a15e42c2192860394cbae`. This accepts the access policy; it does not constitute patent clearance or final release acceptance.

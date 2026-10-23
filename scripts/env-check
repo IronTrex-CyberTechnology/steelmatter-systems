@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Probe the Claude runner environment for D04-D06 (document 12). Run INSIDE the
+# Probe the isolated runner environment for D04-D06. Run INSIDE the
 # isolated runner. This records observations; it is evidence input, not proof
 # that a control is enforced. D01-D03, D07 and D08 need separate human checks.
 #
