@@ -1,3 +1,4 @@
+import { responseFixtures } from './response-fixtures.ts';
 // Regression tests for independent QA defects on the SDK.
 // SDK-DEF-001: only a documented error status with a known ErrorCode is a
 //              SteelmatterApiError; anything else is a SteelmatterResponseError
@@ -108,7 +109,7 @@ test("SDK-DEF-002: '.' and '..' are refused as path identifiers before any reque
   assert.equal(calls(), 0);
   // Identifiers that merely contain dots are encoded and sent as one segment.
   const seen: string[] = [];
-  const c2 = new SteelmatterClient({ baseUrl: 'https://api.example', token: 't', fetch: (async (u: string | URL | Request) => { seen.push(String(u)); return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }); }) as typeof fetch });
+  const c2 = new SteelmatterClient({ baseUrl: 'https://api.example', token: 't', fetch: (async (u: string | URL | Request) => { seen.push(String(u)); return new Response(JSON.stringify(responseFixtures.getOperation), { status: 200, headers: { 'content-type': 'application/json' } }); }) as typeof fetch });
   await c2.getOperation('...');
   await c2.getOperation('op.1');
   await c2.getOperation('../x');

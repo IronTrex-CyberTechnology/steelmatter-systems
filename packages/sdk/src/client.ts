@@ -1,3 +1,4 @@
+import { validError, validResponse } from './response-validation.ts';
 import { SteelmatterApiError, SteelmatterError, SteelmatterResponseError, SteelmatterTransportError } from './errors.ts';
 import { ERROR_CODES, ERROR_STATUS, type ErrorCode as Code } from './types.ts';
 import type {
@@ -73,6 +74,7 @@ export type EvaluateApiResponse = ApiResponse<PermitIssued> | ApiResponse<Denied
 type Idempotency = 'idempotent' | 'rate-limit-only';
 
 interface Call {
+  operation: string;
   method: 'GET' | 'POST';
   path: string;
   body?: unknown;
@@ -186,12 +188,12 @@ export class SteelmatterClient {
 
   /** Owner creates a bounded mandate (201). Not idempotent: each call creates a new mandate. */
   async createMandate(body: MandateCreateRequest, opts?: RequestOptions): Promise<ApiResponse<MandateResponse>> {
-    return this.#call({ method: 'POST', path: '/v1/mandates', body, expect: [201], errors: E_CREATE_MANDATE, idempotency: 'rate-limit-only' }, opts);
+    return this.#call({ operation: 'createMandate', method: 'POST', path: '/v1/mandates', body, expect: [201], errors: E_CREATE_MANDATE, idempotency: 'rate-limit-only' }, opts);
   }
 
   /** Owner revokes a mandate; repeated calls return 200 with the same state. */
   async revokeMandate(mandateId: Identifier, opts?: RequestOptions): Promise<ApiResponse<RevokeResponse>> {
-    return this.#call({ method: 'POST', path: `/v1/mandates/${segment(mandateId, 'mandateId')}/revoke`, expect: [200], errors: E_WRITE_404, idempotency: 'idempotent' }, opts);
+    return this.#call({ operation: 'revokeMandate', method: 'POST', path: `/v1/mandates/${segment(mandateId, 'mandateId')}/revoke`, expect: [200], errors: E_WRITE_404, idempotency: 'idempotent' }, opts);
   }
 
   // ---- instructions ----
@@ -202,7 +204,7 @@ export class SteelmatterClient {
    * of the same source record throws SOURCE_CONFLICT.
    */
   async createInstruction(body: InstructionCreateRequest, opts?: RequestOptions): Promise<ApiResponse<InstructionResponse>> {
-    return this.#call({ method: 'POST', path: '/v1/instructions', body, expect: [201, 200], errors: E_WRITE_409_422, idempotency: 'idempotent' }, opts);
+    return this.#call({ operation: 'createInstruction', method: 'POST', path: '/v1/instructions', body, expect: [201, 200], errors: E_WRITE_409_422, idempotency: 'idempotent' }, opts);
   }
 
   /**
@@ -211,7 +213,7 @@ export class SteelmatterClient {
    * required afterwards; no capacity is reserved automatically.
    */
   async amendInstruction(instructionId: Identifier, body: AmendmentRequest, opts?: RequestOptions): Promise<ApiResponse<AmendmentResponse>> {
-    return this.#call({ method: 'POST', path: `/v1/instructions/${segment(instructionId, 'instructionId')}/revisions`, body, expect: [201, 200], errors: E_WRITE_409_422, idempotency: 'idempotent' }, opts);
+    return this.#call({ operation: 'amendInstruction', method: 'POST', path: `/v1/instructions/${segment(instructionId, 'instructionId')}/revisions`, body, expect: [201, 200], errors: E_WRITE_409_422, idempotency: 'idempotent' }, opts);
   }
 
   // ---- actions ----
@@ -222,12 +224,12 @@ export class SteelmatterClient {
    * This changes state (it reserves capacity); use simulateAction for a dry run.
    */
   async evaluateAction(body: EvaluateRequest, opts?: RequestOptions): Promise<EvaluateApiResponse> {
-    return this.#call<PermitIssued | Denied>({ method: 'POST', path: '/v1/actions/evaluate', body, expect: [201, 200], errors: E_WRITE_409, idempotency: 'idempotent' }, opts);
+    return this.#call<PermitIssued | Denied>({ operation: 'evaluateAction', method: 'POST', path: '/v1/actions/evaluate', body, expect: [201, 200], errors: E_WRITE_409, idempotency: 'idempotent' }, opts);
   }
 
   /** Operator asks what evaluate would decide now. Creates nothing. */
   async simulateAction(body: EvaluateRequest, opts?: RequestOptions): Promise<ApiResponse<SimulationResult>> {
-    return this.#call({ method: 'POST', path: '/v1/actions/simulate', body, expect: [200], errors: E_WRITE_409, idempotency: 'idempotent' }, opts);
+    return this.#call({ operation: 'simulateAction', method: 'POST', path: '/v1/actions/simulate', body, expect: [200], errors: E_WRITE_409, idempotency: 'idempotent' }, opts);
   }
 
   // ---- operations ----
@@ -238,29 +240,29 @@ export class SteelmatterClient {
    * retry after a lost response). Any change to the action throws ACTION_CHANGED.
    */
   async admitOperation(body: OperationRequest, opts?: RequestOptions): Promise<ApiResponse<OperationResult>> {
-    return this.#call({ method: 'POST', path: '/v1/operations', body, expect: [201, 200], errors: E_WRITE_409_422, idempotency: 'idempotent' }, opts);
+    return this.#call({ operation: 'admitOperation', method: 'POST', path: '/v1/operations', body, expect: [201, 200], errors: E_WRITE_409_422, idempotency: 'idempotent' }, opts);
   }
 
   /** Execution, observation and evidence status plus a scoped target reference. */
   async getOperation(operationId: Identifier, opts?: RequestOptions): Promise<ApiResponse<OperationStatus>> {
-    return this.#call({ method: 'GET', path: `/v1/operations/${segment(operationId, 'operationId')}`, expect: [200], errors: E_READ, idempotency: 'idempotent' }, opts);
+    return this.#call({ operation: 'getOperation', method: 'GET', path: `/v1/operations/${segment(operationId, 'operationId')}`, expect: [200], errors: E_READ, idempotency: 'idempotent' }, opts);
   }
 
   /** Observer/operator readback. R0 resolves synchronously (200); 202 QUEUED is reserved for R1. */
   async reconcileOperation(operationId: Identifier, opts?: RequestOptions): Promise<ApiResponse<ReconcileResult>> {
-    return this.#call({ method: 'POST', path: `/v1/operations/${segment(operationId, 'operationId')}/reconcile`, expect: [200, 202], errors: E_WRITE_404, idempotency: 'idempotent' }, opts);
+    return this.#call({ operation: 'reconcileOperation', method: 'POST', path: `/v1/operations/${segment(operationId, 'operationId')}/reconcile`, expect: [200], errors: E_WRITE_404, idempotency: 'idempotent' }, opts);
   }
 
   /** Signed records, linkage and incomplete status. Verify offline with your own trust anchors. */
   async getEvidence(operationId: Identifier, opts?: RequestOptions): Promise<ApiResponse<EvidenceBundle>> {
-    return this.#call({ method: 'GET', path: `/v1/operations/${segment(operationId, 'operationId')}/evidence`, expect: [200], errors: E_READ, idempotency: 'idempotent' }, opts);
+    return this.#call({ operation: 'getEvidence', method: 'GET', path: `/v1/operations/${segment(operationId, 'operationId')}/evidence`, expect: [200], errors: E_READ, idempotency: 'idempotent' }, opts);
   }
 
   // ---- adapters ----
 
   /** Supported paths, limitations, version and test references of a destination adapter. */
   async getAdapterAssurance(adapterId: Identifier, opts?: RequestOptions): Promise<ApiResponse<AdapterAssurance>> {
-    return this.#call({ method: 'GET', path: `/v1/adapters/${segment(adapterId, 'adapterId')}/assurance`, expect: [200], errors: E_READ, idempotency: 'idempotent' }, opts);
+    return this.#call({ operation: 'getAdapterAssurance', method: 'GET', path: `/v1/adapters/${segment(adapterId, 'adapterId')}/assurance`, expect: [200], errors: E_READ, idempotency: 'idempotent' }, opts);
   }
 
   // ---- transport ----
@@ -355,8 +357,8 @@ export class SteelmatterClient {
       }
     }
     if (call.expect.includes(res.status)) {
-      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-        return { kind: 'error', error: new SteelmatterResponseError(`HTTP ${res.status}: expected a JSON object`, { status: res.status, requestId }) };
+      if (!validResponse(call.operation, res.status, parsed)) {
+        return { kind: 'error', error: new SteelmatterResponseError(`HTTP ${res.status}: response does not match the operation schema`, { status: res.status, requestId }) };
       }
       return { kind: 'ok', response: { status: res.status, created: res.status === 201, requestId: requestId ?? '', attempts: attempt, data: parsed as T } };
     }
@@ -366,7 +368,7 @@ export class SteelmatterClient {
     // code, or a status/code mismatch such as 404 + RATE_LIMITED) is a reply
     // outside the contract: it is not typed as an ErrorCode the caller can
     // switch on, and it is never retried.
-    if (call.errors.includes(res.status) && isErrorBody(parsed) && KNOWN_ERROR_CODES.has(parsed.error_code) &&
+    if (call.errors.includes(res.status) && validError(parsed) && isErrorBody(parsed) && KNOWN_ERROR_CODES.has(parsed.error_code) &&
         ERROR_STATUS[parsed.error_code as Code] === res.status) {
       return {
         kind: 'error',

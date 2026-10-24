@@ -1,3 +1,4 @@
+import { responseFixtures as responses } from './response-fixtures.ts';
 // Unit tests: the client against a scripted fetch. No network, no server.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -52,8 +53,7 @@ const action: ActionPayload = {
 };
 
 test('every operation sends the documented method, path, body and headers', async () => {
-  const ok = (status: number) => ({ status, body: { ok: true } });
-  const { c, seen } = client(Array.from({ length: 11 }, (_, i) => ok([0, 2, 3, 4, 6].includes(i) ? 201 : 200)));
+  const { c, seen } = client(Object.values(responses).map((body, i) => ({ status: [0, 2, 3, 4, 6].includes(i) ? 201 : 200, body })));
   const proposal = { supplier_id: 'supplier-a', delivery_id: 'warehouse-a', currency: 'INR' as const, lines: action.lines };
   await c.createMandate({ actor_ids: ['agent-a'], audience: 'synthetic-procurement', supplier_ids: ['supplier-a'], delivery_ids: ['warehouse-a'], currency: 'INR', limit_minor: 100_000_000, expires_at: '2026-10-16T12:00:00Z' });
   await c.revokeMandate('m-1');
@@ -85,7 +85,7 @@ test('every operation sends the documented method, path, body and headers', asyn
 });
 
 test('201 reports created, 200 reports an existing result', async () => {
-  const { c } = client([{ status: 201, body: { instruction_id: 'i' } }, { status: 200, body: { instruction_id: 'i' } }]);
+  const { c } = client([{ status: 201, body: responses.createInstruction }, { status: 200, body: responses.createInstruction }]);
   const first = await c.createInstruction({ source_system: 's', source_record_id: 'r', mandate_id: 'm', proposed_action: { supplier_id: 'x', delivery_id: 'd', currency: 'INR', lines: [] } });
   assert.equal(first.created, true);
   assert.equal(first.status, 201);
@@ -96,7 +96,7 @@ test('201 reports created, 200 reports an existing result', async () => {
 });
 
 test('path identifiers are percent-encoded', async () => {
-  const { c, seen } = client([{ status: 200, body: {} }]);
+  const { c, seen } = client([{ status: 200, body: responses.getOperation }]);
   await c.getOperation('op/../x?y');
   assert.equal(seen[0]!.url, 'http://127.0.0.1:8080/v1/operations/op%2F..%2Fx%3Fy');
   await assert.rejects(() => c.getOperation(''), TypeError);
@@ -129,7 +129,7 @@ test('idempotent calls retry 503 with backoff and keep the identical body', asyn
   const { c, seen } = client([
     { status: 503, body: errorBody('SERVICE_UNAVAILABLE', true) },
     { status: 503, body: errorBody('RETRIES_EXHAUSTED', true, { operation_id: 'op-1' }) },
-    { status: 201, body: { operation_id: 'op-1' } },
+    { status: 201, body: responses.admitOperation },
   ]);
   const r = await c.admitOperation({ action, permit_jws: 'a.b.c' });
   assert.equal(r.attempts, 3);
@@ -149,7 +149,7 @@ test('retries stop at maxAttempts and surface the last error', async () => {
 test('429 honours Retry-After, also for mandate creation', async () => {
   const { c, seen } = client([
     { status: 429, body: errorBody('RATE_LIMITED', true), headers: { 'retry-after': '2' } },
-    { status: 201, body: { mandate_digest: 'd' } },
+    { status: 201, body: responses.createMandate },
   ]);
   const r = await c.createMandate({ actor_ids: ['a'], audience: 'x', supplier_ids: ['s'], delivery_ids: ['d'], currency: 'INR', limit_minor: 1, expires_at: '2026-10-16T12:00:00Z' });
   assert.equal(r.created, true);
@@ -177,7 +177,7 @@ test('mandate creation is never retried after 503 or a transport failure (not id
 });
 
 test('transport failures are retried for idempotent calls', async () => {
-  const { c, seen } = client([new TypeError('fetch failed'), { status: 200, body: { operation_id: 'op' } }]);
+  const { c, seen } = client([new TypeError('fetch failed'), { status: 200, body: responses.getOperation }]);
   const r = await c.getOperation('op');
   assert.equal(r.attempts, 2);
   assert.equal(seen.length, 2);
@@ -229,7 +229,7 @@ test('responses outside the contract raise SteelmatterResponseError and are not 
 
 test('the token can be a function and is read per attempt', async () => {
   let n = 0;
-  const { c, seen } = client([{ status: 503, body: errorBody('SERVICE_UNAVAILABLE', true) }, { status: 200, body: {} }], { token: async () => `tok-${++n}` });
+  const { c, seen } = client([{ status: 503, body: errorBody('SERVICE_UNAVAILABLE', true) }, { status: 200, body: responses.getOperation }], { token: async () => `tok-${++n}` });
   await c.getOperation('op');
   assert.deepEqual(seen.map((s) => s.headers.authorization), ['Bearer tok-1', 'Bearer tok-2']);
   const bad = client([], { token: () => 'a\r\nX-Evil: 1' });
@@ -249,7 +249,7 @@ test('constructor validates its options', () => {
 });
 
 test('custom headers are sent', async () => {
-  const { c, seen } = client([{ status: 200, body: {} }], { headers: { 'X-Trace': 'abc' } });
+  const { c, seen } = client([{ status: 200, body: responses.getOperation }], { headers: { 'X-Trace': 'abc' } });
   await c.getOperation('op');
   assert.equal(seen[0]!.headers['x-trace'], 'abc');
 });
