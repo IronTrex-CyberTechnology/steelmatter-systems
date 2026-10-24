@@ -36,7 +36,7 @@ Independent QA reports 214 execution passes and one review closure on that basel
 
 Callers that previously relied on undocumented response fields must remove them or update the
 published contract and validator together. These corrections do not add production integrations
-or expand the R0 security claims. No dependency pins changed.
+or expand the R0 security claims. The separate dependency correction is listed below.
 
 ## MCP session and transport hardening
 
@@ -46,6 +46,14 @@ or expand the R0 security claims. No dependency pins changed.
 - Legacy batches and in-flight tool calls are each capped at 64; rejected excess requests do not reach the SDK.
 - Cancellation suppresses late results and shutdown drains queued stdout, preventing truncated JSON-RPC responses.
 - Regression coverage includes response mutations, signed-evidence tampering, parser fuzz seeds, concurrent admission/revocation, malformed admissions and tenant isolation.
+
+## Dependency correction
+
+The verifier lockfile updates the existing `fast-uri` transitive dependency from 3.1.8 to 3.1.9,
+addressing GHSA-w74x-v6f9-j3xg, GHSA-xhq7-xmqj-769h, GHSA-wjr9-j795-jxcr and
+GHSA-333x-w4r6-6crp. Third-party notices reflect the patched BSD-3-Clause version.
+This is dependency remediation; no end-to-end exploit of Steelmatter through these advisories
+was established. The release workflow pins the tested vulnerability scanner to `govulncheck@v1.9.0`.
 
 ## Limits and distribution
 
