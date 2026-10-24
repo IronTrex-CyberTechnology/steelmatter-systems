@@ -16,6 +16,9 @@ export const SUPPORTED_PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03
  */
 export const BATCH_PROTOCOL_VERSIONS: readonly string[] = ['2025-03-26'];
 
+export const MAX_BATCH_SIZE = 64;
+export const MAX_IN_FLIGHT_CALLS = 64;
+
 type Id = string | number;
 
 export interface JsonRpcResponse {
@@ -32,6 +35,7 @@ export const ErrorCodes = {
   invalidParams: -32602,
   internalError: -32603,
   notInitialized: -32002,
+  serverBusy: -32000,
 } as const;
 
 export interface ServerOptions {
@@ -83,6 +87,7 @@ export class McpServer {
         return failure(null, ErrorCodes.invalidRequest, `Invalid Request: JSON-RPC batches are not supported under MCP ${this.#protocolVersion ?? 'before initialize'}`);
       }
       if (msg.length === 0) return failure(null, ErrorCodes.invalidRequest, 'Invalid Request: empty batch');
+      if (msg.length > MAX_BATCH_SIZE) return failure(null, ErrorCodes.invalidRequest, 'Invalid Request: batch too large');
       const replies = (await Promise.all(msg.map((m) => this.#one(m)))).filter((r): r is JsonRpcResponse => r !== undefined);
       return replies.length > 0 ? replies : undefined;
     }
@@ -104,8 +109,9 @@ export class McpServer {
       this.#notification(m.method, m.params);
       return undefined;
     }
-    if (typeof m.id !== 'string' && typeof m.id !== 'number') return failure(null, ErrorCodes.invalidRequest, 'Invalid Request: id must be a string or number');
+    if (!validId(m.id)) return failure(null, ErrorCodes.invalidRequest, 'Invalid Request: id must be a string or safe integer');
     const id = m.id;
+    if (this.#inFlight.has(id)) return failure(id, ErrorCodes.invalidRequest, 'Invalid Request: request id is already active');
     try {
       return await this.#request(id, m.method, m.params);
     } catch (e) {
@@ -125,6 +131,7 @@ export class McpServer {
   async #request(id: Id, method: string, params: unknown): Promise<JsonRpcResponse | undefined> {
     switch (method) {
       case 'initialize': {
+        if (this.#initialized) return failure(id, ErrorCodes.invalidRequest, 'Invalid Request: session already initialized');
         const requested = (params as { protocolVersion?: unknown } | undefined)?.protocolVersion;
         const version = (SUPPORTED_PROTOCOL_VERSIONS as readonly unknown[]).includes(requested) ? (requested as string) : SUPPORTED_PROTOCOL_VERSIONS[0];
         this.#initialized = true;
@@ -174,10 +181,12 @@ export class McpServer {
       return success(id, { content: [{ type: 'text', text: JSON.stringify(err, null, 2) }], structuredContent: err, isError: true });
     }
 
+    if (this.#inFlight.size >= MAX_IN_FLIGHT_CALLS) return failure(id, ErrorCodes.serverBusy, 'Server busy: too many in-flight tool calls');
     const ctl = new AbortController();
     this.#inFlight.set(id, ctl);
     try {
       const res = await tool.run(this.#client, args as Record<string, unknown>, ctl.signal);
+      if (ctl.signal.aborted) return undefined;
       const structured = { status: res.status, created: res.created, request_id: res.requestId, result: res.data };
       return success(id, { content: [{ type: 'text', text: JSON.stringify(structured, null, 2) }], structuredContent: structured, isError: false });
     } catch (e) {
@@ -217,7 +226,11 @@ function toolError(e: unknown): Record<string, unknown> | undefined {
 
 function idOf(msg: unknown): Id | null {
   const id = (msg as { id?: unknown } | null)?.id;
-  return typeof id === 'string' || typeof id === 'number' ? id : null;
+  return validId(id) ? id : null;
+}
+
+function validId(id: unknown): id is Id {
+  return typeof id === 'string' || (typeof id === 'number' && Number.isSafeInteger(id));
 }
 
 function success(id: Id, result: unknown): JsonRpcResponse {

@@ -38,6 +38,15 @@ Callers that previously relied on undocumented response fields must remove them 
 published contract and validator together. These corrections do not add production integrations
 or expand the R0 security claims. No dependency pins changed.
 
+## MCP session and transport hardening
+
+- Reinitialization cannot change a running session's negotiated protocol or enable legacy batching.
+- Active request IDs cannot be reused to replace another call's cancellation target. Numeric IDs must be safe integers.
+- Stdio rejects lines over 16 MiB while receiving them, without waiting for newline or EOF, and rejects malformed UTF-8.
+- Legacy batches and in-flight tool calls are each capped at 64; rejected excess requests do not reach the SDK.
+- Cancellation suppresses late results and shutdown drains queued stdout, preventing truncated JSON-RPC responses.
+- Regression coverage includes response mutations, signed-evidence tampering, parser fuzz seeds, concurrent admission/revocation, malformed admissions and tenant isolation.
+
 ## Limits and distribution
 
 - One organisation, INR integer paise and synthetic records only.
