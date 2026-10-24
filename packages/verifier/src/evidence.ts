@@ -119,6 +119,21 @@ async function checkRecord(kind: SignedKind, jws: unknown, trust: TrustStore, no
  * authentic evidence.
  */
 export async function verifyBundle(bundle: JsonValue, trust: TrustStore, now: number = Math.floor(Date.now() / 1000)): Promise<EvidenceReport> {
+  // Unknown envelope members are outside every verification dimension. Reject
+  // them rather than silently returning the same report as a clean bundle.
+  const closed = (value: unknown, keys: string[], path: string) => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return;
+    for (const key of Object.keys(value)) {
+      if (!keys.includes(key)) {
+        const pointer = `${path}/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`;
+        throw new ContractError('UNKNOWN_FIELD', pointer, 'unknown evidence envelope field');
+      }
+    }
+  };
+  closed(bundle, ['operation_id', 'evidence', 'records', 'action', 'links', 'incomplete'], '');
+  const envelope = bundle as Record<string, JsonValue> | null;
+  closed(envelope?.records, KINDS.map(k => `${k}_jws`), '/records');
+  closed(envelope?.links, ['instruction_id', 'action_digest', 'mandate_digest', 'permit_digest', 'execution_digest', 'obligation_id'], '/links');
   const b: any = typeof bundle === 'object' && bundle !== null && !Array.isArray(bundle) ? bundle : {};
   const recs: any = typeof b.records === 'object' && b.records !== null ? b.records : {};
   const payloads: Partial<Record<SignedKind, Payload>> = {};

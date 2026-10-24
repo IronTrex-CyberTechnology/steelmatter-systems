@@ -36,6 +36,7 @@ ci/sprint-report-notes.md
 cmd/smci/main.go
 cmd/smdemo/main.go
 cmd/smkeys/main.go
+cmd/smschemas/main.go
 cmd/smvectors/main.go
 cmd/smvectors/temporal.go
 cmd/steelmatter/main.go
@@ -146,6 +147,8 @@ packages/sdk/src/client.ts
 packages/sdk/src/errors.ts
 packages/sdk/src/helpers.ts
 packages/sdk/src/index.ts
+packages/sdk/src/response-schemas.ts
+packages/sdk/src/response-validation.ts
 packages/sdk/src/types.ts
 packages/sdk/test/client.test.ts
 packages/sdk/test/contract.test.ts
@@ -154,6 +157,8 @@ packages/sdk/test/limits.test.ts
 packages/sdk/test/live/integration.live.ts
 packages/sdk/test/package.test.ts
 packages/sdk/test/qa-defects.test.ts
+packages/sdk/test/response-fixtures.ts
+packages/sdk/test/response-validation.test.ts
 packages/sdk/test/security.test.ts
 packages/sdk/test/typecheck.test.ts
 packages/sdk/test/types.test.ts

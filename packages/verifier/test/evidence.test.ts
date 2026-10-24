@@ -184,3 +184,16 @@ test('key without not_after reports CURRENT and no validity window', async () =>
   assert.equal(r.records.permit.key_status, 'CURRENT');
   assert.equal(r.records.permit.signed_within_key_validity, null);
 });
+
+test('unknown envelope, record and link members are rejected by library and CLI', async () => {
+  for (const [where, key] of [['root', 'payment_confirmed'], ['records', 'invoice_jws'], ['links', 'payment_digest'], ['root', '__proto__']] as const) {
+    const b = clone(byName('complete').bundle);
+    const target = where === 'root' ? b : b[where];
+    Object.defineProperty(target, key, { value: 'forged', enumerable: true });
+    await assert.rejects(verifyBundle(b, trust, usableAt), (e: any) => e.code === 'UNKNOWN_FIELD');
+    const result = cli(b, ['--fail-on', 'integrity,issuer,profile,linkage,chronology,observation,usability', '--now', fx.usable_at]);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /UNKNOWN_FIELD/);
+    assert.equal(result.stdout, '', 'must not print a clean verification report');
+  }
+});

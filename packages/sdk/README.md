@@ -59,10 +59,14 @@ Method names are the OpenAPI `operationId`s; `test/contract.test.ts` keeps them 
 Every method returns `ApiResponse<T>`: `{ status, created, requestId, attempts, data }`.
 `created` is true exactly for HTTP 201.
 
+Successful JSON is checked against the operation's published response schema before it is returned:
+required fields, nested types, closed objects, enums, identifiers, integer bounds and timestamps.
+This is structural validation; it does not verify signatures or prove that an action happened.
+
 ## Errors
 - `SteelmatterApiError`: the server's error envelope, only when the status is one the OpenAPI document lists for that operation, `error_code` is a known `ErrorCode`, and the status is the one that code is sent with (`ERROR_STATUS`, from `core/httpapi/codes.go`). `code` (closed `ErrorCode` union), `status`, `requestId`, `retryable` (429/503), `operationId` (look the operation up), `retryAfterMs` (429).
 - `SteelmatterTransportError`: no response (connection failure or `timedOut`).
-- `SteelmatterResponseError`: a reply outside the contract: non-JSON, a status the operation does not document (for example 409 from `getOperation`, or 418 or 502 from anything), an unknown `error_code`, a status/code mismatch (for example 404 + `RATE_LIMITED`), a redirect, or a body over 16 MiB. It is never retried.
+- `SteelmatterResponseError`: a reply outside the contract: non-JSON, a status the operation does not document (for example 409 from `getOperation`, or 418 or 502 from anything), an unknown `error_code`, a status/code mismatch (for example 404 + `RATE_LIMITED`), a malformed error envelope or successful response, a redirect, or a body over 16 MiB. It is never retried. Error bodies must include a valid `request_id`; a response header cannot substitute for a missing or invalid body field.
 
 ## Timeouts and retries
 - Per-attempt timeout `timeoutMs`, default 65 s (beyond the server's 60 s request deadline, so the client does not give up while the server may still commit). Pass `signal` to cancel.
@@ -87,3 +91,8 @@ npm run typecheck     # strict tsc over src, tests and examples
 ```
 The live test (`test/live/integration.live.ts`) drives all 11 operations against the real service and
 PostgreSQL; it runs from Go: `go test -tags integration,failpoints -run '^TestSDK' ./tests/integration`.
+
+Response schemas are generated from `api/openapi.yaml` and `schemas/*.schema.json` without adding
+runtime dependencies. After changing either contract, run `go run ./cmd/smschemas` from the repository
+root and review the generated `src/response-schemas.ts`. A test detects stale snapshots; the generator
+rejects schema features outside the validator's supported R0 subset.
