@@ -35,11 +35,12 @@ const call = async (s: McpServer, name: string, args: unknown, id: number | stri
 const action = { schema_version: '1', instruction_id: 'ins-1', supplier_id: 'supplier-a', amount_minor: 60000000 };
 
 test('initialize negotiates a supported protocol version and declares only tools', async () => {
-  const s = new McpServer({ client: fakeClient(() => ({})).client });
   for (const v of SUPPORTED_PROTOCOL_VERSIONS) {
+    const s = new McpServer({ client: fakeClient(() => ({})).client });
     const r = (await s.handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: v } })) as JsonRpcResponse;
     assert.equal((r.result as { protocolVersion: string }).protocolVersion, v);
   }
+  const s = new McpServer({ client: fakeClient(() => ({})).client });
   const r = (await s.handle({ jsonrpc: '2.0', id: 2, method: 'initialize', params: { protocolVersion: '1999-01-01' } })) as JsonRpcResponse;
   const res = r.result as { protocolVersion: string; capabilities: Record<string, unknown>; serverInfo: { name: string }; instructions: string };
   assert.equal(res.protocolVersion, SUPPORTED_PROTOCOL_VERSIONS[0]);

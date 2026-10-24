@@ -1,3 +1,4 @@
+import { responseFixtures } from './response-fixtures.ts';
 // Response size limit (16 MiB) against a real local HTTP server and the
 // platform fetch. The limit must stop the download as soon as it is exceeded,
 // not after buffering the whole body (memory exhaustion by a misbehaving or
@@ -76,8 +77,8 @@ test('a declared Content-Length above the limit is rejected before reading the b
 
 test('a body of exactly 16 MiB is accepted; one byte more is rejected', async () => {
   const json = (size: number) => {
-    const head = '{"pad":"';
-    return Buffer.from(head + 'x'.repeat(size - head.length - 2) + '"}');
+    const body = JSON.stringify(responseFixtures.getOperation);
+    return Buffer.from(body + ' '.repeat(size - body.length));
   };
   for (const [size, ok] of [[LIMIT, true], [LIMIT + 1, false]] as const) {
     const payload = json(size);
@@ -89,7 +90,7 @@ test('a body of exactly 16 MiB is accepted; one byte more is rejected', async ()
     });
     try {
       const r = await client.getOperation('op').then((x) => x, (e) => e);
-      if (ok) assert.equal((r as { data: { pad: string } }).data.pad.length, size - 10, 'exactly the limit is accepted');
+      if (ok) assert.deepEqual(r.data, responseFixtures.getOperation, 'valid JSON plus whitespace at exactly the limit is accepted');
       else assert.ok(r instanceof SteelmatterResponseError, `${size} bytes must be rejected`);
     } finally {
       await close();
@@ -100,11 +101,11 @@ test('a body of exactly 16 MiB is accepted; one byte more is rejected', async ()
 test('ordinary responses and empty bodies are unaffected', async () => {
   const { client, close } = await serve((res) => {
     res.writeHead(200, { 'content-type': 'application/json', 'x-request-id': 'req_' + 'e'.repeat(24) });
-    res.end(JSON.stringify({ operation_id: 'op', execution: 'COMMITTED' }));
+    res.end(JSON.stringify(responseFixtures.getOperation));
   });
   try {
     const r = await client.getOperation('op');
-    assert.deepEqual(r.data, { operation_id: 'op', execution: 'COMMITTED' });
+    assert.deepEqual(r.data, responseFixtures.getOperation);
     assert.equal(r.requestId, 'req_' + 'e'.repeat(24));
   } finally {
     await close();

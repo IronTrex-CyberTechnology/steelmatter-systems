@@ -88,11 +88,10 @@ jobs:
           echo "CI_SECONDS=$(( $(date +%s) - s ))" >> "$GITHUB_ENV"
 
       - name: Go vulnerability scan
-        # @latest: older govulncheck releases (v1.1.4, x/tools v0.29) cannot parse
-        # Go 1.27 sources and panic; the version used is printed into the log.
+        # Pin the scanner version verified with the repository's Go toolchain.
         run: |
           set -o pipefail
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
           { "$(go env GOPATH)/bin/govulncheck" -version; "$(go env GOPATH)/bin/govulncheck" ./...; } 2>&1 | tee .out/release/govulncheck.log
 
       - name: Secret scan of all logs and results

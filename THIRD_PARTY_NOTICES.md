@@ -25,7 +25,7 @@ This source distribution does not vendor the dependencies listed below. Package 
 | ajv-formats | verifier (runtime) | 3.0.1 | MIT |
 | canonicalize | verifier (runtime) | 5.1.0 | Apache-2.0 |
 | fast-deep-equal | verifier (runtime) | 3.1.3 | MIT |
-| fast-uri | verifier (runtime) | 3.1.8 | BSD-3-Clause |
+| fast-uri | verifier (runtime) | 3.1.9 | BSD-3-Clause |
 | jose | verifier (runtime) | 6.2.12 | MIT |
 | json-schema-traverse | verifier (runtime) | 1.0.0 | MIT |
 | require-from-string | verifier (runtime) | 2.0.2 | MIT |

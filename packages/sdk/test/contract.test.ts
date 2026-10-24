@@ -1,3 +1,4 @@
+import { responseFixtures } from './response-fixtures.ts';
 // Contract tests: the SDK surface matches api/openapi.yaml. A new or renamed
 // operation, a changed success status or a new error/deny code fails here.
 import { test } from 'node:test';
@@ -67,7 +68,7 @@ test('each method calls its operation with the documented method, path and succe
         baseUrl: 'http://127.0.0.1:8080', token: 't', retry: false,
         fetch: (async (url: string, init: RequestInit) => {
           seen.push({ method: init.method!, path: new URL(url).pathname });
-          return new Response('{}', { status, headers: { 'content-type': 'application/json' } });
+          return new Response(JSON.stringify(responseFixtures[op.id]), { status, headers: { 'content-type': 'application/json' } });
         }) as typeof fetch,
       });
       const params = [...op.path.matchAll(/\{(\w+)\}/g)].map((m) => sample[m[1]!]!);

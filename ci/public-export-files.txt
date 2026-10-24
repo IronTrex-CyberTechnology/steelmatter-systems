@@ -17,11 +17,14 @@ adapters/mcp/README.md
 adapters/mcp/package-lock.json
 adapters/mcp/package.json
 adapters/mcp/src/config.ts
+adapters/mcp/src/framing.ts
 adapters/mcp/src/index.ts
 adapters/mcp/src/main.ts
 adapters/mcp/src/server.ts
 adapters/mcp/src/tools.ts
+adapters/mcp/test/adversarial.test.ts
 adapters/mcp/test/build.test.ts
+adapters/mcp/test/framing.test.ts
 adapters/mcp/test/gojson-reporter.mjs
 adapters/mcp/test/server.test.ts
 adapters/mcp/test/stdio.test.ts
@@ -36,6 +39,7 @@ ci/sprint-report-notes.md
 cmd/smci/main.go
 cmd/smdemo/main.go
 cmd/smkeys/main.go
+cmd/smschemas/main.go
 cmd/smvectors/main.go
 cmd/smvectors/temporal.go
 cmd/steelmatter/main.go
@@ -47,6 +51,7 @@ core/contract/canonical.go
 core/contract/contract_test.go
 core/contract/depth_test.go
 core/contract/errors.go
+core/contract/fuzz_test.go
 core/contract/jws.go
 core/contract/keyring.go
 core/contract/payloads.go
@@ -146,7 +151,10 @@ packages/sdk/src/client.ts
 packages/sdk/src/errors.ts
 packages/sdk/src/helpers.ts
 packages/sdk/src/index.ts
+packages/sdk/src/response-schemas.ts
+packages/sdk/src/response-validation.ts
 packages/sdk/src/types.ts
+packages/sdk/test/adversarial.test.ts
 packages/sdk/test/client.test.ts
 packages/sdk/test/contract.test.ts
 packages/sdk/test/gojson-reporter.mjs
@@ -154,6 +162,8 @@ packages/sdk/test/limits.test.ts
 packages/sdk/test/live/integration.live.ts
 packages/sdk/test/package.test.ts
 packages/sdk/test/qa-defects.test.ts
+packages/sdk/test/response-fixtures.ts
+packages/sdk/test/response-validation.test.ts
 packages/sdk/test/security.test.ts
 packages/sdk/test/typecheck.test.ts
 packages/sdk/test/types.test.ts
@@ -176,6 +186,7 @@ packages/verifier/src/jws.ts
 packages/verifier/src/payloads.ts
 packages/verifier/src/strict-json.ts
 packages/verifier/src/trust.ts
+packages/verifier/test/adversarial.test.ts
 packages/verifier/test/depth.test.ts
 packages/verifier/test/evidence.test.ts
 packages/verifier/test/gojson-reporter.mjs
@@ -212,6 +223,7 @@ tests/conformance/conformance_test.go
 tests/conformance/temporal_test.go
 tests/conformance/time.go
 tests/integration/accounting_test.go
+tests/integration/adversarial_test.go
 tests/integration/capacity_test.go
 tests/integration/crash_test.go
 tests/integration/day2_test.go

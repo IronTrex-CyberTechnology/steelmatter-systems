@@ -75,8 +75,20 @@ go test -tags integration,failpoints -run '^TestMCPAgentEndToEnd$' ./tests/integ
 ## Protocol
 JSON-RPC 2.0, newline-delimited over stdio. Methods: `initialize` (negotiates MCP 2025-11-25, 2025-06-18 or
 2025-03-26), `ping`, `tools/list`, `tools/call`, notifications `initialized` and `cancelled` (aborts the
-in-flight call; no response is sent). Batches are accepted. Only the `tools` capability is offered.
+in-flight call; no response is sent). The negotiated version is fixed for the session; a second
+`initialize` is rejected. Batches are accepted only under 2025-03-26, with at most 64 members;
+newer revisions reject them without executing any member. Only the `tools` capability is offered.
 Implemented without a third-party MCP library (the repository requires human review before adding one).
+
+Request IDs must be strings or safe integers. Clients must use unique IDs per session;
+an ID still attached to an active call is rejected without replacing its cancellation target.
+At most 64 tool calls may be in flight; excess calls return JSON-RPC `-32000` without reaching
+the SDK. Stdio lines are limited to 16 MiB of UTF-8 bytes, enforced while receiving input,
+including before a newline or EOF. An oversized line gets one `-32600` response and is
+discarded through its newline; subsequent valid lines can proceed. Invalid UTF-8 returns `-32700`.
+Cancellation suppresses a late result even if the HTTP client has already completed the work;
+it does not undo an action committed by the service. On stdin EOF, pending responses are drained
+before the process exits.
 
 ## Not decided by the packet
 Open decisions, tracked in the team's review record: tool sets for other principal kinds, network transports,
