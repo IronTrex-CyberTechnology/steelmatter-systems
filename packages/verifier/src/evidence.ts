@@ -122,7 +122,10 @@ export async function verifyBundle(bundle: JsonValue, trust: TrustStore, now: nu
   // Unknown envelope members are outside every verification dimension. Reject
   // them rather than silently returning the same report as a clean bundle.
   const closed = (value: unknown, keys: string[], path: string) => {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) return;
+    if (value === undefined) return; // absent records/links retain incomplete-report handling
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      throw new ContractError('SCHEMA_VIOLATION', path, 'evidence envelope member must be an object');
+    }
     for (const key of Object.keys(value)) {
       if (!keys.includes(key)) {
         const pointer = `${path}/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`;
@@ -222,6 +225,7 @@ export async function verifyBundle(bundle: JsonValue, trust: TrustStore, now: nu
   // The service's link claims must agree with what was recomputed.
   const claims = b.links ?? {};
   const claimMismatch = [
+    ['instruction_id', action?.instruction_id],
     ['action_digest', actionDigest], ['mandate_digest', mandateDigest], ['permit_digest', permitDigest], ['execution_digest', executionDigest],
   ].filter(([k, v]) => claims[k as string] !== undefined && v !== undefined && claims[k as string] !== v).map(([k]) => k);
   checks.push(claimMismatch.length === 0 ? { name: 'service_link_claims', status: 'OK' } : { name: 'service_link_claims', status: 'MISMATCH', detail: claimMismatch.join(',') });

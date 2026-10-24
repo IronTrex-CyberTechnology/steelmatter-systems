@@ -197,3 +197,26 @@ test('unknown envelope, record and link members are rejected by library and CLI'
     assert.equal(result.stdout, '', 'must not print a clean verification report');
   }
 });
+
+test('malformed envelope containers cannot hide unverified content', async () => {
+  for (const where of ['root', 'records', 'links']) {
+    for (const malformed of [null, ['forged'], 'forged', 1, true]) {
+      const b = where === 'root' ? malformed : { ...clone(byName('complete').bundle), [where]: malformed };
+      await assert.rejects(verifyBundle(b, trust, usableAt), (e: any) => e.code === 'SCHEMA_VIOLATION');
+    }
+  }
+  const b = { ...clone(byName('complete').bundle), links: ['forged'] };
+  const result = cli(b, ['--fail-on', 'integrity,issuer,profile,linkage,chronology,observation,usability', '--now', fx.usable_at]);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /SCHEMA_VIOLATION/);
+  assert.equal(result.stdout, '');
+});
+
+test('the service instruction link must match the verified action', async () => {
+  const b = clone(byName('complete').bundle);
+  b.links.instruction_id = 'forged-instruction';
+  const report = await verifyBundle(b, trust, usableAt);
+  assert.equal(report.linkage.status, 'BROKEN');
+  assert.deepEqual(report.linkage.checks.filter(c => c.status === 'MISMATCH').map(c => c.name), ['service_link_claims']);
+  assert.equal(cli(b, ['--fail-on', 'linkage', '--now', fx.usable_at]).status, 1);
+});

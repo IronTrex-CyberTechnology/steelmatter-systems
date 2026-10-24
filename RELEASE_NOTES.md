@@ -32,6 +32,7 @@ Independent QA reports 214 execution passes and one review closure on that basel
 - The SDK rejects malformed error envelopes, including missing or invalid `request_id`, as `SteelmatterResponseError` without retrying them.
 - All SDK success responses must match the published operation schema before callers receive typed data. Empty objects, invalid nested fields and unknown members are rejected. This validates structure, not cryptographic trust or the truth of service claims.
 - The evidence verifier rejects unknown envelope, record and link fields with `UNKNOWN_FIELD`. The CLI exits 2 without a report; missing known records still produce an incomplete report.
+- Malformed envelope containers are rejected with `SCHEMA_VIOLATION`. A service instruction-link claim that differs from the verified action makes linkage `BROKEN`.
 
 Callers that previously relied on undocumented response fields must remove them or update the
 published contract and validator together. These corrections do not add production integrations
