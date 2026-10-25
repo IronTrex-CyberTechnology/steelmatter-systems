@@ -56,6 +56,9 @@ jobs:
             adapters/mcp/package-lock.json
             demo/package-lock.json
 
+      - name: Test experimental destination adapter kit (synthetic only)
+        run: node --test packages/destination-kit/test/*.test.mjs
+
       - name: Run required phases and aggregate gate
         env:
           STEELMATTER_TEST_ADMIN_URL: postgres://postgres:ci-disposable@localhost:5432/postgres?sslmode=disable

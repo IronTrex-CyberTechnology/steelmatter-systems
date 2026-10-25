@@ -1,0 +1,13 @@
+Steelmatter Systems R0 reference implementation
+Copyright 2026 IronTrex CyberTechnology Private Limited
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Steelmatter Systems R0 is a simulation for evaluation. It uses synthetic data,
+synthetic signing keys and a simulated purchase-order destination. It is not
+connected to any production system and must not be used to authorise real
+purchases.
+
+This product depends on third-party open-source components, fetched by the Go
+and npm package managers and not included in this source distribution. They
+are listed with their licences in THIRD_PARTY_NOTICES.md.
