@@ -13,6 +13,7 @@ Developer preview / reference implementation. The service is written in Go ([ADR
 - **I08 demo:** `scripts/demo` runs the flagship, stale-supplier, lost-response and agent-injection scenarios from a clean state; see [docs/quickstart.md](docs/quickstart.md). `scripts/ci` also writes the 31-case day-4 report to `.out/sprint-day4-report.md`.
 - **SDK:** `packages/sdk` is a zero-dependency typed client for all 11 endpoints with timeouts and contract-aware retries; see [packages/sdk/README.md](packages/sdk/README.md). 
 - **MCP adapter:** `adapters/mcp` is a thin stdio MCP server forwarding authenticated calls through the SDK; the service enforces assigned-actor execution and ADR-002 read access; see [adapters/mcp/README.md](adapters/mcp/README.md).
+- **Experimental destination kit:** [packages/destination-kit](packages/destination-kit/README.md) adds strict manifests, content-bound actions, fail-closed scaffolding and synthetic adapter conformance tests. It is an authoring kit, not a live connector or an authorization service; it does not change the R0 engine.
 - **Browser demo:** implemented as recorded playback with browser-side evidence verification; see [demo/README.md](demo/README.md).
 - **Acceptance reporting:** the active `full-R0` gate enforces all 35 reviewed R0 case mappings and retains all 340 required I08 checks across seven phases. Case-mapping checks covered the catalogue assertions, test implementations and recorded results; Sindhu's independent regression is documented separately. Nine later-release cases remain out of scope.
 - **Distribution:** source preview only. npm packages remain `private: true`. See [RELEASE_NOTES.md](RELEASE_NOTES.md) for measured checks and limitations.
@@ -44,6 +45,7 @@ The admin URL needs `CREATEDB` and `CREATEROLE`. Each integration test creates i
 | `scripts/test-verifier` | TypeScript verifier against the same vectors → `.out/verifier.json` |
 | `scripts/test-mcp` | Thin MCP adapter: typecheck, build, protocol, tool and stdio tests → `.out/mcp.json` (the live agent test runs in the integration phase) |
 | `scripts/test-sdk` | TypeScript SDK: strict typecheck, unit, contract and installed-package tests → `.out/sdk.json` (live SDK tests run in the integration phase) |
+| `node --test packages/destination-kit/test/*.test.mjs` | Experimental destination-kit unit and synthetic fixture conformance tests; no database or installation required |
 | `go run ./cmd/smvectors` | Regenerate `fixtures/vectors/golden-v1.json` (a reviewed contract change) |
 | `scripts/ci` | All phases required by the active stage, then the aggregate gate → `.out/results.json` |
 | `node packages/verifier/src/cli.ts verify --trust T --bundle B` | Verify an evidence bundle offline (see [docs/evidence.md](docs/evidence.md)) |
@@ -76,6 +78,7 @@ api/                 openapi.yaml (closed OpenAPI 3.1) and its consistency tests
 schemas/             the five payload JSON Schemas (packet, unchanged)
 packages/verifier/   standalone TypeScript verifier (@irontrex/steelmatter-verifier, private)
 packages/sdk/        typed TypeScript API client (@irontrex/steelmatter-sdk, private); see its README
+packages/destination-kit/ experimental adapter authoring/conformance kit; synthetic only, not wired to the engine
 adapters/mcp/        thin MCP adapter for an actor agent over stdio (@irontrex/steelmatter-mcp, private)
 fixtures/            packet examples and golden vectors
 prototypes/locking/  I02 locking prototype (PROTOTYPE, not product)

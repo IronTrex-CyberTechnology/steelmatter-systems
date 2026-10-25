@@ -2,6 +2,20 @@
 
 This preview demonstrates exact-action control for a synthetic purchase-order workflow. It is not a production deployment or a universal agent-security guarantee.
 
+## Unreleased: experimental destination adapter kit
+
+`packages/destination-kit` is an Apache-2.0 source-only authoring/conformance
+preview: closed manifests, immutable action bindings, a fail-closed scaffold
+generator, readback comparison and a synthetic membership adapter. It adds no
+runtime dependencies and makes no network calls. It is not connected to the
+R0 engine and provides no live authorization, durable capacity accounting,
+signed evidence, certified connectors or payment execution. See its
+[README](packages/destination-kit/README.md) for contracts and limitations.
+
+These additions are not included in the historical R0 measurements below.
+The destination-kit tests run separately in CI; the existing R0 acceptance
+catalogue and 340-check gate are unchanged. npm publication remains disabled.
+
 ## Included behaviour
 
 - Owner-issued mandates, shared INR allowances, instruction versioning and exact-action permits.
