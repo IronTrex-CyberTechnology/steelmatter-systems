@@ -63,10 +63,12 @@ core/db/migrations/0004_observations.sql
 core/db/migrations/0005_immutability.sql
 core/db/migrations/0006_observer_read_set.sql
 core/db/migrations/0007_accounting_fixtures.sql
+core/db/migrations/0008_worker_backoff.sql
 core/db/provision.go
 core/db/roles.go
 core/dbtest/harness.go
 core/engine/admit.go
+core/engine/backoff.go
 core/engine/engine.go
 core/engine/evaluate.go
 core/engine/evidence.go
@@ -229,6 +231,7 @@ tests/integration/sdk_test.go
 tests/integration/simulate_parity_test.go
 tests/integration/simulate_test.go
 tests/integration/temporal_test.go
+tests/integration/workers_test.go
 tools/ciagg/ciagg.go
 tools/ciagg/ciagg_test.go
 tools/ciagg/report.go

@@ -14,11 +14,14 @@ import (
 // CleanupExpired releases unused (UNSIGNED or ACTIVE) issuances whose expiry
 // has passed. Candidates are found without locks; each is then locked in the
 // global order and rechecked, so cleanup and admission have one serial
-// outcome and committed capacity is never released (T28). Returns the number
-// released.
+// outcome and committed capacity is never released (T28). A candidate whose
+// release fails is backed off and the rest are still released (SEC-DEF-005).
+// Returns the number released.
 func (e *Engine) CleanupExpired(ctx context.Context) (int, error) {
-	rows, err := e.Pool.Query(ctx, `SELECT tenant_id, mandate_id, instruction_id, permit_id FROM steelmatter.issuances
-		WHERE status IN ('UNSIGNED', 'ACTIVE') AND expires_at <= clock_timestamp() ORDER BY tenant_id, permit_id LIMIT 100`)
+	rows, err := e.Pool.Query(ctx, `SELECT i.tenant_id, i.mandate_id, i.instruction_id, i.permit_id FROM steelmatter.issuances i
+		WHERE i.status IN ('UNSIGNED', 'ACTIVE') AND i.expires_at <= clock_timestamp()
+		AND `+notBackedOff(workerCleanup, "i.tenant_id", "i.permit_id")+`
+		ORDER BY i.tenant_id, i.permit_id LIMIT 100`)
 	if err != nil {
 		return 0, unavailable(err)
 	}
@@ -37,16 +40,14 @@ func (e *Engine) CleanupExpired(ctx context.Context) (int, error) {
 		return 0, classify(err)
 	}
 	n := 0
-	for _, c := range cands {
-		released, err := e.cleanupOne(ctx, c.tenant, c.mandate, c.instruction, c.permit)
-		if err != nil {
-			return n, err
-		}
+	err = runIsolated(ctx, e, workerCleanup, cands, func(c cand) (string, string) { return c.tenant, c.permit }, func(c cand) error {
+		released, err := e.cleanupOne(failpoint.WithKey(ctx, c.permit), c.tenant, c.mandate, c.instruction, c.permit)
 		if released {
 			n++
 		}
-	}
-	return n, nil
+		return err
+	})
+	return n, err
 }
 
 func (e *Engine) cleanupOne(ctx context.Context, tenant, mandateID, instructionID, permitID string) (bool, error) {
@@ -156,8 +157,10 @@ func (e *Engine) DispatchOutbox(ctx context.Context, sink Sink) (int, error) {
 	return n, nil
 }
 
-// RunWorkers runs cleanup, unsigned-issuance recovery and outbox dispatch
-// every interval until ctx ends. Errors are reported to onErr and retried.
+// RunWorkers runs cleanup, unsigned-issuance recovery, outbox dispatch,
+// evidence signing and observation every interval until ctx ends, then
+// reports any worker backlog older than BacklogAlertAge. Errors are reported
+// to onErr and retried.
 func (e *Engine) RunWorkers(ctx context.Context, interval time.Duration, sink Sink, onErr func(string, error)) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
@@ -176,6 +179,9 @@ func (e *Engine) RunWorkers(ctx context.Context, interval time.Duration, sink Si
 		}
 		if _, err := e.ObserveUnobserved(ctx); err != nil {
 			onErr("observer", err)
+		}
+		if err := e.checkBacklog(ctx); err != nil {
+			onErr("backlog", err)
 		}
 		select {
 		case <-ctx.Done():
