@@ -11,6 +11,7 @@ LICENSE
 NOTICE
 README.md
 RELEASE_NOTES.md
+SECURITY.md
 THIRD_PARTY_NOTICES.md
 adapters/mcp/.npmrc
 adapters/mcp/README.md
