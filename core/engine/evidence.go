@@ -9,6 +9,7 @@ import (
 
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/auth"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/failpoint"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/observer"
 )
 
@@ -112,6 +113,9 @@ func (e *Engine) SignExecution(ctx context.Context, tenant, operationID string) 
 	if err != nil {
 		return err // evidence stays PENDING until a current key is configured
 	}
+	if err := failpoint.Inject(ctx, failpoint.EvidenceBeforeSign); err != nil {
+		return err
+	}
 	jws, err := contract.Sign(contract.KindExecution, canonical, signer)
 	if err != nil {
 		return err
@@ -121,39 +125,64 @@ func (e *Engine) SignExecution(ctx context.Context, tenant, operationID string) 
 	return err
 }
 
-// SignPendingExecutions signs every unsigned execution record.
+// SignPendingExecutions signs unsigned execution records that are not
+// backed off. A record that fails is backed off and the rest are still
+// signed (SEC-DEF-002). Without a current execution key nothing is
+// attempted. Returns the number signed.
 func (e *Engine) SignPendingExecutions(ctx context.Context) (int, error) {
-	ops, err := e.listOps(ctx, `SELECT tenant_id, operation_id FROM steelmatter.operations WHERE execution_jws IS NULL ORDER BY committed_at LIMIT 100`)
-	if err != nil {
+	ops, err := e.listOps(ctx, `SELECT o.tenant_id, o.operation_id FROM steelmatter.operations o
+		WHERE o.execution_jws IS NULL AND `+notBackedOff(workerEvidence, "o.tenant_id", "o.operation_id")+`
+		ORDER BY o.committed_at LIMIT 100`)
+	if err != nil || len(ops) == 0 {
 		return 0, err
 	}
-	for _, o := range ops {
-		if err := e.SignExecution(ctx, o[0], o[1]); err != nil {
-			return 0, err
-		}
+	if _, err := e.signer("SM-EXECUTION+JWS"); err != nil {
+		return 0, err
 	}
-	return len(ops), nil
+	n := 0
+	err = runIsolated(ctx, e, workerEvidence, ops, opKey, func(o [2]string) error {
+		if err := e.SignExecution(failpoint.WithKey(ctx, o[1]), o[0], o[1]); err != nil {
+			return err
+		}
+		n++
+		return nil
+	})
+	return n, err
 }
 
 // ObserveUnobserved records a first observation for committed operations
-// that have none.
+// that have none and are not backed off. A failing operation is backed off
+// and the rest are still observed (SEC-DEF-003). Without a current observer
+// key nothing is attempted. Returns the number observed.
 func (e *Engine) ObserveUnobserved(ctx context.Context) (int, error) {
 	if e.Observer == nil {
 		return 0, nil
 	}
 	ops, err := e.listOps(ctx, `SELECT o.tenant_id, o.operation_id FROM steelmatter.operations o
 		WHERE NOT EXISTS (SELECT 1 FROM steelmatter.observations b WHERE b.tenant_id = o.tenant_id AND b.operation_id = o.operation_id)
+		AND `+notBackedOff(workerObserver, "o.tenant_id", "o.operation_id")+`
 		ORDER BY o.committed_at LIMIT 100`)
-	if err != nil {
+	if err != nil || len(ops) == 0 {
 		return 0, err
 	}
-	for _, o := range ops {
-		if _, err := e.observe(ctx, o[0], o[1]); err != nil {
-			return 0, err
-		}
+	if err := e.observerKeyCurrent(); err != nil {
+		return 0, err
 	}
-	return len(ops), nil
+	n := 0
+	err = runIsolated(ctx, e, workerObserver, ops, opKey, func(o [2]string) error {
+		r, err := e.observe(failpoint.WithKey(ctx, o[1]), o[0], o[1], true)
+		if err != nil {
+			return err
+		}
+		if r != nil {
+			n++
+		}
+		return nil
+	})
+	return n, err
 }
+
+func opKey(o [2]string) (string, string) { return o[0], o[1] }
 
 func (e *Engine) listOps(ctx context.Context, sql string) ([][2]string, error) {
 	rows, err := e.Pool.Query(ctx, sql)
@@ -173,19 +202,63 @@ func (e *Engine) listOps(ctx context.Context, sql string) ([][2]string, error) {
 }
 
 // observe runs a read-only readback and stores the observer-signed result.
-func (e *Engine) observe(ctx context.Context, tenant, operationID string) (*observer.Result, error) {
-	if k, ok := e.Trust.Lookup(e.Observer.Signer.Kid); !ok || k.RetiredAt(e.Now()) {
-		return nil, fault("SERVICE_UNAVAILABLE", "no current signing key for SM-OBSERVATION+JWS")
+// Storing locks the operation row, so a worker's first observation and a
+// concurrent Reconcile are serialised. With firstOnly (the worker), the
+// readback is discarded and nil returned if the operation was observed
+// meanwhile, so it never gets two first observations.
+func (e *Engine) observe(ctx context.Context, tenant, operationID string, firstOnly bool) (*observer.Result, error) {
+	if err := e.observerKeyCurrent(); err != nil {
+		return nil, err
+	}
+	if err := failpoint.Inject(ctx, failpoint.ObserverBeforeReadback); err != nil {
+		return nil, err
 	}
 	r, err := e.Observer.Observe(ctx, tenant, operationID)
 	if err != nil {
 		return nil, err
 	}
-	_, err = e.Pool.Exec(ctx, `INSERT INTO steelmatter.observations (tenant_id, observation_id, operation_id, status, expected_action_digest,
-		observed_action_digest, observation_canonical, observation_digest, observation_jws, observed_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-		tenant, r.ObservationID, operationID, r.Status, r.ExpectedActionDigest, r.ObservedActionDigest, r.Canonical, r.Digest, r.JWS, r.ObservedAt)
-	return r, err
+	if err := failpoint.Inject(ctx, failpoint.ObserverBeforeStore); err != nil {
+		return nil, err
+	}
+	stored := false
+	err = e.inTx(ctx, "", func(tx pgx.Tx) error {
+		stored = false
+		if _, err := tx.Exec(ctx, `SELECT 1 FROM steelmatter.operations WHERE tenant_id = $1 AND operation_id = $2 FOR NO KEY UPDATE`,
+			tenant, operationID); err != nil {
+			return err
+		}
+		if firstOnly {
+			var observed bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM steelmatter.observations WHERE tenant_id = $1 AND operation_id = $2)`,
+				tenant, operationID).Scan(&observed); err != nil {
+				return err
+			}
+			if observed {
+				return nil
+			}
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO steelmatter.observations (tenant_id, observation_id, operation_id, status, expected_action_digest,
+			observed_action_digest, observation_canonical, observation_digest, observation_jws, observed_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+			tenant, r.ObservationID, operationID, r.Status, r.ExpectedActionDigest, r.ObservedActionDigest, r.Canonical, r.Digest, r.JWS, r.ObservedAt); err != nil {
+			return err
+		}
+		stored = true
+		return nil
+	})
+	if err != nil || !stored {
+		return nil, err
+	}
+	return r, nil
+}
+
+// observerKeyCurrent refuses when the observer's signing key is retired or
+// untrusted. This affects every operation, so workers check it up front.
+func (e *Engine) observerKeyCurrent() error {
+	if k, ok := e.Trust.Lookup(e.Observer.Signer.Kid); !ok || k.RetiredAt(e.Now()) {
+		return fault("SERVICE_UNAVAILABLE", "no current signing key for SM-OBSERVATION+JWS")
+	}
+	return nil
 }
 
 // Reconcile performs a readback now (200 RESOLVED). It is read-only against
@@ -203,7 +276,7 @@ func (e *Engine) Reconcile(ctx context.Context, p auth.Principal, operationID st
 	if e.Observer == nil {
 		return nil, fault("SERVICE_UNAVAILABLE", "observer is not configured")
 	}
-	r, err := e.observe(ctx, p.Tenant, operationID)
+	r, err := e.observe(ctx, p.Tenant, operationID, false)
 	if err != nil {
 		return nil, unavailable(err)
 	}

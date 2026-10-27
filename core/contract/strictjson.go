@@ -256,6 +256,9 @@ func (p *parser) hex4(path string) (rune, *Error) {
 	if p.pos+4 > len(p.data) {
 		return 0, p.syntax(path, "short unicode escape")
 	}
+	// CodeQL go/incorrect-integer-conversion (alert #2) is a false positive here:
+	// exactly four hex digits are parsed, so v is at most 0xFFFF and always fits
+	// in a rune.
 	v, err := strconv.ParseUint(string(p.data[p.pos:p.pos+4]), 16, 32)
 	if err != nil {
 		return 0, p.syntax(path, "invalid unicode escape")

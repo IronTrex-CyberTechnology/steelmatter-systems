@@ -58,7 +58,10 @@ func deny(reason, msg, instructionID string, rev int64) *EvaluateResult {
 
 // Evaluate reserves capacity and issues a signed permit for the assigned
 // actor (201). An identical retry returns the existing active issuance
-// without extending, re-reserving or reactivating it (200). Policy refusals
+// without extending, re-reserving or reactivating it (200), unless its
+// signing key has since been retired: then that issuance is released as
+// KEY_RETIRED and a new permit is issued with the current key (201,
+// ADR-004). Policy refusals
 // return DENY (200). Evaluation changes state; it is not a dry run.
 func (e *Engine) Evaluate(ctx context.Context, p auth.Principal, instructionID string, revision int64) (*EvaluateResult, error) {
 	if p.Kind != auth.Actor {
@@ -159,8 +162,9 @@ func (e *Engine) Evaluate(ctx context.Context, p auth.Principal, instructionID s
 		}
 
 		if live != nil {
+			usable := live.Status == "ACTIVE" && !live.Expired && live.Epoch == m.Epoch
 			switch {
-			case live.Status == "ACTIVE" && !live.Expired && live.Epoch == m.Epoch:
+			case usable && e.permitKeyCurrent(*live.JWS):
 				// Identical retry: the existing issuance, unchanged.
 				res = &EvaluateResult{Decision: "PERMIT_ISSUED", Permit: live.Canonical, PermitJWS: *live.JWS, PermitDigest: live.Digest,
 					Action: actionCanonical, ActionDigest: actionDigest}
@@ -169,6 +173,14 @@ func (e *Engine) Evaluate(ctx context.Context, p auth.Principal, instructionID s
 				// Signing was interrupted: complete the same payload (T16).
 				toSign = live
 				return nil
+			case usable:
+				// Live but signed by a key admission no longer accepts (retired
+				// after rotation): returning it would loop the caller until it
+				// expires (SEC-DEF-001). Release it under these locks and issue
+				// a new permit with the current key below (ADR-004).
+				if err := releaseIssuance(ctx, tx, p.Tenant, mandateID, live, "KEY_RETIRED"); err != nil {
+					return err
+				}
 			default:
 				// Expired (or stale epoch) and unused: release it under these
 				// locks, then issue a new permit below. The old permission is
@@ -316,6 +328,14 @@ func (e *Engine) signAndPersist(ctx context.Context, tenant, mandateID, instruct
 		return nil, err
 	}
 	return res, nil
+}
+
+// permitKeyCurrent reports whether admission would still accept the stored
+// permit's signature: it verifies under the trust store and its key is not
+// retired now. This is the same rule Admit applies.
+func (e *Engine) permitKeyCurrent(permitJWS string) bool {
+	v, verr := contract.Verify(permitJWS, contract.KindPermit, e.Trust)
+	return verr == nil && !v.SignedKey.RetiredAt(e.Now())
 }
 
 func releaseIssuance(ctx context.Context, tx pgx.Tx, tenant, mandateID string, is *issuanceRow, reason string) error {

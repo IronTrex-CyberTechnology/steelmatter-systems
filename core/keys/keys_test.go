@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -219,5 +220,54 @@ func TestRetireKeepsHistoricalValidity(t *testing.T) {
 	k := ts2.Keys[0]
 	if k.RetiredAt(at.Add(-time.Second)) || !k.RetiredAt(at) || !k.RetiredAt(at.Add(time.Second)) {
 		t.Fatal("retirement must take effect exactly at not_after")
+	}
+}
+
+// SEC-DEF-004: an effective retirement can move earlier but never later, so
+// a retired key is not reactivated. A future retirement can be rescheduled.
+func TestRetireCannotReactivateKey(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Provision(dir, "svc", []string{"SM-PERMIT+JWS"}, fixedNow); err != nil {
+		t.Fatal(err)
+	}
+	ts, err := LoadTrustStore(filepath.Join(dir, "trust-store.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	notAfter := func() time.Time { return *ts.Keys[0].NotAfter }
+
+	// Not yet effective: rescheduling later is allowed.
+	if err := ts.RetireAt("svc", fixedNow.Add(time.Hour), fixedNow); err != nil {
+		t.Fatal(err)
+	}
+	if err := ts.RetireAt("svc", fixedNow.Add(2*time.Hour), fixedNow.Add(30*time.Minute)); err != nil {
+		t.Fatalf("rescheduling a future retirement: %v", err)
+	}
+
+	// Effective (retired at +2h, now +2h30m): moving later is refused and
+	// changes nothing.
+	now := fixedNow.Add(150 * time.Minute)
+	for _, later := range []time.Duration{2*time.Hour + time.Second, 3 * time.Hour, 24 * time.Hour} {
+		err := ts.RetireAt("svc", fixedNow.Add(later), now)
+		if !errors.Is(err, ErrRetirementEffective) {
+			t.Fatalf("moving an effective retirement to +%s: %v", later, err)
+		}
+		if !notAfter().Equal(fixedNow.Add(2*time.Hour)) || !ts.Keys[0].RetiredAt(now) {
+			t.Fatal("a refused retirement changed not_after")
+		}
+	}
+
+	// Exactly at not_after counts as effective.
+	if err := ts.RetireAt("svc", fixedNow.Add(3*time.Hour), fixedNow.Add(2*time.Hour)); !errors.Is(err, ErrRetirementEffective) {
+		t.Fatalf("retirement effective at not_after: %v", err)
+	}
+
+	// Same time and earlier are allowed (for example after a compromise is
+	// found to have started earlier).
+	if err := ts.RetireAt("svc", fixedNow.Add(2*time.Hour), now); err != nil {
+		t.Fatal(err)
+	}
+	if err := ts.RetireAt("svc", fixedNow.Add(90*time.Minute), now); err != nil || !notAfter().Equal(fixedNow.Add(90*time.Minute)) {
+		t.Fatalf("moving retirement earlier: %v", err)
 	}
 }

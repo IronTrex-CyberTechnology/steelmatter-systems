@@ -725,8 +725,9 @@ components:
         Four independent status fields (document 03). OUTCOME_UNKNOWN is R1.
         R0 derivation: authorisation is PERMITTED for an active or consumed
         permit; REVOKED when released by revocation or withdrawn by an
-        amendment; EXPIRED when expired (cleaned up or not) or released as an
-        unused unsigned issuance. DENIED is unreachable in R0 because policy
+        amendment; EXPIRED when expired (cleaned up or not), released as an
+        unused unsigned issuance, or replaced by a new permit after its
+        signing key was retired (ADR-004). DENIED is unreachable in R0 because policy
         denials create no operation. Execution REJECTED is unreachable because
         rejected admissions persist nothing.
       type: object

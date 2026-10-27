@@ -1,5 +1,5 @@
 // Package failpoint provides named crash/pause points for recovery and race
-// tests (T07, T08, T10, T13-T16, T27, T28). Points are no-ops unless the
+// tests (T07, T08, T10, T13-T16, T27, T28) and worker failure isolation. Points are no-ops unless the
 // binary is built with the "failpoints" build tag; release builds
 // (scripts/package) never include them.
 package failpoint
@@ -18,6 +18,9 @@ const (
 	CleanupAfterLocks           = "cleanup.after_locks"            // cleanup locks held, before rechecks
 	AmendAfterLocks             = "amend.after_locks"              // amendment locks held, before rechecks
 	OutboxAfterDeliver          = "outbox.after_deliver"           // event delivered, not yet marked delivered
+	EvidenceBeforeSign          = "evidence.before_sign"           // pending execution record loaded, not yet signed
+	ObserverBeforeReadback      = "observer.before_readback"       // observer key checked, readback not yet run
+	ObserverBeforeStore         = "observer.before_store"          // readback signed, observation not yet stored
 )
 
 // Inject runs the action registered for name, if any. A returned error
