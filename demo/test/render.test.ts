@@ -7,11 +7,23 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as node from '../../packages/verifier/src/index.ts';
 import { CARDS, STEP_NOTES, coverageProblems } from '../src/notes.ts';
-import { evidenceView, inr, overview, page, parseLedger, parseRoute, quickstart, scenarioView, type Route } from '../src/render.ts';
+import { esc, evidenceView, inr, overview, page, parseLedger, parseRoute, quickstart, scenarioView, type Route } from '../src/render.ts';
 import { data } from './helpers.ts';
 
 const ref = data.reference.data;
-const textOf = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ');
+// Decode &amp; last: decoding it first would turn an escaped literal "&quot;"
+// (rendered as "&amp;quot;") into a quote character (CodeQL js/double-escaping).
+const textOf = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
+
+test('textOf decodes each entity once, keeping literal &quot; and &#39; text', () => {
+  assert.equal(textOf('&amp;quot;'), '&quot;');
+  assert.equal(textOf('&amp;#39;'), '&#39;');
+  assert.equal(textOf('&amp;amp;'), '&amp;');
+  assert.equal(textOf('&quot;a&quot; &#39;b&#39; c &amp; d'), `"a" 'b' c & d`);
+  for (const s of ['&quot;', '&#39;', 'say &quot;hi&quot; or &#39;bye&#39;', `"quoted" 'single' & amp`, 'A&amp;B']) {
+    assert.equal(textOf(esc(s)), s, `round trip of ${JSON.stringify(s)}`);
+  }
+});
 
 test('T43: every recorded step has a note, every note a recorded step', () => {
   assert.deepEqual(coverageProblems(ref.scenarios), []);
