@@ -230,7 +230,8 @@ func (e *Engine) GetOperation(ctx context.Context, p auth.Principal, operationID
 	}
 	// Derivation (F-19, documented in api/openapi.yaml OperationStatus):
 	// consumed → PERMITTED; released by revocation or withdrawn by amendment
-	// → REVOKED; expired (cleaned up or not) or unused unsigned → EXPIRED.
+	// → REVOKED; expired (cleaned up or not), unused unsigned, or replaced
+	// after its signing key was retired (KEY_RETIRED, ADR-004) → EXPIRED.
 	// DENIED is unreachable (denials create no operation).
 	switch {
 	case iStatus == "CONSUMED":

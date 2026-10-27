@@ -170,10 +170,13 @@ func (e *Engine) ObserveUnobserved(ctx context.Context) (int, error) {
 	}
 	n := 0
 	err = runIsolated(ctx, e, workerObserver, ops, opKey, func(o [2]string) error {
-		if _, err := e.observe(failpoint.WithKey(ctx, o[1]), o[0], o[1]); err != nil {
+		r, err := e.observe(failpoint.WithKey(ctx, o[1]), o[0], o[1], true)
+		if err != nil {
 			return err
 		}
-		n++
+		if r != nil {
+			n++
+		}
 		return nil
 	})
 	return n, err
@@ -199,7 +202,11 @@ func (e *Engine) listOps(ctx context.Context, sql string) ([][2]string, error) {
 }
 
 // observe runs a read-only readback and stores the observer-signed result.
-func (e *Engine) observe(ctx context.Context, tenant, operationID string) (*observer.Result, error) {
+// Storing locks the operation row, so a worker's first observation and a
+// concurrent Reconcile are serialised. With firstOnly (the worker), the
+// readback is discarded and nil returned if the operation was observed
+// meanwhile, so it never gets two first observations.
+func (e *Engine) observe(ctx context.Context, tenant, operationID string, firstOnly bool) (*observer.Result, error) {
 	if err := e.observerKeyCurrent(); err != nil {
 		return nil, err
 	}
@@ -210,11 +217,39 @@ func (e *Engine) observe(ctx context.Context, tenant, operationID string) (*obse
 	if err != nil {
 		return nil, err
 	}
-	_, err = e.Pool.Exec(ctx, `INSERT INTO steelmatter.observations (tenant_id, observation_id, operation_id, status, expected_action_digest,
-		observed_action_digest, observation_canonical, observation_digest, observation_jws, observed_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-		tenant, r.ObservationID, operationID, r.Status, r.ExpectedActionDigest, r.ObservedActionDigest, r.Canonical, r.Digest, r.JWS, r.ObservedAt)
-	return r, err
+	if err := failpoint.Inject(ctx, failpoint.ObserverBeforeStore); err != nil {
+		return nil, err
+	}
+	stored := false
+	err = e.inTx(ctx, "", func(tx pgx.Tx) error {
+		stored = false
+		if _, err := tx.Exec(ctx, `SELECT 1 FROM steelmatter.operations WHERE tenant_id = $1 AND operation_id = $2 FOR NO KEY UPDATE`,
+			tenant, operationID); err != nil {
+			return err
+		}
+		if firstOnly {
+			var observed bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM steelmatter.observations WHERE tenant_id = $1 AND operation_id = $2)`,
+				tenant, operationID).Scan(&observed); err != nil {
+				return err
+			}
+			if observed {
+				return nil
+			}
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO steelmatter.observations (tenant_id, observation_id, operation_id, status, expected_action_digest,
+			observed_action_digest, observation_canonical, observation_digest, observation_jws, observed_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+			tenant, r.ObservationID, operationID, r.Status, r.ExpectedActionDigest, r.ObservedActionDigest, r.Canonical, r.Digest, r.JWS, r.ObservedAt); err != nil {
+			return err
+		}
+		stored = true
+		return nil
+	})
+	if err != nil || !stored {
+		return nil, err
+	}
+	return r, nil
 }
 
 // observerKeyCurrent refuses when the observer's signing key is retired or
@@ -241,7 +276,7 @@ func (e *Engine) Reconcile(ctx context.Context, p auth.Principal, operationID st
 	if e.Observer == nil {
 		return nil, fault("SERVICE_UNAVAILABLE", "observer is not configured")
 	}
-	r, err := e.observe(ctx, p.Tenant, operationID)
+	r, err := e.observe(ctx, p.Tenant, operationID, false)
 	if err != nil {
 		return nil, unavailable(err)
 	}

@@ -4,11 +4,15 @@
 //	smkeys generate -dir .local/keys -name steelmatter-service -purpose SM-PERMIT+JWS -purpose SM-EXECUTION+JWS
 //	smkeys list -dir .local/keys
 //	smkeys retire -dir .local/keys -name steelmatter-service -at 2026-10-13T00:00:00Z
+//
+// A retirement that has taken effect can be moved earlier but never later;
+// a key retired by mistake is replaced by generating a new one.
 package main
 
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -56,15 +60,10 @@ func main() {
 				os.Exit(2)
 			}
 		}
-		if err := ts.Retire(*name, when); err != nil {
+		if err := retire(ts, path, *name, when, time.Now(), os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "smkeys:", err)
 			os.Exit(1)
 		}
-		if err := ts.Save(path); err != nil {
-			fmt.Fprintln(os.Stderr, "smkeys:", err)
-			os.Exit(1)
-		}
-		fmt.Printf("retired %s from %s; it still verifies records signed before then\n", *name, when.UTC().Format(time.RFC3339))
 	case "list":
 		ts, err := keys.LoadTrustStore(filepath.Join(*dir, "trust-store.json"))
 		if err != nil {
@@ -78,6 +77,27 @@ func main() {
 		fmt.Fprintln(os.Stderr, "smkeys: unknown command", os.Args[1])
 		os.Exit(2)
 	}
+}
+
+// retire sets the named key's not_after and saves the store, printing the
+// old and new values. RetireAt refuses to move an effective retirement
+// later, so a retired key is never reactivated (SEC-DEF-004).
+func retire(ts *keys.TrustStore, path, name string, when, now time.Time, out io.Writer) error {
+	old := "none"
+	for _, k := range ts.Keys {
+		if k.Name == name && k.NotAfter != nil {
+			old = k.NotAfter.UTC().Format(time.RFC3339)
+		}
+	}
+	if err := ts.RetireAt(name, when, now); err != nil {
+		return err
+	}
+	if err := ts.Save(path); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "retired %s: not_after %s -> %s; it still verifies records signed before then\n",
+		name, old, when.UTC().Format(time.RFC3339))
+	return nil
 }
 
 type multiFlag []string

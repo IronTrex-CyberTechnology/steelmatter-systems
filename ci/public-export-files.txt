@@ -36,6 +36,7 @@ ci/sprint-report-notes.md
 cmd/smci/main.go
 cmd/smdemo/main.go
 cmd/smkeys/main.go
+cmd/smkeys/main_test.go
 cmd/smvectors/main.go
 cmd/smvectors/temporal.go
 cmd/steelmatter/main.go
@@ -64,6 +65,7 @@ core/db/migrations/0005_immutability.sql
 core/db/migrations/0006_observer_read_set.sql
 core/db/migrations/0007_accounting_fixtures.sql
 core/db/migrations/0008_worker_backoff.sql
+core/db/migrations/0009_release_reason_key_retired.sql
 core/db/provision.go
 core/db/roles.go
 core/dbtest/harness.go
@@ -113,6 +115,7 @@ demo/tsconfig.json
 docs/adr/ADR-001-go-service.md
 docs/adr/ADR-002-authorised-readers.md
 docs/adr/ADR-003-evidence-temporal-linkage.md
+docs/adr/ADR-004-key-retirement-and-permit-replacement.md
 docs/contracts/I02-contract.md
 docs/engine.md
 docs/evidence.md
@@ -227,6 +230,7 @@ tests/integration/races_test.go
 tests/integration/readers_test.go
 tests/integration/reference_test.go
 tests/integration/review_test.go
+tests/integration/rotation_test.go
 tests/integration/sdk_test.go
 tests/integration/simulate_parity_test.go
 tests/integration/simulate_test.go

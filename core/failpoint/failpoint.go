@@ -20,6 +20,7 @@ const (
 	OutboxAfterDeliver          = "outbox.after_deliver"           // event delivered, not yet marked delivered
 	EvidenceBeforeSign          = "evidence.before_sign"           // pending execution record loaded, not yet signed
 	ObserverBeforeReadback      = "observer.before_readback"       // observer key checked, readback not yet run
+	ObserverBeforeStore         = "observer.before_store"          // readback signed, observation not yet stored
 )
 
 // Inject runs the action registered for name, if any. A returned error

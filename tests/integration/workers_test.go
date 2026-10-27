@@ -213,3 +213,39 @@ func TestWorkerBacklogReportsOldestOwedRecord(t *testing.T) {
 		t.Fatalf("backlog after catching up %+v (%v)", b, err)
 	}
 }
+
+// A manual reconcile that lands while the worker is between readback and
+// store wins; the worker discards its readback instead of adding a second
+// first observation. A later reconcile still adds one on purpose.
+func TestObserverWorkerDoesNotDuplicateConcurrentReconcile(t *testing.T) {
+	e := newEnv(t)
+	p := e.committed()
+	e.admin(`DELETE FROM steelmatter.observations`)
+	held, release := pauseAt(t, failpoint.ObserverBeforeStore)
+	type result struct {
+		n   int
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		n, err := e.eng.ObserveUnobserved(context.Background())
+		done <- result{n, err}
+	}()
+	<-held // the worker has signed its readback and holds no lock yet
+
+	st, body := e.reconcile("observer-a", p.operation)
+	requireStatus(t, "reconcile during worker pass", st, body, 200, "")
+	release()
+	if r := <-done; r.err != nil || r.n != 0 {
+		t.Fatalf("worker stored %d (%v); want 0, the operation was observed meanwhile", r.n, r.err)
+	}
+	if c := e.count(`SELECT count(*) FROM steelmatter.observations WHERE operation_id = $1`, p.operation); c != 1 {
+		t.Fatalf("%d observations; want exactly one", c)
+	}
+
+	st, body = e.reconcile("observer-a", p.operation)
+	requireStatus(t, "later reconcile", st, body, 200, "")
+	if c := e.count(`SELECT count(*) FROM steelmatter.observations WHERE operation_id = $1`, p.operation); c != 2 {
+		t.Fatalf("a manual reconcile must still add an observation: %d", c)
+	}
+}

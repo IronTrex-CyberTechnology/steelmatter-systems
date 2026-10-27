@@ -137,15 +137,34 @@ func (k TrustedKey) RetiredAt(t time.Time) bool {
 	return k.NotAfter != nil && !t.Before(*k.NotAfter)
 }
 
-// Retire sets NotAfter for the named key.
+// ErrRetirementEffective is returned when a retirement that has already
+// taken effect would be moved later, which would reactivate the key.
+var ErrRetirementEffective = errors.New("retirement has already taken effect")
+
+// Retire sets NotAfter for the named key, judged against the current time
+// (see RetireAt).
 func (ts *TrustStore) Retire(name string, at time.Time) error {
+	return ts.RetireAt(name, at, time.Now())
+}
+
+// RetireAt sets NotAfter for the named key. Once a retirement has taken
+// effect (NotAfter <= now) it may only be moved earlier: moving it later
+// would let a retired, possibly compromised key sign and authorise again
+// (SEC-DEF-004). A retirement still in the future may be rescheduled either
+// way. A key retired by mistake is replaced by provisioning a new one.
+func (ts *TrustStore) RetireAt(name string, at, now time.Time) error {
 	for i := range ts.Keys {
-		if ts.Keys[i].Name == name {
+		k := &ts.Keys[i]
+		if k.Name == name {
 			at = at.UTC()
-			if !at.After(ts.Keys[i].CreatedAt) {
+			if !at.After(k.CreatedAt) {
 				return fmt.Errorf("key %s: not_after must be after created_at", name)
 			}
-			ts.Keys[i].NotAfter = &at
+			if k.RetiredAt(now) && at.After(*k.NotAfter) {
+				return fmt.Errorf("key %s: %w at %s; not_after cannot move later (provision a new key instead)",
+					name, ErrRetirementEffective, k.NotAfter.Format(time.RFC3339))
+			}
+			k.NotAfter = &at
 			return nil
 		}
 	}
