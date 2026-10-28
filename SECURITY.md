@@ -8,7 +8,7 @@ Steelmatter R0 is a developer reference and source preview for local evaluation 
 
 Please report suspected vulnerabilities privately. Do not include vulnerability details, proof-of-concept code, credentials, or sensitive data in a public issue, pull request, or discussion.
 
-1. Visit the repository's [security advisories page](https://github.com/IronTrex-CyberTechnology/steelmatter-systems/security/advisories). If **Report a vulnerability** is available, use it to submit a private report.
+1. Visit the repository's [security advisories page](https://github.com/IronTrex-CyberTechnology/steelmatter-systems/security/advisories) and select **Report a vulnerability** to submit a private report.
 2. If that option is unavailable, open a [public issue](https://github.com/IronTrex-CyberTechnology/steelmatter-systems/issues/new) asking maintainers for a private reporting channel. Do not disclose the vulnerability or other sensitive details in that issue. Wait for a maintainer to provide a private channel before sharing them.
 
 A useful private report includes the affected version or commit, relevant configuration, a description of the issue and potential impact, and minimal steps or a proof of concept needed to reproduce it. Use synthetic data and redact secrets and personal information. Tell us how we can follow up with you privately.
