@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
-  title: Steelmatter R0 reference API
-  version: 0.6.0-i02
-  summary: Closed request/response contract for baseline 0.6 (I02).
+  title: Steelmatter reference API (R0 + R1)
+  version: 0.7.0-r1
+  summary: Closed request/response contract for baseline 0.6 (I02) plus the R1 dispatch, repair and recovery endpoints.
   description: |
     Every request body is UTF-8 JSON parsed by the strict input profile
     (docs/contracts/I02-contract.md section 2): duplicate keys, unknown fields,
@@ -30,6 +30,10 @@ tags:
   - name: actions
   - name: operations
   - name: adapters
+  - name: dispatches
+    description: R1 dispatch to a real destination, settle, HELD findings and repairs.
+  - name: recovery
+    description: R1 restore check, reconciliation, resume gate and anchor repair (instance-wide).
 paths:
   /v1/mandates:
     post:
@@ -335,6 +339,338 @@ paths:
         '500': { $ref: '#/components/responses/Internal' }
         '503': { $ref: '#/components/responses/Unavailable' }
 
+  /v1/dispatches:
+    post:
+      tags: [dispatches]
+      operationId: dispatchOperation
+      summary: R1. Assigned actor dispatches the exact permitted action to the configured destination (Odoo).
+      description: |
+        Same gate as admitOperation, then one transaction consumes the permit,
+        records the operation (op_ref = the permit's operation ID) and moves
+        the amount reserved -> unresolved. The order is created by the settle
+        worker; poll getDispatch or getOperation for the outcome. Refused with
+        403 while writes are off after a restore signal, and with 503 when no
+        destination company or connector is configured. 200 returns the
+        stored state for an identical repeat.
+      x-steelmatter-principals: [actor]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OperationRequest' }
+      responses:
+        '201':
+          description: Dispatch recorded.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DispatchResult' }
+        '200':
+          description: Identical repeat; stored state, no new effect.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DispatchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unsupported' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/dispatches/{op_ref}:
+    get:
+      tags: [dispatches]
+      operationId: getDispatch
+      summary: R1. Observer or operator reads the stored state of a dispatched operation.
+      x-steelmatter-principals: [observer, operator]
+      parameters:
+        - $ref: '#/components/parameters/OpRef'
+      responses:
+        '200':
+          description: Dispatch state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DispatchResult' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/dispatches/{op_ref}/settle:
+    post:
+      tags: [dispatches]
+      operationId: settleDispatch
+      summary: R1. Operator runs one settle step now (send or lookup-first, then fence). Never invents success.
+      description: |
+        The settle worker does this on its own schedule; this endpoint runs
+        it immediately. A final operation (COMMITTED, FENCED, MISMATCH, HELD)
+        returns its stored state unchanged. Body empty or {}.
+      x-steelmatter-principals: [operator]
+      parameters:
+        - $ref: '#/components/parameters/OpRef'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyRequest' }
+      responses:
+        '200':
+          description: State after the step.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DispatchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/dispatches/{op_ref}/findings:
+    post:
+      tags: [dispatches]
+      operationId: recordHeldFinding
+      summary: R1. Operator records a HELD finding (D5 HELD rule). Never moves budget.
+      description: |
+        Applies to HELD, MISMATCH, or committed operations flagged
+        ORDER_MISSING_AFTER_RESTORE. Appended to the recovery anchor; the
+        resume gate accepts such an operation only once a finding exists.
+      x-steelmatter-principals: [operator]
+      parameters:
+        - $ref: '#/components/parameters/OpRef'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FindingRequest' }
+      responses:
+        '201':
+          description: Finding recorded in the anchor.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FindingResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/dispatches/{op_ref}/repairs:
+    post:
+      tags: [dispatches]
+      operationId: prepareRepair
+      summary: R1. Operator prepares repair evidence proposing COMMIT or RELEASE. Nothing moves yet.
+      description: Requires a recorded finding and a HELD or MISMATCH operation. Returns the repair ID.
+      x-steelmatter-principals: [operator]
+      parameters:
+        - $ref: '#/components/parameters/OpRef'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RepairRequest' }
+      responses:
+        '201':
+          description: Repair evidence recorded in the anchor.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RepairResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/dispatches/{op_ref}/repairs/{repair_id}/review:
+    post:
+      tags: [dispatches]
+      operationId: reviewRepair
+      summary: R1. A configured repair reviewer (not the preparer) approves or rejects the evidence.
+      x-steelmatter-principals: [operator]
+      parameters:
+        - $ref: '#/components/parameters/OpRef'
+        - $ref: '#/components/parameters/RepairId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewRequest' }
+      responses:
+        '200':
+          description: Review recorded in the anchor.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RepairResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/dispatches/{op_ref}/repairs/{repair_id}/confirm:
+    post:
+      tags: [dispatches]
+      operationId: confirmRepair
+      summary: R1. A configured confirmer (distinct from preparer and reviewer) confirms; the only way a held amount moves.
+      description: |
+        Requires an approved review, writes on at this engine's generation and
+        no restore signal. Status, bucket move and anchor records commit in
+        one transaction. A repeat is refused (409). Body empty or {}.
+      x-steelmatter-principals: [operator]
+      parameters:
+        - $ref: '#/components/parameters/OpRef'
+        - $ref: '#/components/parameters/RepairId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyRequest' }
+      responses:
+        '200':
+          description: Repaired; the operation is now COMMITTED or FENCED.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DispatchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/dispatches/{op_ref}/anchor-repair:
+    post:
+      tags: [recovery]
+      operationId: confirmAnchorRepair
+      summary: R1. A configured confirmer repairs an anchor found behind the engine from the engine's own dispatch record.
+      x-steelmatter-principals: [operator]
+      parameters:
+        - $ref: '#/components/parameters/OpRef'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AnchorRepairRequest' }
+      responses:
+        '200':
+          description: DISPATCH_INTENT re-appended with a REPAIR_CONFIRMED record.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnchorRepairResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/recovery/write-state:
+    get:
+      tags: [recovery]
+      operationId: getWriteState
+      summary: R1. Observer or operator reads the instance write switch from the recovery anchor.
+      x-steelmatter-principals: [observer, operator]
+      responses:
+        '200':
+          description: Current write state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WriteState' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/recovery/check:
+    post:
+      tags: [recovery]
+      operationId: checkRestore
+      summary: R1. Operator runs the restore check now; any signal turns writes off (instance-wide).
+      description: The worker runs the same check on a schedule. Body empty or {}.
+      x-steelmatter-principals: [operator]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyRequest' }
+      responses:
+        '200':
+          description: Check result.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RestoreReport' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/recovery/reconcile:
+    post:
+      tags: [recovery]
+      operationId: reconcileRestore
+      summary: R1. Operator runs restore reconciliation (cases A to G) while writes are off. Safe to repeat.
+      description: |
+        Rebuilds missing operations from the anchor (or, case C, from the
+        engine's own permit), writes BLOCK for committed operations whose
+        order is gone, re-fences fenced ones and settles the rest by lookup
+        and fence. Never creates an order and never releases without proof.
+        Body empty or {}.
+      x-steelmatter-principals: [operator]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyRequest' }
+      responses:
+        '200':
+          description: What this pass did.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReconcileReport' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/recovery/resume:
+    post:
+      tags: [recovery]
+      operationId: resumeWrites
+      summary: R1. Operator runs the resume gate; writes restart only if every check passes.
+      description: A failed gate returns 200 with passed false and the failing checks. Body empty or {}.
+      x-steelmatter-principals: [operator]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyRequest' }
+      responses:
+        '200':
+          description: Gate result.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GateReport' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
 components:
   securitySchemes:
     principalToken:
@@ -363,6 +699,17 @@ components:
       schema: { $ref: '#/components/schemas/Identifier' }
     AdapterId:
       name: adapter_id
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Identifier' }
+
+    OpRef:
+      name: op_ref
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Identifier' }
+    RepairId:
+      name: repair_id
       in: path
       required: true
       schema: { $ref: '#/components/schemas/Identifier' }
@@ -821,3 +1168,138 @@ components:
         test_references:
           type: array
           items: { type: string, maxLength: 256 }
+
+    EmptyRequest:
+      type: object
+      additionalProperties: false
+      properties: {}
+    DispatchResult:
+      type: object
+      additionalProperties: false
+      required: [op_ref, instruction_id, action_revision, action_digest, execution]
+      properties:
+        op_ref: { $ref: '#/components/schemas/Identifier' }
+        instruction_id: { $ref: '#/components/schemas/Identifier' }
+        action_revision: { $ref: '#/components/schemas/PositiveInteger' }
+        action_digest: { $ref: '#/components/schemas/Digest' }
+        execution: { type: string, enum: [PENDING, UNRESOLVED, COMMITTED, FENCED, MISMATCH, HELD] }
+        last_outcome: { type: string, maxLength: 64, description: Last connector outcome code (D1). }
+        destination_order: { type: string, maxLength: 128, description: Destination order reference once committed. }
+    FindingRequest:
+      type: object
+      additionalProperties: false
+      required: [finding, evidence_ref]
+      properties:
+        finding: { type: string, minLength: 1, maxLength: 2000 }
+        evidence_ref: { type: string, minLength: 1, maxLength: 512 }
+    FindingResult:
+      type: object
+      additionalProperties: false
+      required: [op_ref, anchor_seq]
+      properties:
+        op_ref: { $ref: '#/components/schemas/Identifier' }
+        anchor_seq: { $ref: '#/components/schemas/PositiveInteger' }
+    RepairRequest:
+      type: object
+      additionalProperties: false
+      required: [outcome, evidence_ref]
+      properties:
+        outcome: { type: string, enum: [COMMIT, RELEASE] }
+        evidence_ref: { type: string, minLength: 1, maxLength: 512 }
+        summary: { type: string, minLength: 1, maxLength: 2000 }
+    ReviewRequest:
+      type: object
+      additionalProperties: false
+      required: [approved]
+      properties:
+        approved: { type: boolean }
+        note: { type: string, minLength: 1, maxLength: 2000 }
+    RepairResult:
+      type: object
+      additionalProperties: false
+      required: [op_ref, repair_id]
+      properties:
+        op_ref: { $ref: '#/components/schemas/Identifier' }
+        repair_id: { $ref: '#/components/schemas/Identifier' }
+        outcome: { type: string, enum: [COMMIT, RELEASE] }
+        approved: { type: boolean }
+    AnchorRepairRequest:
+      type: object
+      additionalProperties: false
+      required: [evidence_ref]
+      properties:
+        evidence_ref: { type: string, minLength: 1, maxLength: 512 }
+    AnchorRepairResult:
+      type: object
+      additionalProperties: false
+      required: [op_ref, repaired]
+      properties:
+        op_ref: { $ref: '#/components/schemas/Identifier' }
+        repaired: { const: true }
+    WriteState:
+      type: object
+      additionalProperties: false
+      required: [enabled, generation, reason, baseline_seq]
+      properties:
+        enabled: { type: boolean }
+        generation: { $ref: '#/components/schemas/PositiveInteger' }
+        reason: { type: string, maxLength: 1024 }
+        baseline_seq: { $ref: '#/components/schemas/NonNegativeInteger' }
+    RestoreSignal:
+      type: object
+      additionalProperties: false
+      required: [code, detail]
+      properties:
+        code:
+          type: string
+          enum: [ENGINE_MISSING_OPERATION, ANCHOR_MISSING_OPERATION, ENGINE_STATUS_BEHIND, DESTINATION_BEHIND,
+                 UNKNOWN_DESTINATION_OPERATION, COMMITTED_ORDER_MISSING]
+        tenant_id: { $ref: '#/components/schemas/Identifier' }
+        op_ref: { $ref: '#/components/schemas/Identifier' }
+        detail: { type: string, maxLength: 1024 }
+    RestoreReport:
+      type: object
+      additionalProperties: false
+      required: [signals, writes_disabled, write_state]
+      properties:
+        signals:
+          type: array
+          items: { $ref: '#/components/schemas/RestoreSignal' }
+        writes_disabled: { type: boolean, description: true when this check turned writes off. }
+        write_state: { $ref: '#/components/schemas/WriteState' }
+    OpRefList:
+      type: array
+      items: { type: string, maxLength: 1024 }
+    ReconcileReport:
+      type: object
+      additionalProperties: false
+      required: [recreated, from_odoo, flagged, refenced, settled, problems]
+      properties:
+        recreated: { $ref: '#/components/schemas/OpRefList' }
+        from_odoo: { $ref: '#/components/schemas/OpRefList' }
+        flagged: { $ref: '#/components/schemas/OpRefList' }
+        refenced: { $ref: '#/components/schemas/OpRefList' }
+        settled: { $ref: '#/components/schemas/OpRefList' }
+        problems: { $ref: '#/components/schemas/OpRefList' }
+    GateCheck:
+      type: object
+      additionalProperties: false
+      required: [name, passed]
+      properties:
+        name:
+          type: string
+          enum: [WRITES_ALREADY_ON, ALL_READABLE, ALL_OPERATIONS_PRESENT, NONE_PENDING_OR_UNRESOLVED, HELD_RULE, BUCKETS_RECONCILE,
+                 ANCHOR_NOT_BEHIND, NO_UNEXPLAINED_SIGNALS]
+        passed: { type: boolean }
+        detail: { type: string, maxLength: 4096 }
+    GateReport:
+      type: object
+      additionalProperties: false
+      required: [checks, passed, resumed, write_state]
+      properties:
+        checks:
+          type: array
+          items: { $ref: '#/components/schemas/GateCheck' }
+        passed: { type: boolean }
+        resumed: { type: boolean }
+        write_state: { $ref: '#/components/schemas/WriteState' }

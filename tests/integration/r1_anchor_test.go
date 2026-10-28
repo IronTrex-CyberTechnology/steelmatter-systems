@@ -622,6 +622,15 @@ func TestD5AnchorBehindNeedsConfirmedRepair(t *testing.T) {
 	if err := e.eng.ConfirmAnchorRepair(context.Background(), aakhil, p.operation, "engine-db-export-2026-10-28"); err != nil {
 		t.Fatal(err)
 	}
+	// The repaired intent carries the same action facts Dispatch records.
+	var sup, cur, del, rev string
+	if err := a.ah.Admin.QueryRow(context.Background(), `SELECT payload->>'supplier_ref', payload->>'currency', payload->>'delivery_ref',
+		payload->>'supplier_revision' FROM anchor.engine_records WHERE record_type = 'DISPATCH_INTENT' AND op_ref = $1`, p.operation).Scan(&sup, &cur, &del, &rev); err != nil {
+		t.Fatal(err)
+	}
+	if sup != "supplier-a" || cur != "INR" || del != "warehouse-a" || rev != "1" {
+		t.Fatalf("repaired intent supplier %q currency %q delivery %q revision %q", sup, cur, del, rev)
+	}
 	if g := a.gate(); !g.Resumed {
 		t.Fatalf("gate %+v", g)
 	}

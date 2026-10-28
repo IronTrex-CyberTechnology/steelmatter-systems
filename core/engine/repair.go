@@ -314,6 +314,19 @@ func (e *Engine) ConfirmAnchorRepair(ctx context.Context, p auth.Principal, opRe
 		return classify(err)
 	}
 	ir.Tenant, ir.OpRef, ir.ActionCanonical = p.Tenant, opRef, string(canonical)
+	// The repaired intent carries the same action facts as the one Dispatch
+	// writes, taken from the stored canonical action (found missing by the
+	// first engine-plus-Odoo run, case C).
+	var act struct {
+		Currency         string `json:"currency"`
+		SupplierID       string `json:"supplier_id"`
+		SupplierRevision int64  `json:"supplier_revision"`
+		DeliveryID       string `json:"delivery_id"`
+	}
+	if err := json.Unmarshal(canonical, &act); err != nil {
+		return fmt.Errorf("stored action for %s: %w", opRef, err)
+	}
+	ir.Currency, ir.SupplierRef, ir.SupplierRevision, ir.DeliveryRef = act.Currency, act.SupplierID, act.SupplierRevision, act.DeliveryID
 	if _, err := e.Anchor.Append(ctx, anchor.DispatchIntent, p.Tenant, opRef, ir, 0); err != nil {
 		return fmt.Errorf("recovery anchor: %w", err)
 	}

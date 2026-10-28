@@ -56,6 +56,23 @@ Method names are the OpenAPI `operationId`s; `test/contract.test.ts` keeps them 
 | `getEvidence(id)` | `GET /v1/operations/{id}/evidence` | 200 |
 | `getAdapterAssurance(id)` | `GET /v1/adapters/{id}/assurance` | 200 |
 
+R1 (dispatch to a real destination, repairs and recovery):
+
+| Method | Endpoint | Success |
+|---|---|---|
+| `dispatchOperation(body)` | `POST /v1/dispatches` | 201 recorded (PENDING), 200 identical repeat |
+| `getDispatch(opRef)` | `GET /v1/dispatches/{op_ref}` | 200 |
+| `settleDispatch(opRef)` | `POST /v1/dispatches/{op_ref}/settle` | 200 (repeatable) |
+| `recordHeldFinding(opRef, body)` | `POST /v1/dispatches/{op_ref}/findings` | 201 |
+| `prepareRepair(opRef, body)` | `POST /v1/dispatches/{op_ref}/repairs` | 201 |
+| `reviewRepair(opRef, repairId, body)` | `POST /v1/dispatches/{op_ref}/repairs/{repair_id}/review` | 200 |
+| `confirmRepair(opRef, repairId)` | `POST /v1/dispatches/{op_ref}/repairs/{repair_id}/confirm` | 200 (a repeat is 409) |
+| `confirmAnchorRepair(opRef, body)` | `POST /v1/dispatches/{op_ref}/anchor-repair` | 200 |
+| `getWriteState()` | `GET /v1/recovery/write-state` | 200 |
+| `checkRestore()` | `POST /v1/recovery/check` | 200 |
+| `reconcileRestore()` | `POST /v1/recovery/reconcile` | 200 (repeatable) |
+| `resumeWrites()` | `POST /v1/recovery/resume` | 200 (`passed` false when the gate fails) |
+
 Every method returns `ApiResponse<T>`: `{ status, created, requestId, attempts, data }`.
 `created` is true exactly for HTTP 201.
 

@@ -4768,7 +4768,7 @@
       ]
     },
     "r1-engine": {
-      "description": "R1 engine work on uday-r1 dispatch intent, lookup-first settle, the settle worker, R1 status values, revocation of in-flight operations (D4), per-aggregate outbox (D6), readiness, and the D2 budget, crash and race tests, all against the stub connector. Requires every full-R0 test and case as well. Not the active stage: switching to it is a team decision. Includes the D5 recovery anchor (separate local PostgreSQL), restore detection, reconciliation, the resume gate with the HELD rule, HELD findings and repairs, and real PostgreSQL recovery and concurrency tests.",
+      "description": "R1 engine work on uday-r1 dispatch intent, lookup-first settle, the settle worker, R1 status values, revocation of in-flight operations (D4), per-aggregate outbox (D6), readiness, and the D2 budget, crash and race tests, all against the stub connector. Requires every full-R0 test and case as well. Not the active stage: switching to it is a team decision. Includes the D5 recovery anchor (separate local PostgreSQL), restore detection, reconciliation, the resume gate with the HELD rule, HELD findings and repairs, and real PostgreSQL recovery and concurrency tests. Includes the R1 HTTP endpoints (dispatch, settle, findings, repairs, restore check, reconcile, resume gate, write state). The engine-plus-real-Odoo suite (TestR1OdooEndToEnd, build tag odoo) needs the Odoo sandbox and runs through destinations/odoo/sandbox/test-engine, not this gate.",
       "phases": [
         "unit",
         "integration",
@@ -6918,6 +6918,26 @@
           "phase": "unit",
           "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector/odoo",
           "test": "TestNewRejectsUnsafeConfig"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1HTTPDispatchSettleAndRead"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1HTTPRecoveryHeldRuleAndRepair"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1HTTPUnconfiguredIsUnavailable"
+        },
+        {
+          "phase": "sdk",
+          "package": "packages/sdk",
+          "test": "contract.test.ts/the OpenAPI document declares the 12 R1 dispatch, repair and recovery operations"
         }
       ],
       "required_cases": [

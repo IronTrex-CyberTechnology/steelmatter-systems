@@ -257,10 +257,14 @@ func TestR1OdooEndToEnd(t *testing.T) {
 		if late, _ := r.conn.Execute(ctx, r.e.destActionForPermit(p)); late.Outcome != connector.RefusedFenced {
 			t.Fatalf("delayed create after the restore: %s", late.Outcome)
 		}
-		if rep := r.check(t); !rep.WritesDisabled {
+		// The refusal re-wrote the tombstone in Odoo (seen on the first real
+		// run), so the destination is no longer behind. Restore once more to
+		// test detection, as the stub test does.
+		sandboxOdoo(t, "restore_odoo")
+		if rep := r.check(t); !rep.WritesDisabled || !hasSignal(rep, engine.SignalDestinationBehind) {
 			t.Fatalf("Odoo restore not detected: %+v", rep.Signals)
 		}
-		if rec := r.reconcile(t); len(rec.Problems) != 0 {
+		if rec := r.reconcile(t); len(rec.Refenced) != 1 || len(rec.Problems) != 0 {
 			t.Fatalf("reconcile %+v", rec)
 		}
 		r.resume(t)
@@ -327,6 +331,33 @@ func TestR1OdooEndToEnd(t *testing.T) {
 			t.Fatal(err)
 		}
 		r.resume(t)
+		r.evidence(t, p.operation)
+	})
+
+	t.Run("HTTP: dispatch, settle and the recovery endpoints against Odoo", func(t *testing.T) {
+		p := r.order(t)
+		st, body := r.e.call("POST", "/v1/dispatches", "agent-a", dispatchBody(p))
+		requireStatus(t, "dispatch", st, body, 201, "")
+		st, body = r.e.call("POST", "/v1/dispatches/"+p.operation+"/settle", "operator-a", nil)
+		requireStatus(t, "settle", st, body, 200, "")
+		if body["execution"] != engine.DispatchCommitted || body["destination_order"] == nil {
+			t.Fatalf("settle %v", body)
+		}
+		st, body = r.e.call("POST", "/v1/recovery/check", "operator-a", nil)
+		requireStatus(t, "check", st, body, 200, "")
+		if body["writes_disabled"] != false || len(body["signals"].([]any)) != 0 {
+			t.Fatalf("check after a clean purchase %v", body)
+		}
+		st, body = r.e.call("POST", "/v1/recovery/resume", "operator-a", nil)
+		requireStatus(t, "gate", st, body, 200, "")
+		if body["passed"] != true {
+			t.Fatalf("gate %v", body)
+		}
+		st, body = r.e.call("GET", "/v1/recovery/write-state", "observer-a", nil)
+		requireStatus(t, "write state", st, body, 200, "")
+		if body["enabled"] != true {
+			t.Fatalf("write state %v", body)
+		}
 		r.evidence(t, p.operation)
 	})
 }

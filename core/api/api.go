@@ -50,6 +50,7 @@ func RegisterWith(mux *http.ServeMux, e *engine.Engine, a *auth.Authenticator, o
 	mux.HandleFunc("POST /v1/operations/{operation_id}/reconcile", h.wrap(h.reconcile))
 	mux.HandleFunc("GET /v1/operations/{operation_id}/evidence", h.wrap(h.evidence))
 	mux.HandleFunc("GET /v1/adapters/{adapter_id}/assurance", h.wrap(h.assurance))
+	h.registerR1(mux)
 }
 
 type handlers struct {

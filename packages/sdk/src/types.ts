@@ -349,3 +349,107 @@ export interface AdapterAssurance {
   limitations: string[];
   test_references: string[];
 }
+
+// ---- R1 dispatches, repairs and recovery ----
+
+export type DispatchExecution = 'PENDING' | 'UNRESOLVED' | 'COMMITTED' | 'FENCED' | 'MISMATCH' | 'HELD';
+
+/** Stored state of an R1 dispatched operation (op_ref = the permit's operation ID). */
+export interface DispatchResult {
+  op_ref: Identifier;
+  instruction_id: Identifier;
+  action_revision: number;
+  action_digest: Digest;
+  execution: DispatchExecution;
+  last_outcome?: string;
+  destination_order?: string;
+}
+
+export interface FindingRequest {
+  finding: string;
+  evidence_ref: string;
+}
+
+export interface FindingResult {
+  op_ref: Identifier;
+  anchor_seq: number;
+}
+
+export type RepairOutcome = 'COMMIT' | 'RELEASE';
+
+export interface RepairRequest {
+  outcome: RepairOutcome;
+  evidence_ref: string;
+  summary?: string;
+}
+
+export interface ReviewRequest {
+  approved: boolean;
+  note?: string;
+}
+
+export interface RepairResult {
+  op_ref: Identifier;
+  repair_id: Identifier;
+  outcome?: RepairOutcome;
+  approved?: boolean;
+}
+
+export interface AnchorRepairRequest {
+  evidence_ref: string;
+}
+
+export interface AnchorRepairResult {
+  op_ref: Identifier;
+  repaired: true;
+}
+
+/** The instance write switch, read from the recovery anchor. */
+export interface WriteState {
+  enabled: boolean;
+  generation: number;
+  reason: string;
+  baseline_seq: number;
+}
+
+export type RestoreSignalCode = 'ENGINE_MISSING_OPERATION' | 'ANCHOR_MISSING_OPERATION' | 'ENGINE_STATUS_BEHIND' | 'DESTINATION_BEHIND'
+  | 'UNKNOWN_DESTINATION_OPERATION' | 'COMMITTED_ORDER_MISSING';
+
+export interface RestoreSignal {
+  code: RestoreSignalCode;
+  tenant_id?: Identifier;
+  op_ref?: Identifier;
+  detail: string;
+}
+
+export interface RestoreReport {
+  signals: RestoreSignal[];
+  /** True when this check turned writes off. */
+  writes_disabled: boolean;
+  write_state: WriteState;
+}
+
+export interface ReconcileReport {
+  recreated: string[];
+  from_odoo: string[];
+  flagged: string[];
+  refenced: string[];
+  settled: string[];
+  problems: string[];
+}
+
+export type GateCheckName = 'WRITES_ALREADY_ON' | 'ALL_READABLE' | 'ALL_OPERATIONS_PRESENT' | 'NONE_PENDING_OR_UNRESOLVED' | 'HELD_RULE'
+  | 'BUCKETS_RECONCILE' | 'ANCHOR_NOT_BEHIND' | 'NO_UNEXPLAINED_SIGNALS';
+
+export interface GateCheck {
+  name: GateCheckName;
+  passed: boolean;
+  detail?: string;
+}
+
+export interface GateReport {
+  checks: GateCheck[];
+  passed: boolean;
+  resumed: boolean;
+  write_state: WriteState;
+}
