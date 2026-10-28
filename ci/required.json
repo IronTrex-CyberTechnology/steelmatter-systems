@@ -6843,6 +6843,81 @@
           "phase": "integration",
           "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/anchor",
           "test": "TestAnchorConcurrentAppendsAndDisable"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5CaseCOrderOnlyOdooKnowsIsRebuilt"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5CaseCUnattributableOrdersKeepTheGateClosed"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5BothRestoredAfterCommitWithCreateDone"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1OutOfScopeRefusalReleases"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector/stub",
+          "test": "TestOutOfScopeRefusalReleases"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/cmd/steelmatter",
+          "test": "TestConnectorFromEnv"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector/odoo",
+          "test": "TestExecuteSendsOnlyTheCanonicalActionAsExecutor"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector/odoo",
+          "test": "TestReadsUseTheObserverAndNeverTheExecutor"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector/odoo",
+          "test": "TestFailuresAreNeverProof"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector/odoo",
+          "test": "TestTimeoutAfterSendIsUnknown"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector/odoo",
+          "test": "TestUnreachableDestinationIsUnknown"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector/odoo",
+          "test": "TestRefusedLoginAndRotation"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector/odoo",
+          "test": "TestReadinessChecksTheOdooVersion"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector/odoo",
+          "test": "TestListRejectsRowsOutOfOrder"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector/odoo",
+          "test": "TestNewRejectsUnsafeConfig"
         }
       ],
       "required_cases": [

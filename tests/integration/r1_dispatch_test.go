@@ -445,3 +445,23 @@ func TestR1CreateDoneAfterRestoreCommits(t *testing.T) {
 		t.Fatalf("creates %d", s.Creates())
 	}
 }
+
+// D1 v1.3: a destination refusal for an action outside its configured scope
+// is decided before any create attempt and blocks the op_ref, so it releases
+// the amount; a later create is refused.
+func TestR1OutOfScopeRefusalReleases(t *testing.T) {
+	e := newEnv(t)
+	p := e.permitted()
+	mustDispatch(t, e, p)
+	s := stub.New()
+	s.SetOutOfScope(p.operation, "MAPPING_MISSING:item")
+	r := e.settle(p.operation, s)
+	requireExecution(t, "out of scope", r, engine.DispatchFenced)
+	if r.LastOutcome != string(connector.RefusedOutOfScope) {
+		t.Fatalf("last outcome %s", r.LastOutcome)
+	}
+	requireBuckets(t, "released", e.buckets(p.mandate), r1Released)
+	if d := s.Deliver(stubActionFor(t, e, p)); d.Outcome != connector.RefusedFenced || s.Creates() != 0 {
+		t.Fatalf("late create: %s", d.Outcome)
+	}
+}

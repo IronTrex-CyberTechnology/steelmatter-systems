@@ -12,8 +12,11 @@
 //	steelmatter anchor-init          create a local recovery anchor database and its three roles (STEELMATTER_ADMIN_URL)
 //	steelmatter anchor-drop -name NAME   drop a local anchor-init database and its roles (STEELMATTER_ADMIN_URL)
 //
-// serve also reads STEELMATTER_ANCHOR_URL (the anchor's engine-writer URL;
-// without it R1 runs with no restore protection), STEELMATTER_COMPANY_REF,
+// serve also reads STEELMATTER_CONNECTOR (none or odoo, with the
+// STEELMATTER_ODOO_* settings in connector.go), STEELMATTER_ANCHOR_URL (the
+// anchor's engine-writer URL; without it R1 runs with no restore
+// protection), STEELMATTER_COMPANY_REF (must equal the Odoo company's
+// sm_ref and the module's STEELMATTER_DESTINATION),
 // STEELMATTER_REPAIR_REVIEWERS and STEELMATTER_REPAIR_CONFIRMERS
 // (comma-separated principal IDs, D5).
 //
@@ -199,6 +202,12 @@ func serve(ctx context.Context) error {
 	}
 	eng.RepairReviewers = splitList(os.Getenv("STEELMATTER_REPAIR_REVIEWERS"))
 	eng.RepairConfirmers = splitList(os.Getenv("STEELMATTER_REPAIR_CONFIRMERS"))
+	conn, connKind, err := connectorFromEnv(os.Getenv)
+	if err != nil {
+		return err
+	}
+	eng.Connector = conn
+	slog.Info("R1 destination connector", "kind", connKind, "company_ref", eng.Cfg.CompanyRef)
 	if anchorDSN := os.Getenv("STEELMATTER_ANCHOR_URL"); anchorDSN != "" {
 		anchorPool, err := newPool(ctx, anchorDSN)
 		if err != nil {

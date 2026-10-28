@@ -90,8 +90,9 @@ type Stub struct {
 	failBlock      map[string]int // op_ref -> fences whose BLOCK write fails
 	loseCreateDone map[string]int // op_ref -> creates whose best-effort CREATE_DONE write is lost
 
-	notReady string              // readiness reason to report, if set
-	foreign  []connector.ListRow // orders created outside Steelmatter
+	outOfScope map[string]string   // op_ref -> scope reason the module refuses with (D1 v1.3)
+	notReady   string              // readiness reason to report, if set
+	foreign    []connector.ListRow // orders created outside Steelmatter
 }
 
 // Snapshot is a destination backup: the in-Odoo state only.
@@ -112,7 +113,7 @@ func New() *Stub {
 // as Kaif's Odoo module will use it.
 func NewWithProof(p connector.RestoreProof) *Stub {
 	return &Stub{ops: map[string]*record{}, supplierRev: map[string]int64{}, dropReply: map[string]int{}, unreachable: map[string]int{},
-		proof: p, failCommit: map[string]int{}, failBlock: map[string]int{}, loseCreateDone: map[string]int{}}
+		proof: p, failCommit: map[string]int{}, failBlock: map[string]int{}, loseCreateDone: map[string]int{}, outOfScope: map[string]string{}}
 }
 
 // SetAnchorUnavailable makes the destination's restore-proof record
@@ -333,7 +334,18 @@ func (s *Stub) create(ctx context.Context, a connector.Action) connector.Result 
 		return s.result(ctx, a.OpRef, "execute", connector.RefusedPriorAttempt)
 	}
 	// Refusals decided before CREATE_INTENT write BLOCK only, so they carry
-	// prior_create = false and can release.
+	// prior_create = false and can release: out of scope (D1 v1.3), then a
+	// stale supplier, in the module's order.
+	if reason, ok := s.outOfScope[a.OpRef]; ok {
+		if err := s.proof.RecordBlock(ctx, a.OpRef, "out of scope: "+reason); err != nil {
+			return unavailable(a.OpRef, "execute", "ANCHOR_UNAVAILABLE", s.seq)
+		}
+		s.seq++
+		s.ops[a.OpRef] = &record{state: Refused, digest: a.PermitDigest, seq: s.seq}
+		r := s.result(ctx, a.OpRef, "execute", connector.RefusedOutOfScope)
+		r.Reason = reason
+		return r
+	}
 	if want, ok := s.supplierRev[a.SupplierRef]; ok && want != a.SupplierRevision {
 		if err := s.proof.RecordBlock(ctx, a.OpRef, "supplier stale"); err != nil { // block recorded before the refusal is reported
 			return unavailable(a.OpRef, "execute", "ANCHOR_UNAVAILABLE", s.seq)
@@ -454,6 +466,15 @@ func (s *Stub) Fence(ctx context.Context, opRef string, expectedMinSeq int64) (c
 		}
 		return s.result(ctx, opRef, "fence", connector.Fenced), nil
 	}
+}
+
+// SetOutOfScope makes the module refuse opRef as out of its configured scope
+// with reason (for example CURRENCY_OUT_OF_SCOPE), as Kaif's module does
+// before writing CREATE_INTENT.
+func (s *Stub) SetOutOfScope(opRef, reason string) {
+	s.mu.Lock()
+	s.outOfScope[opRef] = reason
+	s.mu.Unlock()
 }
 
 // SetNotReady makes Readiness report NOT_READY with reason (empty clears it).

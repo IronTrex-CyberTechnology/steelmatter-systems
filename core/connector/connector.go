@@ -1,5 +1,5 @@
-// Package connector defines the engine-connector interface agreed as D1 v1
-// (Uday and Kaif, 28 Oct 2026). The engine owns operation state and every
+// Package connector defines the engine-connector interface agreed as D1
+// (Uday and Kaif, 28 Oct 2026; v1.3 adds REFUSED_OUT_OF_SCOPE). The engine owns operation state and every
 // allowance move; a connector only reports destination facts and never
 // writes to Steelmatter's ledger.
 //
@@ -28,6 +28,7 @@ const (
 	RefusedSupplierStale    Outcome = "REFUSED_SUPPLIER_STALE"    // supplier revision changed; op_ref tombstoned in the same transaction
 	RefusedRestoreSuspected Outcome = "REFUSED_RESTORE_SUSPECTED" // destination head behind expected_min_seq; nothing written
 	RefusedPriorAttempt     Outcome = "REFUSED_PRIOR_ATTEMPT"     // restore-proof journal has a create intent but the destination has no row (restored); block written, no create
+	RefusedOutOfScope       Outcome = "REFUSED_OUT_OF_SCOPE"      // D1 v1.3: the action is outside the destination's configured scope (mapping, currency, lines, approval mode); decided before CREATE_INTENT, block written, no create
 	Unknown                 Outcome = "UNKNOWN"                   // timeout, reset, 5xx, malformed reply, standard destination error
 
 	// Lookup.
@@ -64,7 +65,7 @@ const (
 // result also shows the block committed durably and no earlier create
 // occurred (Result.ProvesNoOrder; Aakhil, 28 Oct 2026).
 func (o Outcome) Tombstones() bool {
-	return o == RefusedFenced || o == RefusedSupplierStale || o == RefusedPriorAttempt
+	return o == RefusedFenced || o == RefusedSupplierStale || o == RefusedPriorAttempt || o == RefusedOutOfScope
 }
 
 // Line is one purchase line in minor units.
@@ -194,7 +195,7 @@ type ListPage struct {
 // the error return is reserved for programming faults.
 type Connector interface {
 	// Execute may return Created, Exists, Mismatch, RefusedFenced,
-	// RefusedSupplierStale, RefusedPriorAttempt, RefusedRestoreSuspected,
+	// RefusedSupplierStale, RefusedPriorAttempt, RefusedOutOfScope, RefusedRestoreSuspected,
 	// Unavailable (restore-proof record unreadable; nothing created) or
 	// Unknown.
 	Execute(ctx context.Context, a Action) (Result, error)

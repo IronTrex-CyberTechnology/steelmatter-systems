@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -842,5 +843,128 @@ func TestD5ConcurrentRepairConfirmationsMoveOnce(t *testing.T) {
 	requireBuckets(t, "released once", e.buckets(p.mandate), r1Released)
 	if a.count(anchor.RepairConfirmed) != 1 {
 		t.Fatalf("repair records %d", a.count(anchor.RepairConfirmed))
+	}
+}
+
+// destActionForPermit builds the canonical action Odoo would hold for p's
+// permit, straight from the engine's issuance and action revision.
+func (e *env) destActionForPermit(p permitted) connector.Action {
+	e.t.Helper()
+	var digest string
+	var canonical []byte
+	if err := e.h.Admin.QueryRow(context.Background(), `SELECT i.permit_digest, a.action_canonical FROM steelmatter.issuances i
+		JOIN steelmatter.action_revisions a ON a.tenant_id = i.tenant_id AND a.instruction_id = i.instruction_id AND a.action_revision = i.action_revision
+		WHERE i.operation_id = $1`, p.operation).Scan(&digest, &canonical); err != nil {
+		e.t.Fatal(err)
+	}
+	var act contract.Action
+	if err := json.Unmarshal(canonical, &act); err != nil {
+		e.t.Fatal(err)
+	}
+	a := connector.Action{OpRef: p.operation, ActionRevision: act.ActionRevision, CompanyRef: e.eng.Cfg.CompanyRef, DeliveryRef: act.DeliveryID,
+		SupplierRef: act.SupplierID, SupplierRevision: act.SupplierRevision, Currency: act.Currency, AmountMinor: act.AmountMinor, PermitDigest: digest}
+	for _, l := range act.Lines {
+		a.Lines = append(a.Lines, connector.Line{ItemRef: l.ItemID, Quantity: l.Quantity, UnitPriceMinor: l.UnitPriceMinor})
+	}
+	return a
+}
+
+// Case C: Odoo holds an order that neither the anchor nor the engine knows
+// (both lost it). It is rebuilt from the engine's own permit for that
+// op_ref, verified against the order and committed; writes stay off until
+// Aakhil confirms the anchor repair, then resume.
+func TestD5CaseCOrderOnlyOdooKnowsIsRebuilt(t *testing.T) {
+	e := newEnv(t)
+	a := withAnchor(t, e)
+	p := e.permitted()
+	if r := a.s.Deliver(e.destActionForPermit(p)); r.Outcome != connector.Created {
+		t.Fatalf("order at the destination: %s", r.Outcome)
+	}
+	r := a.check()
+	if !r.WritesDisabled || !hasSignal(r, engine.SignalUnknownDestinationOp) {
+		t.Fatalf("signals %+v", r.Signals)
+	}
+	rec := a.reconcile()
+	if len(rec.FromOdoo) != 1 || rec.FromOdoo[0] != p.operation || len(rec.Problems) != 0 {
+		t.Fatalf("reconcile %+v", rec)
+	}
+	if e.dispatchStatus(p.operation) != engine.DispatchCommitted || a.s.Creates() != 1 {
+		t.Fatalf("status %s, creates %d", e.dispatchStatus(p.operation), a.s.Creates())
+	}
+	requireBuckets(t, "committed from the permit's reservation", e.buckets(p.mandate), r1Committed)
+	if g := a.gate(); g.Passed || gateCheck(g, "ANCHOR_NOT_BEHIND").Passed || !gateCheck(g, "ALL_OPERATIONS_PRESENT").Passed {
+		t.Fatalf("gate before the anchor repair %+v", g)
+	}
+	if err := e.eng.ConfirmAnchorRepair(context.Background(), aakhil, p.operation, "odoo-order-and-engine-permit-match"); err != nil {
+		t.Fatal(err)
+	}
+	if g := a.gate(); !g.Resumed {
+		t.Fatalf("gate %+v", g)
+	}
+	a.verify()
+}
+
+// Case C refused: an order whose permit digest does not match the engine's
+// permit, or whose op_ref has no permit at all, is never attributed; the
+// gate stays closed for an operator.
+func TestD5CaseCUnattributableOrdersKeepTheGateClosed(t *testing.T) {
+	e := newEnv(t)
+	a := withAnchor(t, e)
+	p := e.permitted()
+	forged := e.destActionForPermit(p)
+	forged.PermitDigest = strings.Repeat("ab", 32)
+	a.s.Deliver(forged)
+	stranger := e.destActionForPermit(p)
+	stranger.OpRef = "op-not-issued-by-this-engine"
+	a.s.Deliver(stranger)
+	if r := a.check(); !r.WritesDisabled {
+		t.Fatal("unknown orders not detected")
+	}
+	rec := a.reconcile()
+	if len(rec.FromOdoo) != 0 || len(rec.Problems) != 2 {
+		t.Fatalf("reconcile %+v", rec)
+	}
+	requireBuckets(t, "nothing moved", e.buckets(p.mandate), r1Reserved)
+	if g := a.gate(); g.Passed || gateCheck(g, "ALL_OPERATIONS_PRESENT").Passed {
+		t.Fatalf("gate %+v", g)
+	}
+}
+
+// Both restored after a committed order whose CREATE_DONE survived: one
+// reconciliation pass rebuilds the operation, commits it from CREATE_DONE,
+// and, because the order is gone from Odoo, writes its BLOCK and flags it
+// (case E). The gate stays closed until Uday records the finding.
+func TestD5BothRestoredAfterCommitWithCreateDone(t *testing.T) {
+	e := newEnv(t)
+	a := withAnchor(t, e)
+	p := e.permitted()
+	snap := e.snapshotEngine()
+	destBefore := a.s.Backup()
+	mustDispatch(t, e, p)
+	requireExecution(t, "commit", e.settle(p.operation, a.s), engine.DispatchCommitted)
+	e.restoreEngine(snap)
+	a.s.Restore(destBefore)
+	if r := a.check(); !r.WritesDisabled {
+		t.Fatal("restore not detected")
+	}
+	rec := a.reconcile()
+	if len(rec.Recreated) != 1 || len(rec.Flagged) != 1 || len(rec.Problems) != 0 {
+		t.Fatalf("reconcile %+v", rec)
+	}
+	if e.dispatchStatus(p.operation) != engine.DispatchCommitted {
+		t.Fatalf("status %s", e.dispatchStatus(p.operation))
+	}
+	requireBuckets(t, "committed, no refund", e.buckets(p.mandate), r1Committed)
+	if g := a.gate(); g.Passed || gateCheck(g, "HELD_RULE").Passed {
+		t.Fatalf("gate passed without the finding: %+v", g)
+	}
+	if _, err := e.eng.RecordHeldFinding(context.Background(), uday, p.operation, "order erased when both stores were restored", "restore-log"); err != nil {
+		t.Fatal(err)
+	}
+	if g := a.gate(); !g.Resumed {
+		t.Fatalf("gate %+v", g)
+	}
+	if r := a.s.Deliver(stubActionFor(t, e, p)); !r.Outcome.Tombstones() || a.s.Creates() != 1 {
+		t.Fatalf("retry: %s, creates %d", r.Outcome, a.s.Creates())
 	}
 }

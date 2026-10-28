@@ -289,6 +289,7 @@ func (e *Engine) systemEvent(ctx context.Context, typ string, gen int64, payload
 // ReconcileReport is what one reconciliation pass did.
 type ReconcileReport struct {
 	Recreated []string `json:"recreated"` // op_refs rebuilt from the anchor as UNRESOLVED (cases A, B, G)
+	FromOdoo  []string `json:"from_odoo"` // op_refs only Odoo knew, rebuilt from the engine's own permit (case C)
 	Flagged   []string `json:"flagged"`   // committed operations with the order gone; BLOCK written, still committed (case E)
 	Refenced  []string `json:"refenced"`  // fenced operations re-fenced after a destination restore
 	Settled   []string `json:"settled"`   // operations that reached a final state in this pass
@@ -297,7 +298,8 @@ type ReconcileReport struct {
 
 // ReconcileRestore accounts for every operation a restore may have erased (cases
 // A to G). It runs only while writes are off: it rebuilds missing
-// operations from the anchor as UNRESOLVED with their amount held, writes a
+// operations from the anchor as UNRESOLVED with their amount held, rebuilds
+// an order only Odoo knows from the engine's own permit (case C), writes a
 // BLOCK for committed operations whose order is gone (they stay committed),
 // re-fences fenced operations, and settles everything unsettled through
 // lookup and fence. It never creates an order and never releases an amount
@@ -333,30 +335,20 @@ func (e *Engine) ReconcileRestore(ctx context.Context, c connector.Connector) (*
 		}
 		rep.Recreated = append(rep.Recreated, k[1])
 	}
-	for k, o := range v.ops {
-		switch {
-		case o.status == DispatchCommitted && o.flag == "" && !v.orderPresent(k[1]):
-			r, err := c.Fence(ctx, k[1], 0)
-			if err != nil || r.BlockCommitted == nil || !*r.BlockCommitted {
-				rep.Problems = append(rep.Problems, fmt.Sprintf("%s: committed order missing; BLOCK not yet committed (%s %v)", k[1], r.Outcome, err))
-				continue
-			}
-			if err := e.flagCommitted(ctx, o, r); err != nil {
-				rep.Problems = append(rep.Problems, fmt.Sprintf("%s: %v", k[1], err))
-				continue
-			}
-			rep.Flagged = append(rep.Flagged, k[1])
-		case o.status == DispatchFenced && !v.proofs[k[1]].Blocked:
-			// A fence the destination's restore-proof record does not show.
-			rep.Problems = append(rep.Problems, fmt.Sprintf("%s: fenced but the destination has no BLOCK record", k[1]))
-		case o.status == DispatchFenced && v.dest[k[1]].State == "":
-			r, err := c.Fence(ctx, k[1], 0)
-			if err != nil || !r.ProvesNoOrder() {
-				rep.Problems = append(rep.Problems, fmt.Sprintf("%s: re-fence after a destination restore did not prove no order (%s %v)", k[1], r.Outcome, err))
-				continue
-			}
-			rep.Refenced = append(rep.Refenced, k[1])
+	// Case C: an order Odoo has that neither the anchor nor the engine knows.
+	ops := make([]string, 0, len(v.dest))
+	for op := range v.dest {
+		if !v.knownOp(op) {
+			ops = append(ops, op)
 		}
+	}
+	sort.Strings(ops)
+	for _, op := range ops {
+		if err := e.recreateFromDestination(ctx, v.dest[op]); err != nil {
+			rep.Problems = append(rep.Problems, fmt.Sprintf("%s: order known only to Odoo; cannot rebuild: %v", op, err))
+			continue
+		}
+		rep.FromOdoo = append(rep.FromOdoo, op)
 	}
 	// Settle everything unsettled; writes are off, so nothing is executed.
 	for round := 0; round < 3; round++ {
@@ -390,6 +382,38 @@ func (e *Engine) ReconcileRestore(ctx context.Context, c connector.Connector) (*
 			} else if round == 2 {
 				rep.Problems = append(rep.Problems, fmt.Sprintf("%s: still %s after %s", k[1], r.Execution, r.LastOutcome))
 			}
+		}
+	}
+	// Then, on a fresh read, block committed operations whose order is gone
+	// and re-fence fenced ones. This runs after settling so that an
+	// operation committed just now from a surviving CREATE_DONE (engine and
+	// Odoo both restored) is blocked and flagged in the same pass.
+	if v, err = e.readView(ctx, c); err != nil {
+		return rep, err
+	}
+	for k, o := range v.ops {
+		switch {
+		case o.status == DispatchCommitted && o.flag == "" && !v.orderPresent(k[1]):
+			r, err := c.Fence(ctx, k[1], 0)
+			if err != nil || r.BlockCommitted == nil || !*r.BlockCommitted {
+				rep.Problems = append(rep.Problems, fmt.Sprintf("%s: committed order missing; BLOCK not yet committed (%s %v)", k[1], r.Outcome, err))
+				continue
+			}
+			if err := e.flagCommitted(ctx, o, r); err != nil {
+				rep.Problems = append(rep.Problems, fmt.Sprintf("%s: %v", k[1], err))
+				continue
+			}
+			rep.Flagged = append(rep.Flagged, k[1])
+		case o.status == DispatchFenced && !v.proofs[k[1]].Blocked:
+			// A fence the destination's restore-proof record does not show.
+			rep.Problems = append(rep.Problems, fmt.Sprintf("%s: fenced but the destination has no BLOCK record", k[1]))
+		case o.status == DispatchFenced && v.dest[k[1]].State == "":
+			r, err := c.Fence(ctx, k[1], 0)
+			if err != nil || !r.ProvesNoOrder() {
+				rep.Problems = append(rep.Problems, fmt.Sprintf("%s: re-fence after a destination restore did not prove no order (%s %v)", k[1], r.Outcome, err))
+				continue
+			}
+			rep.Refenced = append(rep.Refenced, k[1])
 		}
 	}
 	return rep, nil
@@ -474,6 +498,60 @@ func (e *Engine) recreateDispatch(ctx context.Context, ir anchor.IntentRecord) e
 		}
 		return nil
 	})
+}
+
+// recreateFromDestination rebuilds an operation that only Odoo knows (case
+// C) from the engine's own record of its permit: op_ref is the operation ID
+// the engine assigned when it issued the permit, so the issuance, the
+// action revision it authorised and the permit digest are still in the
+// engine database. The order must carry that permit digest and amount;
+// otherwise nothing is rebuilt and an operator takes over. The rebuilt
+// operation is UNRESOLVED with its amount held; settling then verifies the
+// order (COMMITTED if it matches, MISMATCH if not). Its missing anchor
+// intent keeps the resume gate closed until Aakhil confirms the anchor
+// repair (ConfirmAnchorRepair).
+func (e *Engine) recreateFromDestination(ctx context.Context, row connector.ListRow) error {
+	rows, err := e.Pool.Query(ctx, `SELECT i.tenant_id, i.permit_id, i.mandate_id, i.instruction_id, i.action_revision, i.control_epoch,
+		i.amount_minor, i.permit_digest, COALESCE(i.permit_jws, ''), a.action_canonical, a.action_digest
+		FROM steelmatter.issuances i
+		JOIN steelmatter.action_revisions a ON a.tenant_id = i.tenant_id AND a.instruction_id = i.instruction_id AND a.action_revision = i.action_revision
+		WHERE i.operation_id = $1`, row.OpRef)
+	if err != nil {
+		return unavailable(err)
+	}
+	var found []anchor.IntentRecord
+	for rows.Next() {
+		var ir anchor.IntentRecord
+		var canonical []byte
+		if err := rows.Scan(&ir.Tenant, &ir.PermitID, &ir.MandateID, &ir.InstructionID, &ir.ActionRevision, &ir.ControlEpoch,
+			&ir.AmountMinor, &ir.PermitDigest, &ir.PermitJWS, &canonical, &ir.ActionDigest); err != nil {
+			rows.Close()
+			return err
+		}
+		ir.OpRef, ir.CompanyRef, ir.ActionCanonical = row.OpRef, e.Cfg.CompanyRef, string(canonical)
+		found = append(found, ir)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return classify(err)
+	}
+	switch {
+	case len(found) == 0:
+		return errors.New("the engine database has no permit for this operation")
+	case len(found) > 1:
+		return errors.New("more than one permit claims this operation")
+	}
+	ir := found[0]
+	if row.PermitDigest != ir.PermitDigest {
+		return errors.New("the order's permit digest does not match the engine's permit")
+	}
+	if row.AmountMinor != ir.AmountMinor {
+		return fmt.Errorf("the order's amount %d does not match the permit's %d", row.AmountMinor, ir.AmountMinor)
+	}
+	if ir.PermitJWS == "" {
+		return errors.New("the engine's permit was never signed, so no order can be attributed to it")
+	}
+	return e.recreateDispatch(ctx, ir)
 }
 
 // flagCommitted marks a committed operation whose order is gone (case E).
@@ -598,8 +676,9 @@ func (e *Engine) TryResume(ctx context.Context, c connector.Connector) (*GateRep
 	for _, s := range v.signals() {
 		switch s.Code {
 		case SignalDestinationBehind: // re-baselined when writes resume
-		case SignalEngineMissingOperation, SignalAnchorMissingOperation, SignalUnknownDestinationOp, SignalCommittedOrderMissing:
-			// covered by the checks above
+		case SignalEngineMissingOperation, SignalAnchorMissingOperation, SignalUnknownDestinationOp:
+			// covered by the checks above (a committed operation whose order is
+			// missing is NOT: until reconciliation blocks and flags it, it fails here)
 		default:
 			other = append(other, s.Code+" "+s.OpRef+": "+s.Detail)
 		}

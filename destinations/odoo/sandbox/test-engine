@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Run the engine-plus-real-Odoo tests (T33, T34, T35 end to end) against the
+# running sandbox. Start from a FRESH sandbox: the sandbox's anchor is shared
+# with the Odoo module, so records from an earlier run look like a restore.
+#
+#   destinations/odoo/sandbox/reset && destinations/odoo/sandbox/up
+#   eval "$(scripts/dev-postgres)"      # the engine's own disposable test databases
+#   destinations/odoo/sandbox/test-engine -v
+#
+# Needs Docker, Go and python3. Extra arguments go to go test.
+source "$(dirname "$0")/lib.sh"
+load_secrets
+[[ -n "${STEELMATTER_TEST_ADMIN_URL:-}" ]] || die "STEELMATTER_TEST_ADMIN_URL is not set; run: eval \"\$(scripts/dev-postgres)\""
+[[ -n "${STEELMATTER_ANCHOR_URL:-}" ]] || die "$ANCHOR_ENV missing; run destinations/odoo/sandbox/up"
+export STEELMATTER_ODOO_URL="http://127.0.0.1:$ODOO_PORT"
+export STEELMATTER_ODOO_DB="$ODOO_DB_NAME"
+export STEELMATTER_ODOO_EXECUTOR_PASSWORD="$SM_EXECUTOR_PASSWORD"
+export STEELMATTER_ODOO_OBSERVER_PASSWORD="$SM_OBSERVER_PASSWORD"
+export STEELMATTER_ANCHOR_URL
+cd "$ROOT"
+go test -tags integration,failpoints,odoo -count=1 -run TestR1OdooEndToEnd "$@" ./tests/integration/

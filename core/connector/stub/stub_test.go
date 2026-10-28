@@ -355,3 +355,18 @@ func TestListInCommitOrder(t *testing.T) {
 		t.Fatalf("page 3: %+v", p3)
 	}
 }
+
+// D1 v1.3: an out-of-scope refusal is decided before CREATE_INTENT, writes
+// BLOCK and proves no order; a retry stays refused.
+func TestOutOfScopeRefusalReleases(t *testing.T) {
+	s := New()
+	s.SetOutOfScope("op-1", "CURRENCY_OUT_OF_SCOPE")
+	r, _ := s.Execute(context.Background(), action("op-1"))
+	if r.Outcome != connector.RefusedOutOfScope || r.Reason != "CURRENCY_OUT_OF_SCOPE" || !r.Outcome.Tombstones() ||
+		!is(r.BlockCommitted, true) || !is(r.PriorCreate, false) || !r.ProvesNoOrder() || s.Creates() != 0 {
+		t.Fatalf("out of scope: %+v", r)
+	}
+	if r := s.Deliver(action("op-1")); r.Outcome != connector.RefusedFenced || s.Creates() != 0 {
+		t.Fatalf("retry: %s", r.Outcome)
+	}
+}
