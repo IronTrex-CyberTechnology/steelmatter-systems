@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="module_category_steelmatter" model="ir.module.category">
+        <field name="name">Steelmatter</field>
+        <field name="sequence">90</field>
+    </record>
+
+    <!-- The connector's execution identity. It gets no purchase rights of its
+         own: it can create, fence and look up orders only through the
+         steelmatter.api methods, which accept only the canonical action. -->
+    <record id="group_executor" model="res.groups">
+        <field name="name">Steelmatter executor</field>
+        <field name="category_id" ref="module_category_steelmatter"/>
+        <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+    </record>
+
+    <!-- The read-only observation identity: lookup, listing and observe.
+         It has no write access to any model. -->
+    <record id="group_observer" model="res.groups">
+        <field name="name">Steelmatter observer (read-only)</field>
+        <field name="category_id" ref="module_category_steelmatter"/>
+        <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+    </record>
+</odoo>

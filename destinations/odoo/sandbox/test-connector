@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Run the Go Odoo connector's tests against the running sandbox
+# (destinations/odoo/sandbox/up first). Extra arguments go to go test.
+source "$(dirname "$0")/lib.sh"
+load_secrets
+export STEELMATTER_ODOO_URL="http://127.0.0.1:$ODOO_PORT"
+export STEELMATTER_ODOO_DB="$ODOO_DB_NAME"
+export STEELMATTER_ODOO_EXECUTOR_PASSWORD="$SM_EXECUTOR_PASSWORD"
+export STEELMATTER_ODOO_OBSERVER_PASSWORD="$SM_OBSERVER_PASSWORD"
+cd "$ROOT"
+go test -tags odoo -count=1 "$@" ./core/connector/odoo/
