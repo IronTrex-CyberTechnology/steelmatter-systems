@@ -200,11 +200,52 @@ func (r *odooRun) evidence(t *testing.T, op string) {
 	}
 }
 
+// odooOrders counts Odoo purchase orders carrying op_ref, read straight
+// from Odoo's database through Kaif's sandbox helper (not through the
+// connector under test).
+func odooOrders(t *testing.T, op string) int {
+	t.Helper()
+	root, _ := filepath.Abs("../..")
+	cmd := exec.Command("python3", "-I", "-c",
+		"import sys; sys.path.insert(0, 'destinations/odoo/tests'); import sandbox_client as s; print(s.orders_for(sys.argv[1]))", op)
+	cmd.Dir = root
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("count Odoo orders for %s: %v\n%s", op, err, out)
+	}
+	var n int
+	if _, err := fmt.Sscan(string(out), &n); err != nil {
+		t.Fatalf("count Odoo orders for %s: %q", op, out)
+	}
+	return n
+}
+
+// outcome checks the two records Aakhil asked for at the end of each
+// scenario: the Odoo orders for the operation and the mandate's budget
+// buckets (ledger() also checks available + reserved + committed +
+// unresolved = limit). base is the mandate's buckets before the scenario's
+// order was evaluated; committed and unresolved are what this operation
+// should now hold.
+func (r *odooRun) outcome(t *testing.T, op string, base buckets, wantOrders int, committed, unresolved int64) {
+	t.Helper()
+	got := r.e.buckets(r.mandate)
+	want := buckets{Available: base.Available - committed - unresolved, Reserved: base.Reserved,
+		Committed: base.Committed + committed, Unresolved: base.Unresolved + unresolved}
+	requireBuckets(t, op+" budget", got, want)
+	n := odooOrders(t, op)
+	if n != wantOrders {
+		t.Fatalf("%s: %d Odoo orders, want %d", op, n, wantOrders)
+	}
+	t.Logf("result %s: execution %s, Odoo orders %d, mandate buckets %+v", op, r.e.dispatchStatus(op), n, got)
+}
+
 func TestR1OdooEndToEnd(t *testing.T) {
 	r := setupOdoo(t)
+	const sixL = int64(6_000_000) // one order: 10 chairs at ₹6,000
 	ctx := context.Background()
 
 	t.Run("T33 reply lost after Odoo created the order: held, then found and committed once", func(t *testing.T) {
+		base := r.e.buckets(r.mandate)
 		p := r.order(t)
 		mustDispatch(t, r.e, p)
 		r.l.drop[p.operation] = true
@@ -214,10 +255,12 @@ func TestR1OdooEndToEnd(t *testing.T) {
 		if lk, _ := r.conn.Lookup(ctx, p.operation); lk.Outcome != connector.Found {
 			t.Fatalf("lookup %s", lk.Outcome)
 		}
+		r.outcome(t, p.operation, base, 1, sixL, 0)
 		r.evidence(t, p.operation)
 	})
 
 	t.Run("never reached Odoo: fenced and released; a late create is refused", func(t *testing.T) {
+		base := r.e.buckets(r.mandate)
 		p := r.order(t)
 		mustDispatch(t, r.e, p)
 		r.l.notSent[p.operation] = true
@@ -226,10 +269,12 @@ func TestR1OdooEndToEnd(t *testing.T) {
 		if late, _ := r.conn.Execute(ctx, r.e.destActionForPermit(p)); late.Outcome != connector.RefusedFenced {
 			t.Fatalf("late create %s", late.Outcome)
 		}
+		r.outcome(t, p.operation, base, 0, 0, 0)
 		r.evidence(t, p.operation)
 	})
 
 	t.Run("T35 case A: engine restored before a confirmed purchase", func(t *testing.T) {
+		base := r.e.buckets(r.mandate)
 		p := r.order(t)
 		snap := r.e.snapshotEngine()
 		mustDispatch(t, r.e, p)
@@ -243,10 +288,12 @@ func TestR1OdooEndToEnd(t *testing.T) {
 		}
 		requireExecution(t, "rebuilt", r.settle(t, p.operation), engine.DispatchCommitted)
 		r.resume(t)
+		r.outcome(t, p.operation, base, 1, sixL, 0)
 		r.evidence(t, p.operation)
 	})
 
 	t.Run("T35 case 2: Odoo restored after a fence; the delayed create is refused by BLOCK", func(t *testing.T) {
+		base := r.e.buckets(r.mandate)
 		p := r.order(t)
 		mustDispatch(t, r.e, p)
 		r.l.notSent[p.operation] = true
@@ -268,10 +315,12 @@ func TestR1OdooEndToEnd(t *testing.T) {
 			t.Fatalf("reconcile %+v", rec)
 		}
 		r.resume(t)
+		r.outcome(t, p.operation, base, 0, 0, 0)
 		r.evidence(t, p.operation)
 	})
 
 	t.Run("T34 case E: Odoo forgot a committed order; a retry never creates a second one", func(t *testing.T) {
+		base := r.e.buckets(r.mandate)
 		p := r.order(t)
 		sandboxOdoo(t, "snapshot_odoo")
 		mustDispatch(t, r.e, p)
@@ -291,10 +340,12 @@ func TestR1OdooEndToEnd(t *testing.T) {
 		}
 		r.resume(t)
 		requireExecution(t, "still committed", r.settle(t, p.operation), engine.DispatchCommitted)
+		r.outcome(t, p.operation, base, 0, sixL, 0)
 		r.evidence(t, p.operation)
 	})
 
 	t.Run("T35 both restored after a commit: rebuilt, committed from CREATE_DONE, blocked and flagged", func(t *testing.T) {
+		base := r.e.buckets(r.mandate)
 		p := r.order(t)
 		snap := r.e.snapshotEngine()
 		sandboxOdoo(t, "snapshot_odoo")
@@ -313,10 +364,12 @@ func TestR1OdooEndToEnd(t *testing.T) {
 			t.Fatal(err)
 		}
 		r.resume(t)
+		r.outcome(t, p.operation, base, 0, sixL, 0)
 		r.evidence(t, p.operation)
 	})
 
 	t.Run("case C: an order only Odoo knows is rebuilt from the engine's permit", func(t *testing.T) {
+		base := r.e.buckets(r.mandate)
 		p := r.order(t)
 		if cr, _ := r.conn.Execute(ctx, r.e.destActionForPermit(p)); cr.Outcome != connector.Created {
 			t.Fatalf("order straight into Odoo: %s", cr.Outcome)
@@ -331,10 +384,12 @@ func TestR1OdooEndToEnd(t *testing.T) {
 			t.Fatal(err)
 		}
 		r.resume(t)
+		r.outcome(t, p.operation, base, 1, sixL, 0)
 		r.evidence(t, p.operation)
 	})
 
 	t.Run("HTTP: dispatch, settle and the recovery endpoints against Odoo", func(t *testing.T) {
+		base := r.e.buckets(r.mandate)
 		p := r.order(t)
 		st, body := r.e.call("POST", "/v1/dispatches", "agent-a", dispatchBody(p))
 		requireStatus(t, "dispatch", st, body, 201, "")
@@ -358,6 +413,7 @@ func TestR1OdooEndToEnd(t *testing.T) {
 		if body["enabled"] != true {
 			t.Fatalf("write state %v", body)
 		}
+		r.outcome(t, p.operation, base, 1, sixL, 0)
 		r.evidence(t, p.operation)
 	})
 }
