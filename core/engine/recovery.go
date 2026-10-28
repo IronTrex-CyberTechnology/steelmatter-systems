@@ -240,15 +240,16 @@ func (v *recoveryView) signals() []RestoreSignal {
 // CheckRestore compares the anchor with the engine database and the
 // destination journal (mechanism step 6). Any signal turns writes off and
 // bumps the generation, so no worker from before the restore can dispatch.
-// A failed read returns an error and changes nothing: if writes are already
-// off they stay off; held amounts keep their hold either way.
+// A failed comparison disables new writes as well; an unreadable store is
+// not evidence that recovery is safe. Held amounts remain held.
 func (e *Engine) CheckRestore(ctx context.Context, c connector.Connector) (*RestoreReport, error) {
 	if err := e.recoveryReady(c); err != nil {
 		return nil, err
 	}
 	v, err := e.readView(ctx, c)
 	if err != nil {
-		return nil, err
+		_, disableErr := e.Anchor.DisableWrites(ctx, "restore comparison unavailable")
+		return nil, errors.Join(err, disableErr)
 	}
 	rep := &RestoreReport{Signals: v.signals()}
 	if rep.WriteState, err = e.Anchor.WriteState(ctx); err != nil {
@@ -384,6 +385,11 @@ func (e *Engine) ReconcileRestore(ctx context.Context, c connector.Connector) (*
 			}
 		}
 	}
+	problems, err := e.replayConfirmedRepairs(ctx)
+	if err != nil {
+		return rep, err
+	}
+	rep.Problems = append(rep.Problems, problems...)
 	// Then, on a fresh read, block committed operations whose order is gone
 	// and re-fence fenced ones. This runs after settling so that an
 	// operation committed just now from a surviving CREATE_DONE (engine and

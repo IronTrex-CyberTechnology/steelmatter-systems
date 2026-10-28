@@ -481,8 +481,8 @@ func TestD5BothRestoredHeldRuleAndRepair(t *testing.T) {
 		t.Fatalf("confirm: %+v %v", d, err)
 	}
 	requireBuckets(t, "committed by the confirmed repair", e.buckets(p.mandate), r1Committed)
-	if _, err := e.eng.ConfirmRepair(ctx, aakhil, p.operation, repairID, a.s); err == nil {
-		t.Fatal("a repair was confirmed twice")
+	if d, err := e.eng.ConfirmRepair(ctx, aakhil, p.operation, repairID, a.s); err != nil || d.Execution != engine.DispatchCommitted {
+		t.Fatalf("retry must return the same confirmed result: %+v %v", d, err)
 	}
 	if a.count(anchor.RepairConfirmed) != 1 || a.count(anchor.OperatorFinding) != 1 {
 		t.Fatal("anchor repair records")
@@ -846,8 +846,8 @@ func TestD5ConcurrentRepairConfirmationsMoveOnce(t *testing.T) {
 			}
 		}
 	}
-	if ok != 1 {
-		t.Fatalf("%d confirmations succeeded", ok)
+	if ok != 4 {
+		t.Fatalf("%d idempotent confirmation requests succeeded", ok)
 	}
 	requireBuckets(t, "released once", e.buckets(p.mandate), r1Released)
 	if a.count(anchor.RepairConfirmed) != 1 {

@@ -81,6 +81,9 @@ func (e *Engine) lockForAdmission(ctx context.Context, tx pgx.Tx, p auth.Princip
 	if err != nil {
 		return err
 	}
+	if err := e.guardMandateHistory(ctx, tx, p.Tenant, permit.MandateID); err != nil {
+		return err
+	}
 	var current int64
 	var actor, sourceSystem string
 	err = tx.QueryRow(ctx, `SELECT current_revision, actor_id, source_system FROM steelmatter.instructions WHERE tenant_id = $1 AND instruction_id = $2 FOR UPDATE`,

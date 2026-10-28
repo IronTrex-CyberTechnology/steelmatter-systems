@@ -1,6 +1,6 @@
 {
   "schema": "steelmatter-required-results/1",
-  "active_stage": "full-R0",
+  "active_stage": "r1-engine",
   "stages": {
     "I01": {
       "description": "Foundation: real-PostgreSQL harness, role separation, synthetic keys, service skeleton and the aggregate gate. No product acceptance case is required yet; all 44 remain NOT_RUN.",
@@ -6938,6 +6938,26 @@
           "phase": "sdk",
           "package": "packages/sdk",
           "test": "contract.test.ts/the OpenAPI document declares the 12 R1 dispatch, repair and recovery operations"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1RestoredBudgetRefusedBeforeWorkerRuns"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1StartupRefusesRestoredHistory"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1RequiredAnchorCannotBeOmitted"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1ConfirmedRepairSurvivesEveryCrashBoundary"
         }
       ],
       "required_cases": [

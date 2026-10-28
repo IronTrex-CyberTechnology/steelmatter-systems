@@ -12,6 +12,7 @@ import (
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/anchor"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/auth"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/failpoint"
 )
 
 // HELD findings and repairs (D5 decision, Aakhil, 28 Oct 2026): Uday
@@ -145,9 +146,10 @@ func (e *Engine) PrepareRepair(ctx context.Context, p auth.Principal, opRef, out
 }
 
 type repairState struct {
-	evidence *RepairEvidenceRecord
-	review   *RepairReviewRecord
-	done     bool
+	evidence          *RepairEvidenceRecord
+	review            *RepairReviewRecord
+	confirmed         *RepairConfirmRecord
+	otherConfirmation bool
 }
 
 func (e *Engine) repairState(ctx context.Context, tenant, opRef, repairID string) (repairState, error) {
@@ -170,8 +172,13 @@ func (e *Engine) repairState(ctx context.Context, tenant, opRef, repairID string
 			}
 		case anchor.RepairConfirmed:
 			var rc RepairConfirmRecord
-			if json.Unmarshal(r.Payload, &rc) == nil && rc.RepairID == repairID {
-				st.done = true
+			if err := json.Unmarshal(r.Payload, &rc); err != nil {
+				return st, err
+			}
+			if rc.RepairID == repairID {
+				st.confirmed = &rc
+			} else if rc.RepairID != "" {
+				st.otherConfirmation = true
 			}
 		}
 	}
@@ -190,27 +197,30 @@ func (e *Engine) ReviewRepair(ctx context.Context, p auth.Principal, opRef, repa
 	if p.Kind != auth.Operator || !slices.Contains(e.RepairReviewers, p.ID) {
 		return fault("FORBIDDEN", "only a configured repair reviewer can review repair evidence")
 	}
-	st, err := e.repairState(ctx, p.Tenant, opRef, repairID)
-	if err != nil {
+	return e.inTx(ctx, opRef, func(tx pgx.Tx) error {
+		if _, _, _, _, err := lockRepairOperation(ctx, tx, p.Tenant, opRef); err != nil {
+			return err
+		}
+		st, err := e.repairState(ctx, p.Tenant, opRef, repairID)
+		if err != nil {
+			return err
+		}
+		if st.confirmed != nil || st.otherConfirmation {
+			return fault("ALREADY_COMMITTED", "repair already confirmed")
+		}
+		if st.evidence.PreparedBy == p.ID {
+			return fault("FORBIDDEN", "the reviewer must not be the person who prepared the evidence")
+		}
+		_, err = e.Anchor.Append(ctx, anchor.RepairReviewed, p.Tenant, opRef,
+			RepairReviewRecord{RepairID: repairID, Approved: approve, Note: note, ReviewedBy: p.ID}, 0)
 		return err
-	}
-	if st.done {
-		return fault("ALREADY_COMMITTED", "repair already confirmed")
-	}
-	if st.evidence.PreparedBy == p.ID {
-		return fault("FORBIDDEN", "the reviewer must not be the person who prepared the evidence")
-	}
-	_, err = e.Anchor.Append(ctx, anchor.RepairReviewed, p.Tenant, opRef,
-		RepairReviewRecord{RepairID: repairID, Approved: approve, Note: note, ReviewedBy: p.ID}, 0)
-	return err
+	})
 }
 
-// ConfirmRepair is Aakhil's confirmation, and the only way a HELD or
-// MISMATCH amount moves. It requires: a configured confirmer distinct from
-// the preparer and the reviewer; an approved review; and passed recovery
-// checks (writes enabled at this engine's generation and no restore signal
-// now). The status change, the bucket move, REPAIR_CONFIRMED and OUTCOME in
-// the anchor all happen in one engine transaction; a repeat is refused.
+// ConfirmRepair durably records the human decision BEFORE applying it to
+// the engine. These are separate databases, not an atomic transaction.
+// Retries and restore reconciliation replay the same decision idempotently;
+// they never ask humans to approve an already-durable decision again.
 func (e *Engine) ConfirmRepair(ctx context.Context, p auth.Principal, opRef, repairID string, c connector.Connector) (*DispatchResult, error) {
 	if err := e.recoveryReady(c); err != nil {
 		return nil, err
@@ -218,75 +228,149 @@ func (e *Engine) ConfirmRepair(ctx context.Context, p auth.Principal, opRef, rep
 	if p.Kind != auth.Operator || !slices.Contains(e.RepairConfirmers, p.ID) {
 		return nil, fault("FORBIDDEN", "only a configured repair confirmer can confirm a repair")
 	}
-	st, err := e.repairState(ctx, p.Tenant, opRef, repairID)
-	if err != nil {
-		return nil, err
-	}
-	switch {
-	case st.done:
-		return nil, fault("ALREADY_COMMITTED", "repair already confirmed")
-	case st.review == nil || !st.review.Approved:
-		return nil, fault("FORBIDDEN", "the repair evidence has not been approved by a reviewer")
-	case p.ID == st.evidence.PreparedBy || p.ID == st.review.ReviewedBy:
-		return nil, fault("FORBIDDEN", "the confirmer must be different from the preparer and the reviewer")
-	}
-	if on, _, err := e.writesOn(ctx); err != nil || !on {
-		return nil, fault("FORBIDDEN", "recovery checks have not passed: writes are not enabled at this engine's generation")
-	}
-	v, err := e.readView(ctx, c)
-	if err != nil {
-		return nil, err
-	}
-	if sig := v.signals(); len(sig) > 0 {
-		return nil, fault("FORBIDDEN", "recovery checks have not passed: %s %s", sig[0].Code, sig[0].OpRef)
-	}
-	ev := st.evidence
-	to, move := DispatchCommitted, `UPDATE steelmatter.mandates SET unresolved_minor = unresolved_minor - $3, committed_minor = committed_minor + $3 WHERE tenant_id = $1 AND mandate_id = $2`
-	if ev.Outcome == RepairRelease {
-		to, move = DispatchFenced, `UPDATE steelmatter.mandates SET unresolved_minor = unresolved_minor - $3, available_minor = available_minor + $3 WHERE tenant_id = $1 AND mandate_id = $2`
-	}
-	err = e.inTx(ctx, opRef, func(tx pgx.Tx) error {
-		var mandate, status string
-		var amount int64
-		if err := tx.QueryRow(ctx, `SELECT mandate_id FROM steelmatter.dispatches WHERE tenant_id = $1 AND op_ref = $2`, p.Tenant, opRef).Scan(&mandate); err != nil {
+	err := e.inTx(ctx, opRef, func(tx pgx.Tx) error {
+		mandate, status, amount, applied, err := lockRepairOperation(ctx, tx, p.Tenant, opRef)
+		if err != nil {
 			return err
 		}
-		if _, err := lockMandate(ctx, tx, p.Tenant, mandate, "FOR UPDATE"); err != nil {
+		// Read the latest review under the SAME lock used by ReviewRepair.
+		st, err := e.repairState(ctx, p.Tenant, opRef, repairID)
+		if err != nil {
 			return err
 		}
-		if err := tx.QueryRow(ctx, `SELECT status, amount_minor FROM steelmatter.dispatches WHERE tenant_id = $1 AND op_ref = $2 FOR UPDATE`,
-			p.Tenant, opRef).Scan(&status, &amount); err != nil {
-			return err
+		if st.otherConfirmation {
+			return fault("ALREADY_COMMITTED", "another repair was already confirmed for this operation")
+		}
+		if st.confirmed != nil {
+			return e.applyConfirmedRepairTx(ctx, tx, p.Tenant, opRef, mandate, status, amount, applied, *st.confirmed)
+		}
+		if st.review == nil || !st.review.Approved {
+			return fault("FORBIDDEN", "the repair evidence has not been approved by a reviewer")
+		}
+		if p.ID == st.evidence.PreparedBy || p.ID == st.review.ReviewedBy {
+			return fault("FORBIDDEN", "the confirmer must be different from the preparer and the reviewer")
 		}
 		if status != DispatchHeld && status != DispatchMismatch {
 			return fault("ALREADY_COMMITTED", "operation is already %s", status)
 		}
-		if _, err := tx.Exec(ctx, move, p.Tenant, mandate, amount); err != nil {
+		if on, _, err := e.writesOn(ctx); err != nil || !on {
+			return fault("FORBIDDEN", "recovery checks have not passed: writes are not enabled at this engine's generation")
+		}
+		v, err := e.readView(ctx, c)
+		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE steelmatter.dispatches SET status = $3, repair_ref = $4, updated_at = clock_timestamp(), settled_at = clock_timestamp()
-			WHERE tenant_id = $1 AND op_ref = $2`, p.Tenant, opRef, to, repairID); err != nil {
+		if sig := v.signals(); len(sig) > 0 {
+			return fault("FORBIDDEN", "recovery checks have not passed: %s %s", sig[0].Code, sig[0].OpRef)
+		}
+		ev := st.evidence
+		to := DispatchCommitted
+		if ev.Outcome == RepairRelease {
+			to = DispatchFenced
+		}
+		rc := RepairConfirmRecord{RepairID: repairID, Outcome: ev.Outcome, EvidenceRef: ev.EvidenceRef,
+			PreparedBy: ev.PreparedBy, ReviewedBy: st.review.ReviewedBy, ConfirmedBy: p.ID,
+			FromStatus: status, ToStatus: to, Move: moveFor(to)}
+		if _, err := e.Anchor.Append(ctx, anchor.RepairConfirmed, p.Tenant, opRef, rc, e.WriteGeneration()); err != nil {
+			return anchorFault(err)
+		}
+		if err := failpoint.Inject(ctx, failpoint.RepairAfterDecision); err != nil {
 			return err
 		}
-		if _, err := e.Anchor.Append(ctx, anchor.RepairConfirmed, p.Tenant, opRef, RepairConfirmRecord{RepairID: repairID, Outcome: ev.Outcome,
-			EvidenceRef: ev.EvidenceRef, PreparedBy: ev.PreparedBy, ReviewedBy: st.review.ReviewedBy, ConfirmedBy: p.ID,
-			FromStatus: status, ToStatus: to, Move: moveFor(to)}, 0); err != nil {
-			return fmt.Errorf("recovery anchor: %w", err)
-		}
-		if err := e.anchorOutcome(ctx, anchor.OutcomeRecord{Tenant: p.Tenant, OpRef: opRef, Destination: e.Cfg.CompanyRef, Outcome: "REPAIR_" + ev.Outcome,
-			Status: to, Move: moveFor(to), RepairID: repairID}); err != nil {
-			return err
-		}
-		payload, _ := json.Marshal(map[string]any{"op_ref": opRef, "repair_id": repairID, "outcome": ev.Outcome, "amount_minor": amount,
-			"confirmed_by": p.ID, "reviewed_by": st.review.ReviewedBy, "prepared_by": ev.PreparedBy})
-		_, err := tx.Exec(ctx, `INSERT INTO steelmatter.outbox (event_id, tenant_id, event_type, aggregate_id, payload, created_at)
-			VALUES ($1, $2, 'operation.repaired', $3, $4, clock_timestamp())`, newID("evt"), p.Tenant, opRef, payload)
-		return err
+		return e.applyConfirmedRepairTx(ctx, tx, p.Tenant, opRef, mandate, status, amount, applied, rc)
 	})
 	if err != nil {
 		return nil, err
 	}
 	return e.GetDispatch(ctx, p.Tenant, opRef)
+}
+
+func lockRepairOperation(ctx context.Context, tx pgx.Tx, tenant, opRef string) (mandate, status string, amount int64, applied string, err error) {
+	if err = tx.QueryRow(ctx, `SELECT mandate_id FROM steelmatter.dispatches WHERE tenant_id = $1 AND op_ref = $2`, tenant, opRef).Scan(&mandate); err != nil {
+		return
+	}
+	if _, err = lockMandate(ctx, tx, tenant, mandate, "FOR UPDATE"); err != nil {
+		return
+	}
+	err = tx.QueryRow(ctx, `SELECT status, amount_minor, COALESCE(repair_ref, '') FROM steelmatter.dispatches
+		WHERE tenant_id = $1 AND op_ref = $2 FOR UPDATE`, tenant, opRef).Scan(&status, &amount, &applied)
+	return
+}
+
+func (e *Engine) applyConfirmedRepairTx(ctx context.Context, tx pgx.Tx, tenant, opRef, mandate, status string, amount int64, applied string, rc RepairConfirmRecord) error {
+	if rc.RepairID == "" || rc.EvidenceRef == "" || rc.PreparedBy == "" || rc.ReviewedBy == "" || rc.ConfirmedBy == "" ||
+		rc.PreparedBy == rc.ReviewedBy || rc.PreparedBy == rc.ConfirmedBy || rc.ReviewedBy == rc.ConfirmedBy ||
+		!((rc.Outcome == RepairCommit && rc.ToStatus == DispatchCommitted) || (rc.Outcome == RepairRelease && rc.ToStatus == DispatchFenced)) {
+		return fault("SERVICE_UNAVAILABLE", "invalid confirmed repair record; keep budget held")
+	}
+	if applied == rc.RepairID && status == rc.ToStatus {
+		return nil
+	}
+	if applied == "" && status == rc.ToStatus {
+		// Recovery may already have established the same destination outcome.
+		// Attach the surviving decision without moving its budget a second time.
+		_, err := tx.Exec(ctx, `UPDATE steelmatter.dispatches SET repair_ref = $3
+			WHERE tenant_id = $1 AND op_ref = $2`, tenant, opRef, rc.RepairID)
+		return err
+	}
+	if applied != "" || (status != DispatchHeld && status != DispatchMismatch) {
+		return fault("REVISION_STALE", "confirmed repair cannot be applied to operation in %s", status)
+	}
+	move := `UPDATE steelmatter.mandates SET unresolved_minor = unresolved_minor - $3, committed_minor = committed_minor + $3 WHERE tenant_id = $1 AND mandate_id = $2`
+	if rc.Outcome == RepairRelease {
+		move = `UPDATE steelmatter.mandates SET unresolved_minor = unresolved_minor - $3, available_minor = available_minor + $3 WHERE tenant_id = $1 AND mandate_id = $2`
+	}
+	if err := e.anchorOutcome(ctx, anchor.OutcomeRecord{Tenant: tenant, OpRef: opRef, Destination: e.Cfg.CompanyRef,
+		Outcome: "REPAIR_" + rc.Outcome, Status: rc.ToStatus, Move: moveFor(rc.ToStatus), RepairID: rc.RepairID}); err != nil {
+		return err
+	}
+	if err := failpoint.Inject(ctx, failpoint.RepairAfterOutcome); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, move, tenant, mandate, amount); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE steelmatter.dispatches SET status = $3, repair_ref = $4, updated_at = clock_timestamp(), settled_at = clock_timestamp()
+		WHERE tenant_id = $1 AND op_ref = $2`, tenant, opRef, rc.ToStatus, rc.RepairID); err != nil {
+		return err
+	}
+	payload, _ := json.Marshal(map[string]any{"op_ref": opRef, "repair_id": rc.RepairID, "outcome": rc.Outcome, "amount_minor": amount,
+		"confirmed_by": rc.ConfirmedBy, "reviewed_by": rc.ReviewedBy, "prepared_by": rc.PreparedBy})
+	if _, err := tx.Exec(ctx, `INSERT INTO steelmatter.outbox (event_id, tenant_id, event_type, aggregate_id, payload, created_at)
+		VALUES ($1, $2, 'operation.repaired', $3, $4, clock_timestamp())`, newID("evt"), tenant, opRef, payload); err != nil {
+		return err
+	}
+	return failpoint.Inject(ctx, failpoint.RepairBeforeCommit)
+}
+
+// replayConfirmedRepairs runs after unsettled dispatches have been recovered.
+// A durable human decision survives a rollback of the engine database.
+func (e *Engine) replayConfirmedRepairs(ctx context.Context) ([]string, error) {
+	recs, err := e.Anchor.Records(ctx, anchor.RepairConfirmed)
+	if err != nil {
+		return nil, err
+	}
+	var problems []string
+	for _, r := range recs {
+		var rc RepairConfirmRecord
+		if err := json.Unmarshal(r.Payload, &rc); err != nil {
+			return problems, err
+		}
+		if rc.RepairID == "" {
+			continue
+		} // anchor-history repair, not a budget decision
+		err := e.inTx(ctx, r.OpRef, func(tx pgx.Tx) error {
+			m, status, amount, applied, err := lockRepairOperation(ctx, tx, r.Tenant, r.OpRef)
+			if err != nil {
+				return err
+			}
+			return e.applyConfirmedRepairTx(ctx, tx, r.Tenant, r.OpRef, m, status, amount, applied, rc)
+		})
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("%s: confirmed repair not applied: %v", r.OpRef, err))
+		}
+	}
+	return problems, nil
 }
 
 // ConfirmAnchorRepair is Aakhil's confirmation that an anchor found behind

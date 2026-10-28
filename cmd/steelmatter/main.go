@@ -207,6 +207,7 @@ func serve(ctx context.Context) error {
 		return err
 	}
 	eng.Connector = conn
+	eng.Cfg.RequireRecoveryAnchor = conn != nil
 	slog.Info("R1 destination connector", "kind", connKind, "company_ref", eng.Cfg.CompanyRef)
 	if anchorDSN := os.Getenv("STEELMATTER_ANCHOR_URL"); anchorDSN != "" {
 		anchorPool, err := newPool(ctx, anchorDSN)
@@ -219,8 +220,15 @@ func serve(ctx context.Context) error {
 			return fmt.Errorf("recovery anchor: %w", err)
 		}
 		slog.Info("recovery anchor connected", "writes_enabled", ws.Enabled, "generation", ws.Generation, "reason", ws.Reason)
-	} else {
-		slog.Warn("no recovery anchor (STEELMATTER_ANCHOR_URL): R1 dispatch runs without restore protection")
+	} else if conn != nil {
+		return errors.New("STEELMATTER_ANCHOR_URL is required with an R1 destination connector")
+	}
+	if conn != nil {
+		gate, err := eng.InitializeRecovery(ctx, conn)
+		if err != nil {
+			return fmt.Errorf("startup recovery barrier: %w", err)
+		}
+		slog.Info("startup recovery gate", "passed", gate.Passed, "checks", gate.Checks)
 	}
 	authn := &auth.Authenticator{Pool: pool}
 
