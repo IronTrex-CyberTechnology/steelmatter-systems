@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Run the lost-reply proxy in front of the running sandbox (for QA and manual
+# failure tests). Point the connector at the data address instead of Odoo:
+#
+#   STEELMATTER_ODOO_URL=http://127.0.0.1:18070
+#
+# Then add faults on the control address, for example:
+#
+#   curl -X POST 127.0.0.1:18071/faults -d '{"mode":"drop_reply","method":"sm_create","op_ref":"op-1"}'
+#   curl -X POST 127.0.0.1:18071/faults -d '{"mode":"drop_request","method":"sm_fence"}'
+#   curl -X POST 127.0.0.1:18071/faults -d '{"mode":"delay_reply","method":"sm_create","delay_ms":40000}'
+#   curl -X POST 127.0.0.1:18071/faults -d '{"mode":"bad_gateway","method":"sm_create","count":2}'
+#   curl 127.0.0.1:18071/events?op_ref=op-1     # what Odoo actually answered
+#   curl -X DELETE 127.0.0.1:18071/faults       # clear faults and events
+#
+# Modes: drop_reply (Odoo applies the call, the client gets no reply),
+# drop_request (Odoo never sees it), delay_reply (reply held for delay_ms),
+# bad_gateway (Odoo applies it, the client gets HTTP 502).
+source "$(dirname "$0")/lib.sh"
+DATA_PORT="${STEELMATTER_PROXY_PORT:-18070}"
+CONTROL_PORT="${STEELMATTER_PROXY_CONTROL_PORT:-18071}"
+cd "$ROOT"
+exec go run ./cmd/smlossproxy -target "http://127.0.0.1:$ODOO_PORT" \
+  -listen "127.0.0.1:$DATA_PORT" -control "127.0.0.1:$CONTROL_PORT" "$@"
