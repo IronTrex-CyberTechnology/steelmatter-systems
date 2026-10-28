@@ -1,0 +1,206 @@
+package engine
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract"
+)
+
+// Settle advances one dispatched R1 operation by one connector round trip
+// and records what the destination proved (lookup-first recovery):
+//
+//   - PENDING: execute the stored action with the same op_ref.
+//   - UNRESOLVED: lookup; if the order is not found now, fence.
+//   - COMMITTED, FENCED, MISMATCH: final here; returned unchanged.
+//
+// Allowance moves (D2, decided 28 Oct 2026):
+//
+//   - unresolved -> committed only when the destination returns a confirmed
+//     order whose details match the approved action (CREATED, EXISTS, FOUND);
+//   - unresolved -> available only when the destination proves no order:
+//     FENCED or a structured module refusal, with the permanent block
+//     committed and no earlier create attempt (Aakhil, 28 Oct 2026);
+//   - a block over an earlier create attempt is HELD: the earlier outcome is
+//     not established (an old backup may have erased a real order), so
+//     blocking future attempts alone cannot release it (D5 v3 case 1);
+//   - everything else (UNKNOWN, NOT_FOUND_NOW alone, UNAVAILABLE, restore
+//     suspected, a differing order) leaves the amount held.
+//
+// A committed operation is never fenced: Settle only fences UNRESOLVED ones
+// (D5 rule 7). Settle is safe to call concurrently; the first transaction to
+// record a transition wins and the others return the stored state.
+func (e *Engine) Settle(ctx context.Context, tenant, opRef string, c connector.Connector) (*DispatchResult, error) {
+	d, err := e.loadDispatchForSettle(ctx, tenant, opRef)
+	if err != nil {
+		return nil, err
+	}
+	if d == nil {
+		return nil, fault("NOT_FOUND", "operation not found")
+	}
+	var res connector.Result
+	switch d.status {
+	case DispatchPending:
+		res, err = c.Execute(ctx, d.connectorAction())
+	case DispatchUnresolved:
+		res, err = c.Lookup(ctx, opRef)
+		if err == nil && res.Outcome == connector.NotFoundNow {
+			res, err = c.Fence(ctx, opRef, d.expectedMinSeq())
+		}
+	default: // COMMITTED, FENCED, MISMATCH, HELD
+		return e.GetDispatch(ctx, tenant, opRef)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("connector %s: %w", opRef, err)
+	}
+	if res.OpRef != "" && res.OpRef != opRef {
+		return nil, fmt.Errorf("connector answered for %s, asked for %s", res.OpRef, opRef)
+	}
+	if err := e.recordOutcome(ctx, d, res); err != nil {
+		return nil, err
+	}
+	return e.GetDispatch(ctx, tenant, opRef)
+}
+
+type dispatchRow struct {
+	tenant, opRef, mandateID, companyRef, permitDigest, status string
+	amount, destSeq                                            int64
+	action                                                     contract.Action
+}
+
+func (e *Engine) loadDispatchForSettle(ctx context.Context, tenant, opRef string) (*dispatchRow, error) {
+	d := dispatchRow{tenant: tenant, opRef: opRef}
+	var canonical []byte
+	err := e.Pool.QueryRow(ctx, `SELECT mandate_id, company_ref, permit_digest, status, amount_minor, COALESCE(destination_seq, 0), action_canonical
+		FROM steelmatter.dispatches WHERE tenant_id = $1 AND op_ref = $2`, tenant, opRef).
+		Scan(&d.mandateID, &d.companyRef, &d.permitDigest, &d.status, &d.amount, &d.destSeq, &canonical)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, classify(err)
+	}
+	if err := json.Unmarshal(canonical, &d.action); err != nil {
+		return nil, fmt.Errorf("dispatch %s: stored action: %w", opRef, err)
+	}
+	return &d, nil
+}
+
+func (d *dispatchRow) connectorAction() connector.Action {
+	lines := make([]connector.Line, len(d.action.Lines))
+	for i, l := range d.action.Lines {
+		lines[i] = connector.Line{ItemRef: l.ItemID, Quantity: l.Quantity, UnitPriceMinor: l.UnitPriceMinor}
+	}
+	return connector.Action{OpRef: d.opRef, ActionRevision: d.action.ActionRevision, CompanyRef: d.companyRef,
+		DeliveryRef: d.action.DeliveryID, SupplierRef: d.action.SupplierID,
+		SupplierRevision: d.action.SupplierRevision, Lines: lines, AmountMinor: d.action.AmountMinor, Currency: d.action.Currency,
+		PermitDigest: d.permitDigest, ExpectedMinSeq: d.expectedMinSeq()}
+}
+
+// expectedMinSeq is the highest destination sequence the engine has seen.
+// TODO(D5): read it from the recovery anchor once the anchor store is chosen;
+// until then 0 disables the destination's restore gate.
+func (d *dispatchRow) expectedMinSeq() int64 { return 0 }
+
+// matches reports whether a destination order is a confirmed order with
+// exactly the approved details (Aakhil's D1 decision: success only when the
+// destination confirms the order and its details match).
+func (d *dispatchRow) matches(o *connector.Order) bool {
+	if o == nil || o.State != connector.StateConfirmed || o.CompanyRef != d.companyRef || o.DeliveryRef != d.action.DeliveryID ||
+		o.AmountMinor != d.action.AmountMinor ||
+		o.Currency != d.action.Currency || o.PermitDigest != d.permitDigest || o.SupplierRef != d.action.SupplierID ||
+		len(o.Lines) != len(d.action.Lines) {
+		return false
+	}
+	for i, l := range d.action.Lines {
+		ol := o.Lines[i]
+		if ol.ItemRef != l.ItemID || ol.Quantity != l.Quantity || ol.UnitPriceMinor != l.UnitPriceMinor {
+			return false
+		}
+	}
+	return true
+}
+
+// next decides the new status and allowance move for a destination result.
+func (d *dispatchRow) next(r connector.Result) (status, event string) {
+	switch {
+	case r.CreateDone && r.Destination != nil:
+		// The destination's CREATE_DONE record establishes the earlier
+		// create, even when a restore erased the order (D5 v3 case E).
+		if d.matches(r.Destination) {
+			return DispatchCommitted, "operation.committed"
+		}
+		return DispatchMismatch, "operation.mismatch"
+	case r.Outcome == connector.Created || r.Outcome == connector.Exists || r.Outcome == connector.Found:
+		if d.matches(r.Destination) {
+			return DispatchCommitted, "operation.committed"
+		}
+		return DispatchMismatch, "operation.mismatch"
+	case r.Outcome == connector.Mismatch:
+		return DispatchMismatch, "operation.mismatch"
+	case r.ProvesNoOrder():
+		return DispatchFenced, "operation.fenced"
+	case r.BlockedOverPriorCreate():
+		return DispatchHeld, "operation.held"
+	default:
+		// Includes a block not yet committed durably, or proof flags that
+		// are unknown (restore-proof record unreadable): retry the fence.
+		// UNKNOWN, NOT_FOUND_NOW, UNAVAILABLE, REFUSED_RESTORE_SUSPECTED or an
+		// unrecognised value: the order may exist, so hold.
+		return DispatchUnresolved, "operation.unresolved"
+	}
+}
+
+func (e *Engine) recordOutcome(ctx context.Context, d *dispatchRow, r connector.Result) error {
+	status, event := d.next(r)
+	eventID := newID("evt")
+	order := ""
+	if r.Destination != nil {
+		order = r.Destination.ID
+	}
+	return e.inTx(ctx, d.opRef, func(tx pgx.Tx) error {
+		// Lock order: mandate, then the dispatch row.
+		if _, err := lockMandate(ctx, tx, d.tenant, d.mandateID, "FOR UPDATE"); err != nil {
+			return err
+		}
+		var current string
+		if err := tx.QueryRow(ctx, `SELECT status FROM steelmatter.dispatches WHERE tenant_id = $1 AND op_ref = $2 FOR UPDATE`,
+			d.tenant, d.opRef).Scan(&current); err != nil {
+			return err
+		}
+		if current != d.status {
+			return nil // another settler recorded a transition first
+		}
+		var move string
+		switch status {
+		case DispatchCommitted:
+			move = `UPDATE steelmatter.mandates SET unresolved_minor = unresolved_minor - $3, committed_minor = committed_minor + $3 WHERE tenant_id = $1 AND mandate_id = $2`
+		case DispatchFenced:
+			move = `UPDATE steelmatter.mandates SET unresolved_minor = unresolved_minor - $3, available_minor = available_minor + $3 WHERE tenant_id = $1 AND mandate_id = $2`
+		}
+		if move != "" {
+			if _, err := tx.Exec(ctx, move, d.tenant, d.mandateID, d.amount); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.Exec(ctx, `UPDATE steelmatter.dispatches SET status = $3, last_outcome = $4, attempts = attempts + 1,
+			destination_order = COALESCE(NULLIF($5, ''), destination_order), destination_seq = GREATEST(COALESCE(destination_seq, 0), $6),
+			updated_at = clock_timestamp(), settled_at = CASE WHEN $3 IN ('COMMITTED', 'FENCED') THEN clock_timestamp() END
+			WHERE tenant_id = $1 AND op_ref = $2`, d.tenant, d.opRef, status, string(r.Outcome), order, r.Seq); err != nil {
+			return err
+		}
+		if status != d.status {
+			payload, _ := json.Marshal(map[string]any{"op_ref": d.opRef, "outcome": r.Outcome, "destination_order": order, "amount_minor": d.amount})
+			if _, err := tx.Exec(ctx, `INSERT INTO steelmatter.outbox (event_id, tenant_id, event_type, aggregate_id, payload, created_at)
+				VALUES ($1, $2, $3, $4, $5, clock_timestamp())`, eventID, d.tenant, event, d.opRef, payload); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}

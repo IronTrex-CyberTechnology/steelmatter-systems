@@ -51,6 +51,10 @@ type Config struct {
 	RecoveryAge time.Duration
 	// Version is the build version reported by the adapter assurance endpoint.
 	Version string
+	// CompanyRef is the destination company R1 dispatches order for (one
+	// company per deployment, D7). It is the engine's mapping key, not an
+	// Odoo ID; the connector maps it. Dispatch refuses when it is empty.
+	CompanyRef string
 }
 
 // DefaultConfig returns the R0 defaults.
@@ -63,6 +67,7 @@ func DefaultConfig() Config {
 		MaxAttempts:  3,
 		RecoveryAge:  10 * time.Second,
 		Version:      "dev",
+		CompanyRef:   "synthetic-company",
 	}
 }
 
