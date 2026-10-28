@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-
 	"fmt"
-	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/anchor"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector"
 )
 
 // UseAnchor connects the engine to the recovery anchor (D5 v3) and adopts

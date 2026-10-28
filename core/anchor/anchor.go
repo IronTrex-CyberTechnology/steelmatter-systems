@@ -75,6 +75,7 @@ type DestRecord struct {
 // the authorised request (verifiable against the signed permit) and the
 // budget move reserved -> unresolved.
 type IntentRecord struct {
+	AdmittedAt       string `json:"admitted_at,omitempty"`
 	Tenant           string `json:"tenant_id"`
 	OpRef            string `json:"op_ref"`
 	InstructionID    string `json:"instruction_id"`

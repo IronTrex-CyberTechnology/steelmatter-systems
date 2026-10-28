@@ -126,6 +126,7 @@ def order_facts(po):
         "company_ref": po.company_id.sm_ref or "",
         "delivery_ref": po.dest_address_id.sm_ref or "",
         "supplier_ref": po.partner_id.sm_ref or "",
+        "supplier_revision": po.sm_supplier_revision,
         "lines": lines,
         "amount_minor": minor(po.amount_total, cur),
         "currency": cur.name,
@@ -135,7 +136,7 @@ def order_facts(po):
 
 def _same_order(facts, action):
     return (facts["company_ref"] == action["company_ref"] and facts["delivery_ref"] == action["delivery_ref"]
-            and facts["supplier_ref"] == action["supplier_ref"] and facts["amount_minor"] == action["amount_minor"]
+            and facts["supplier_ref"] == action["supplier_ref"] and facts["supplier_revision"] == action["supplier_revision"] and facts["amount_minor"] == action["amount_minor"]
             and facts["currency"] == action["currency"] and facts["permit_digest"] == action["permit_digest"]
             and facts["lines"] == [{"item_ref": l["item_ref"], "quantity": l["quantity"], "unit_price_minor": l["unit_price_minor"]}
                                    for l in action["lines"]])
@@ -355,6 +356,7 @@ class SteelmatterApi(models.AbstractModel):
             "currency_id": cur.id,
             "sm_op_ref": a["op_ref"],
             "sm_permit_digest": a["permit_digest"],
+            "sm_supplier_revision": a["supplier_revision"],
             "order_line": [(0, 0, {
                 "product_id": prod.id,
                 "name": prod.display_name,

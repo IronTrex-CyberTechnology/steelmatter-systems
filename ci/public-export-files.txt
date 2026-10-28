@@ -1,5 +1,5 @@
-# Reviewed R0 + R1 source-export paths. Exact regular files only.
 # Excludes private records and internal instructions; Git history is not exported.
+# Reviewed R0 + R1 source-export paths. Exact regular files only.
 .gitattributes
 .github/ISSUE_TEMPLATE/bug.md
 .github/ISSUE_TEMPLATE/issue.md
@@ -65,6 +65,7 @@ core/contract/errors.go
 core/contract/jws.go
 core/contract/keyring.go
 core/contract/payloads.go
+core/contract/r1_evidence_test.go
 core/contract/strictjson.go
 core/contract/temporal.go
 core/contract/temporal_test.go
@@ -84,6 +85,7 @@ core/db/migrations/0010_r1_dispatches.sql
 core/db/migrations/0011_r1_workers_outbox.sql
 core/db/migrations/0012_r1_recovery.sql
 core/db/migrations/0013_repair_replay.sql
+core/db/migrations/0014_r1_evidence.sql
 core/db/provision.go
 core/db/roles.go
 core/dbtest/anchor.go
@@ -98,6 +100,7 @@ core/engine/evaluate.go
 core/engine/evidence.go
 core/engine/instructions.go
 core/engine/mandates.go
+core/engine/r1_evidence.go
 core/engine/recovery.go
 core/engine/repair.go
 core/engine/settle.go
@@ -112,6 +115,7 @@ core/httpapi/codes.go
 core/httpapi/httpapi.go
 core/keys/keys.go
 core/keys/keys_test.go
+core/observer/destination.go
 core/observer/observer.go
 core/server/server.go
 core/server/server_test.go
@@ -233,6 +237,7 @@ packages/verifier/test/depth.test.ts
 packages/verifier/test/evidence.test.ts
 packages/verifier/test/gojson-reporter.mjs
 packages/verifier/test/package.test.ts
+packages/verifier/test/r1-evidence.test.ts
 packages/verifier/test/temporal.test.ts
 packages/verifier/test/truststore.test.ts
 packages/verifier/test/vectors.test.ts
@@ -277,6 +282,7 @@ tests/integration/mcp_test.go
 tests/integration/quota_test.go
 tests/integration/r1_anchor_test.go
 tests/integration/r1_dispatch_test.go
+tests/integration/r1_evidence_test.go
 tests/integration/r1_hardening_test.go
 tests/integration/r1_http_test.go
 tests/integration/r1_odoo_e2e_test.go

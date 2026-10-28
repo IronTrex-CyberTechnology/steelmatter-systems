@@ -65,7 +65,7 @@ func (e *Engine) scope(ctx context.Context, p auth.Principal, operationID string
 		FROM steelmatter.issuances i
 		JOIN steelmatter.instructions n ON n.tenant_id = i.tenant_id AND n.instruction_id = i.instruction_id
 		JOIN steelmatter.mandates m ON m.tenant_id = i.tenant_id AND m.mandate_id = i.mandate_id
-		LEFT JOIN steelmatter.operations o ON o.tenant_id = i.tenant_id AND o.operation_id = i.operation_id
+		LEFT JOIN steelmatter.evidence_operations o ON o.tenant_id = i.tenant_id AND o.operation_id = i.operation_id
 		WHERE i.tenant_id = $1 AND i.operation_id = $2`, p.Tenant, operationID, p.ID).
 		Scan(&s.instructionID, &s.actor, &s.issuer, &s.owner, &s.mandateID, &opID, &entitled)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -101,8 +101,9 @@ var readers = []string{auth.Actor, auth.Issuer, auth.Owner, auth.Observer, auth.
 // evidence may be PENDING briefly after commit; the stored bytes never change.
 func (e *Engine) SignExecution(ctx context.Context, tenant, operationID string) error {
 	var canonical []byte
-	err := e.Pool.QueryRow(ctx, `SELECT execution_canonical FROM steelmatter.operations
-		WHERE tenant_id = $1 AND operation_id = $2 AND execution_jws IS NULL`, tenant, operationID).Scan(&canonical)
+	var external bool
+	err := e.Pool.QueryRow(ctx, `SELECT execution_canonical, external_destination FROM steelmatter.evidence_operations
+		WHERE tenant_id = $1 AND operation_id = $2 AND execution_jws IS NULL`, tenant, operationID).Scan(&canonical, &external)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -120,7 +121,11 @@ func (e *Engine) SignExecution(ctx context.Context, tenant, operationID string) 
 	if err != nil {
 		return err
 	}
-	_, err = e.Pool.Exec(ctx, `UPDATE steelmatter.operations SET execution_jws = $3
+	table := "steelmatter.operations"
+	if external {
+		table = "steelmatter.r1_executions"
+	}
+	_, err = e.Pool.Exec(ctx, `UPDATE `+table+` SET execution_jws = $3
 		WHERE tenant_id = $1 AND operation_id = $2 AND execution_jws IS NULL`, tenant, operationID, jws)
 	return err
 }
@@ -130,14 +135,15 @@ func (e *Engine) SignExecution(ctx context.Context, tenant, operationID string) 
 // signed (SEC-DEF-002). Without a current execution key nothing is
 // attempted. Returns the number signed.
 func (e *Engine) SignPendingExecutions(ctx context.Context) (int, error) {
-	ops, err := e.listOps(ctx, `SELECT o.tenant_id, o.operation_id FROM steelmatter.operations o
+	buildErr := e.buildPendingR1Evidence(ctx)
+	ops, err := e.listOps(ctx, `SELECT o.tenant_id, o.operation_id FROM steelmatter.evidence_operations o
 		WHERE o.execution_jws IS NULL AND `+notBackedOff(workerEvidence, "o.tenant_id", "o.operation_id")+`
 		ORDER BY o.committed_at LIMIT 100`)
 	if err != nil || len(ops) == 0 {
-		return 0, err
+		return 0, errors.Join(buildErr, err)
 	}
 	if _, err := e.signer("SM-EXECUTION+JWS"); err != nil {
-		return 0, err
+		return 0, errors.Join(buildErr, err)
 	}
 	n := 0
 	err = runIsolated(ctx, e, workerEvidence, ops, opKey, func(o [2]string) error {
@@ -147,7 +153,7 @@ func (e *Engine) SignPendingExecutions(ctx context.Context) (int, error) {
 		n++
 		return nil
 	})
-	return n, err
+	return n, errors.Join(buildErr, err)
 }
 
 // ObserveUnobserved records a first observation for committed operations
@@ -158,8 +164,8 @@ func (e *Engine) ObserveUnobserved(ctx context.Context) (int, error) {
 	if e.Observer == nil {
 		return 0, nil
 	}
-	ops, err := e.listOps(ctx, `SELECT o.tenant_id, o.operation_id FROM steelmatter.operations o
-		WHERE NOT EXISTS (SELECT 1 FROM steelmatter.observations b WHERE b.tenant_id = o.tenant_id AND b.operation_id = o.operation_id)
+	ops, err := e.listOps(ctx, `SELECT o.tenant_id, o.operation_id FROM steelmatter.evidence_operations o
+		WHERE NOT EXISTS (SELECT 1 FROM steelmatter.evidence_observations b WHERE b.tenant_id = o.tenant_id AND b.operation_id = o.operation_id)
 		AND `+notBackedOff(workerObserver, "o.tenant_id", "o.operation_id")+`
 		ORDER BY o.committed_at LIMIT 100`)
 	if err != nil || len(ops) == 0 {
@@ -213,7 +219,19 @@ func (e *Engine) observe(ctx context.Context, tenant, operationID string, firstO
 	if err := failpoint.Inject(ctx, failpoint.ObserverBeforeReadback); err != nil {
 		return nil, err
 	}
-	r, err := e.Observer.Observe(ctx, tenant, operationID)
+	var external bool
+	if err := e.Pool.QueryRow(ctx, `SELECT external_destination FROM steelmatter.evidence_operations WHERE tenant_id=$1 AND operation_id=$2`, tenant, operationID).Scan(&external); err != nil {
+		return nil, err
+	}
+	var r *observer.Result
+	var err error
+	operationTable, observationTable := "steelmatter.operations", "steelmatter.observations"
+	if external {
+		operationTable, observationTable = "steelmatter.r1_executions", "steelmatter.r1_observations"
+		r, err = e.Observer.ObserveDestination(ctx, tenant, operationID, e.Connector)
+	} else {
+		r, err = e.Observer.Observe(ctx, tenant, operationID)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -223,13 +241,13 @@ func (e *Engine) observe(ctx context.Context, tenant, operationID string, firstO
 	stored := false
 	err = e.inTx(ctx, "", func(tx pgx.Tx) error {
 		stored = false
-		if _, err := tx.Exec(ctx, `SELECT 1 FROM steelmatter.operations WHERE tenant_id = $1 AND operation_id = $2 FOR NO KEY UPDATE`,
+		if _, err := tx.Exec(ctx, `SELECT 1 FROM `+operationTable+` WHERE tenant_id = $1 AND operation_id = $2 FOR NO KEY UPDATE`,
 			tenant, operationID); err != nil {
 			return err
 		}
 		if firstOnly {
 			var observed bool
-			if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM steelmatter.observations WHERE tenant_id = $1 AND operation_id = $2)`,
+			if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM steelmatter.evidence_observations WHERE tenant_id = $1 AND operation_id = $2)`,
 				tenant, operationID).Scan(&observed); err != nil {
 				return err
 			}
@@ -237,7 +255,7 @@ func (e *Engine) observe(ctx context.Context, tenant, operationID string, firstO
 				return nil
 			}
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO steelmatter.observations (tenant_id, observation_id, operation_id, status, expected_action_digest,
+		if _, err := tx.Exec(ctx, `INSERT INTO `+observationTable+` (tenant_id, observation_id, operation_id, status, expected_action_digest,
 			observed_action_digest, observation_canonical, observation_digest, observation_jws, observed_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 			tenant, r.ObservationID, operationID, r.Status, r.ExpectedActionDigest, r.ObservedActionDigest, r.Canonical, r.Digest, r.JWS, r.ObservedAt); err != nil {
@@ -308,11 +326,11 @@ func (e *Engine) loadEvidence(ctx context.Context, tenant, operationID, instruct
 	var mandateJWS, permitJWS, execJWS, obsJWS *string
 	err := e.Pool.QueryRow(ctx, `SELECT m.mandate_jws, m.mandate_digest, i.permit_jws, i.permit_digest, a.action_canonical, a.action_digest,
 		o.execution_jws, o.execution_digest, o.obligation_id,
-		(SELECT observation_jws FROM steelmatter.observations b WHERE b.tenant_id = i.tenant_id AND b.operation_id = i.operation_id ORDER BY recorded_at DESC LIMIT 1)
+		(SELECT observation_jws FROM steelmatter.evidence_observations b WHERE b.tenant_id = i.tenant_id AND b.operation_id = i.operation_id ORDER BY recorded_at DESC LIMIT 1)
 		FROM steelmatter.issuances i
 		JOIN steelmatter.mandates m ON m.tenant_id = i.tenant_id AND m.mandate_id = i.mandate_id
 		JOIN steelmatter.action_revisions a ON a.tenant_id = i.tenant_id AND a.instruction_id = i.instruction_id AND a.action_revision = i.action_revision
-		LEFT JOIN steelmatter.operations o ON o.tenant_id = i.tenant_id AND o.operation_id = i.operation_id
+		LEFT JOIN steelmatter.evidence_operations o ON o.tenant_id = i.tenant_id AND o.operation_id = i.operation_id
 		WHERE i.tenant_id = $1 AND i.operation_id = $2`, tenant, operationID).
 		Scan(&mandateJWS, &st.mandateDigest, &permitJWS, &st.permitDigest, &st.actionCanonical, &st.actionDigest, &execJWS, &st.executionDigest, &st.obligation, &obsJWS)
 	if err != nil {
@@ -395,6 +413,10 @@ func (e *Engine) evidenceStatus(r EvidenceRecords, st storedEvidence) string {
 		op := ov.Value.(*contract.Observation)
 		consistent = consistent && op.OperationID == st.operationID && op.ExpectedActionDigest == actionDigest &&
 			op.ExecutionDigest == deref(st.executionDigest)
+	}
+	if ev != nil && ov != nil && ev.Value.(*contract.Execution).SchemaVersion == contract.ExternalEvidenceVersion {
+		ex, ob := ev.Value.(*contract.Execution), ov.Value.(*contract.Observation)
+		consistent = consistent && ob.SchemaVersion == contract.ExternalEvidenceVersion && ob.ExpectedCompanyRef == ex.CompanyRef && ob.ExpectedPermitDigest == ex.PermitDigest
 	}
 	if !consistent {
 		return "INVALID"

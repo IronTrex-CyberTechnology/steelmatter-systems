@@ -4,7 +4,6 @@ package integration
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -98,10 +97,14 @@ func TestR1ConfirmedRepairSurvivesEveryCrashBoundary(t *testing.T) {
 				if err := e.eng.ReviewRepair(ctx, kaif, p.operation, id, true, "reviewed"); err != nil {
 					t.Fatal(err)
 				}
-				failpoint.Set(point, func(context.Context) error { return failpoint.ErrInjected })
+				injected := false
+				failpoint.Set(point, func(context.Context) error {
+					injected = true
+					return failpoint.ErrInjected
+				})
 				t.Cleanup(failpoint.Clear)
-				if _, err := e.eng.ConfirmRepair(ctx, aakhil, p.operation, id, a.s); !errors.Is(err, failpoint.ErrInjected) {
-					t.Fatalf("crash: %v", err)
+				if _, err := e.eng.ConfirmRepair(ctx, aakhil, p.operation, id, a.s); err == nil || !injected {
+					t.Fatalf("crash boundary reached=%v: %v", injected, err)
 				}
 				failpoint.Clear()
 				requireBuckets(t, "crashed engine commit", e.buckets(p.mandate), r1Unresolved)

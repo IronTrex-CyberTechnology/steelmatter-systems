@@ -131,9 +131,9 @@ func (e *Engine) WorkerBacklog(ctx context.Context) (Backlog, error) {
 	var ev, ob, cl, se, ou float64
 	var b Backlog
 	err := e.Pool.QueryRow(ctx, `SELECT
-		COALESCE(extract(epoch FROM clock_timestamp() - (SELECT min(committed_at) FROM steelmatter.operations WHERE execution_jws IS NULL)), 0),
-		COALESCE(extract(epoch FROM clock_timestamp() - (SELECT min(o.committed_at) FROM steelmatter.operations o
-			WHERE NOT EXISTS (SELECT 1 FROM steelmatter.observations b WHERE b.tenant_id = o.tenant_id AND b.operation_id = o.operation_id))), 0),
+		COALESCE(extract(epoch FROM clock_timestamp() - (SELECT min(committed_at) FROM steelmatter.evidence_operations WHERE execution_jws IS NULL)), 0),
+		COALESCE(extract(epoch FROM clock_timestamp() - (SELECT min(o.committed_at) FROM steelmatter.evidence_operations o
+			WHERE NOT EXISTS (SELECT 1 FROM steelmatter.evidence_observations b WHERE b.tenant_id = o.tenant_id AND b.operation_id = o.operation_id))), 0),
 		COALESCE(extract(epoch FROM clock_timestamp() - (SELECT min(expires_at) FROM steelmatter.issuances
 			WHERE status IN ('UNSIGNED', 'ACTIVE') AND expires_at <= clock_timestamp())), 0),
 		(SELECT count(*) FROM steelmatter.worker_backoff WHERE resolved_at IS NULL AND next_attempt_at > clock_timestamp()),

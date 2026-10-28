@@ -51,19 +51,30 @@ func TemporalLinkage(m *Mandate, p *Permit, e *Execution, o *Observation) []Temp
 		y, ok2 := at(b)
 		return ok1 && ok2 && x.Before(y)
 	}
-	return []TemporalCheck{
+	admitted := ""
+	if e != nil {
+		admitted = e.CommittedAt
+		if e.SchemaVersion == ExternalEvidenceVersion {
+			admitted = e.AdmittedAt
+		}
+	}
+	checks := []TemporalCheck{
 		rule("time:permit_issued_within_mandate", m != nil && p != nil, func() bool {
 			return le(m.IssuedAt, p.IssuedAt) && lt(p.IssuedAt, m.ExpiresAt)
 		}),
 		rule("time:permit_expiry_within_mandate", m != nil && p != nil, func() bool { return le(p.ExpiresAt, m.ExpiresAt) }),
 		rule("time:execution_within_permit", p != nil && e != nil, func() bool {
-			return le(p.IssuedAt, e.CommittedAt) && lt(e.CommittedAt, p.ExpiresAt)
+			return le(p.IssuedAt, admitted) && lt(admitted, p.ExpiresAt)
 		}),
 		rule("time:execution_within_mandate", m != nil && e != nil, func() bool {
-			return le(m.IssuedAt, e.CommittedAt) && lt(e.CommittedAt, m.ExpiresAt)
+			return le(m.IssuedAt, admitted) && lt(admitted, m.ExpiresAt)
 		}),
 		rule("time:observation_after_execution", e != nil && o != nil, func() bool { return le(e.CommittedAt, o.ObservedAt) }),
 	}
+	if e != nil && e.SchemaVersion == ExternalEvidenceVersion {
+		checks = append(checks, rule("time:settlement_after_admission", true, func() bool { return le(e.AdmittedAt, e.CommittedAt) }))
+	}
+	return checks
 }
 
 // TemporalConsistent reports whether no rule is violated (MISSING is not a violation).

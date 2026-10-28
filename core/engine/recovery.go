@@ -95,6 +95,17 @@ func (e *Engine) recoveryReady(c connector.Connector) error {
 // holds what the earlier one saw. Records newer than RestoreGrace are left
 // out of the comparisons that look the other way.
 func (e *Engine) readView(ctx context.Context, c connector.Connector) (*recoveryView, error) {
+	return e.readViewWithDB(ctx, c, e.Pool)
+}
+
+type recoveryQuerier interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}
+
+// A caller already holding an engine transaction must reuse its connection.
+// Acquiring another pool connection while peers wait on its mandate lock can
+// exhaust the pool and prevent the lock holder from making progress.
+func (e *Engine) readViewWithDB(ctx context.Context, c connector.Connector, db recoveryQuerier) (*recoveryView, error) {
 	v := &recoveryView{intents: map[dispKey]anchor.IntentRecord{}, outcomes: map[dispKey]anchor.OutcomeRecord{}, young: map[dispKey]bool{},
 		youngOps: map[dispKey]bool{}, findings: map[dispKey]bool{}, ops: map[dispKey]engineOp{}, dest: map[string]connector.ListRow{}}
 	var cp int64
@@ -115,7 +126,7 @@ func (e *Engine) readView(ctx context.Context, c connector.Connector) (*recovery
 		cp = page.NextCheckpoint
 	}
 
-	rows, err := e.Pool.Query(ctx, `SELECT tenant_id, op_ref, status, COALESCE(flag, ''), mandate_id, amount_minor,
+	rows, err := db.Query(ctx, `SELECT tenant_id, op_ref, status, COALESCE(flag, ''), mandate_id, amount_minor,
 		updated_at > clock_timestamp() - make_interval(secs => $1) FROM steelmatter.dispatches`, e.Cfg.RestoreGrace.Seconds())
 	if err != nil {
 		return nil, unavailable(err)
@@ -487,10 +498,10 @@ func (e *Engine) recreateDispatch(ctx context.Context, ir anchor.IntentRecord) e
 			args []any
 		}{
 			{`INSERT INTO steelmatter.dispatches (tenant_id, op_ref, instruction_id, action_revision, mandate_id, company_ref, permit_id, control_epoch,
-			  action_canonical, action_digest, permit_digest, amount_minor, status, created_at, updated_at, recovered_at)
-			  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'UNRESOLVED', $13, $13, $13)`,
+			  action_canonical, action_digest, permit_digest, amount_minor, status, created_at, updated_at, recovered_at, admitted_at)
+			  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'UNRESOLVED', $13, $13, $13, NULLIF($14, '')::timestamptz)`,
 				[]any{ir.Tenant, ir.OpRef, ir.InstructionID, ir.ActionRevision, ir.MandateID, ir.CompanyRef, ir.PermitID, ir.ControlEpoch,
-					[]byte(ir.ActionCanonical), ir.ActionDigest, ir.PermitDigest, ir.AmountMinor, now}},
+					[]byte(ir.ActionCanonical), ir.ActionDigest, ir.PermitDigest, ir.AmountMinor, now, ir.AdmittedAt}},
 			{`UPDATE steelmatter.action_revisions SET status = 'COMMITTED' WHERE tenant_id = $1 AND instruction_id = $2 AND action_revision = $3`,
 				[]any{ir.Tenant, ir.InstructionID, ir.ActionRevision}},
 			{`UPDATE steelmatter.mandates SET ` + from + ` = ` + from + ` - $3, unresolved_minor = unresolved_minor + $3 WHERE tenant_id = $1 AND mandate_id = $2`,

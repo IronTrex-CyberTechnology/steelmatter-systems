@@ -256,7 +256,7 @@ func (e *Engine) ConfirmRepair(ctx context.Context, p auth.Principal, opRef, rep
 		if on, _, err := e.writesOn(ctx); err != nil || !on {
 			return fault("FORBIDDEN", "recovery checks have not passed: writes are not enabled at this engine's generation")
 		}
-		v, err := e.readView(ctx, c)
+		v, err := e.readViewWithDB(ctx, c, tx)
 		if err != nil {
 			return err
 		}
@@ -387,10 +387,11 @@ func (e *Engine) ConfirmAnchorRepair(ctx context.Context, p auth.Principal, opRe
 	var ir anchor.IntentRecord
 	var canonical []byte
 	err := e.Pool.QueryRow(ctx, `SELECT d.instruction_id, d.action_revision, d.mandate_id, d.control_epoch, d.company_ref, d.permit_id,
-		COALESCE(i.permit_jws, ''), d.permit_digest, d.action_canonical, d.action_digest, d.amount_minor
+		COALESCE(i.permit_jws, ''), d.permit_digest, d.action_canonical, d.action_digest, d.amount_minor,
+		COALESCE(to_char(d.admitted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), '')
 		FROM steelmatter.dispatches d JOIN steelmatter.issuances i ON i.tenant_id = d.tenant_id AND i.permit_id = d.permit_id
 		WHERE d.tenant_id = $1 AND d.op_ref = $2`, p.Tenant, opRef).Scan(&ir.InstructionID, &ir.ActionRevision, &ir.MandateID, &ir.ControlEpoch,
-		&ir.CompanyRef, &ir.PermitID, &ir.PermitJWS, &ir.PermitDigest, &canonical, &ir.ActionDigest, &ir.AmountMinor)
+		&ir.CompanyRef, &ir.PermitID, &ir.PermitJWS, &ir.PermitDigest, &canonical, &ir.ActionDigest, &ir.AmountMinor, &ir.AdmittedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return fault("NOT_FOUND", "operation not found")
 	}

@@ -10,6 +10,17 @@ This change is a review candidate, not a release or customer-write approval.
 - Evaluation and admission compare the mandate's engine records with its anchor history while holding the budget row lock. This check has no age grace period. Missing history disables writes before more money can be reserved or admitted.
 - A failed background restore comparison disables writes. An unreadable store is not a successful comparison.
 - Human repair decisions are recorded durably before engine updates. The two databases do not share a transaction. A retry or restore reconciliation applies the same saved decision once, including when writes are fenced. Reviews and confirmations serialize on the mandate and dispatch locks.
+- Recovery comparisons inside repair confirmation reuse the transaction connection. Concurrent confirmations cannot exhaust the pool while waiting for the mandate lock.
+
+## R1 evidence contract
+
+- Execution and observation payloads accept `schema_version: "2"` for external destinations. R0 version 1 remains unchanged; mandates, actions and permits remain version 1. Existing signature types and digest namespaces remain unchanged; the signed payload's version distinguishes its semantics.
+- A version 2 execution includes `admitted_at` and `company_ref`. Admission must be within the signed permit and mandate windows; confirmation may arrive later, but cannot precede admission. Observation cannot precede confirmation. A version 1 observation cannot attest a version 2 execution.
+- Dispatch records preserve admission time in the engine and recovery anchor. Settlement stores immutable destination facts. The evidence worker builds and signs a separate R1 execution, without inserting a synthetic R0 order or moving budget again.
+- The destination order result now includes `supplier_revision`, captured when Odoo creates the order. Missing or differing revisions cannot count as a verified matching purchase. Update the engine, connector and Odoo module together.
+- The observer uses its separate database and Odoo read-only credentials. Its signed version 2 record includes expected/observed company and permit digest, and observed order state. Matching commercial fields alone do not prove a match in another company or a cancelled order. Readback never releases money or recreates orders.
+- Existing evidence/status/reconcile endpoints expose the R1 records. The Go validator and standalone TypeScript verifier support both versions. Tests exercise signed Go exports through the TypeScript CLI, including admission before expiry followed by confirmation after expiry and engine restore.
+- Migration 0014 adds separate R1 evidence tables and read views. Existing unrecovered dispatches use their original creation time as admission time. A restored legacy record with no original admission timestamp, or a manual accounting repair without verified destination facts, remains explicitly incomplete. No historical timestamps or purchase evidence are invented.
 
 ## Verification
 
@@ -21,4 +32,4 @@ Developer checks and independent SDET verification remain separate. Sindhu shoul
 
 - The full-R1 catalogue still includes T17–T19 (exact-action human approval). This patch does not silently remove those requirements or invent an approval design.
 - The existing D5 human repair workflow permits a three-person reviewed release of HELD money. Its trust assumptions must be explicitly reconciled with the earlier FOUND/FENCED-only release rule before claiming full-R1 acceptance. Automated recovery never uses a human note as proof of no purchase.
-- Signed R1 execution evidence and independent destination readback require a versioned contract that distinguishes admission time from later settlement. Reusing R0's commit-within-permit assertion would be incorrect.
+- This is a proposed version 2 contract addition. Both developers must include it in their shared interface review before merging; existing external verifiers must be upgraded to verify version 2 records.

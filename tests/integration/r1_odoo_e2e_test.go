@@ -257,6 +257,7 @@ func TestR1OdooEndToEnd(t *testing.T) {
 		}
 		r.outcome(t, p.operation, base, 1, sixL, 0)
 		r.evidence(t, p.operation)
+		assertR1Evidence(t, r.e, p)
 	})
 
 	t.Run("never reached Odoo: fenced and released; a late create is refused", func(t *testing.T) {

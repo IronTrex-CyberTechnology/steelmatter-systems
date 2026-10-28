@@ -38,6 +38,9 @@ import (
 // (D5 rule 7). Settle is safe to call concurrently; the first transaction to
 // record a transition wins and the others return the stored state.
 func (e *Engine) Settle(ctx context.Context, tenant, opRef string, c connector.Connector) (*DispatchResult, error) {
+	if e.Cfg.RequireRecoveryAnchor && e.Anchor == nil {
+		return nil, fault("SERVICE_UNAVAILABLE", "recovery anchor is required")
+	}
 	d, err := e.loadDispatchForSettle(ctx, tenant, opRef)
 	if err != nil {
 		return nil, err
@@ -133,7 +136,7 @@ func toConnectorAction(opRef, companyRef, permitDigest string, a *contract.Actio
 // destination confirms the order and its details match).
 func (d *dispatchRow) matches(o *connector.Order) bool {
 	if o == nil || o.State != connector.StateConfirmed || o.CompanyRef != d.companyRef || o.DeliveryRef != d.action.DeliveryID ||
-		o.AmountMinor != d.action.AmountMinor ||
+		o.AmountMinor != d.action.AmountMinor || o.SupplierRevision != d.action.SupplierRevision ||
 		o.Currency != d.action.Currency || o.PermitDigest != d.permitDigest || o.SupplierRef != d.action.SupplierID ||
 		len(o.Lines) != len(d.action.Lines) {
 		return false
@@ -209,10 +212,14 @@ func (e *Engine) recordOutcome(ctx context.Context, d *dispatchRow, r connector.
 				return err
 			}
 		}
+		var facts []byte
+		if status == DispatchCommitted {
+			facts, _ = json.Marshal(r.Destination)
+		}
 		if _, err := tx.Exec(ctx, `UPDATE steelmatter.dispatches SET status = $3, last_outcome = $4, attempts = attempts + 1,
 			destination_order = COALESCE(NULLIF($5, ''), destination_order), destination_seq = GREATEST(COALESCE(destination_seq, 0), $6),
-			updated_at = clock_timestamp(), settled_at = CASE WHEN $3 IN ('COMMITTED', 'FENCED') THEN clock_timestamp() END
-			WHERE tenant_id = $1 AND op_ref = $2`, d.tenant, d.opRef, status, string(r.Outcome), order, r.Seq); err != nil {
+			destination_facts = COALESCE(destination_facts, $7::jsonb), updated_at = clock_timestamp(), settled_at = CASE WHEN $3 IN ('COMMITTED', 'FENCED') THEN clock_timestamp() END
+			WHERE tenant_id = $1 AND op_ref = $2`, d.tenant, d.opRef, status, string(r.Outcome), order, r.Seq, facts); err != nil {
 			return err
 		}
 		if err := e.anchorOutcome(ctx, anchor.OutcomeRecord{Tenant: d.tenant, OpRef: d.opRef, Destination: d.companyRef, Outcome: string(r.Outcome),

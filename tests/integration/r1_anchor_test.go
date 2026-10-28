@@ -340,6 +340,7 @@ func TestD5EngineRestoredBeforeConfirmedPurchase(t *testing.T) {
 	e := newEnv(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
+	q := e.permittedIn(tenant, "owner-a", "issuer-a", "agent-a", "po-request-002")
 	snap := e.snapshotEngine()
 	mustDispatch(t, e, p)
 	requireExecution(t, "commit", e.settle(p.operation, a.s), engine.DispatchCommitted)
@@ -355,7 +356,8 @@ func TestD5EngineRestoredBeforeConfirmedPurchase(t *testing.T) {
 	if !r.WritesDisabled || !hasSignal(r, engine.SignalEngineMissingOperation) || a.writes().Enabled {
 		t.Fatalf("restore not detected: %+v", r)
 	}
-	q := e.permittedIn(tenant, "owner-a", "issuer-a", "agent-a", "po-request-002")
+	st, body := e.evaluate("agent-a", q.instruction, 1)
+	requireStatus(t, "evaluate while writes are off", st, body, 503, "SERVICE_UNAVAILABLE")
 	if _, err := e.dispatch("agent-a", q); err == nil {
 		t.Fatal("dispatch while writes are off")
 	}
