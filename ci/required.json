@@ -4494,6 +4494,16 @@
           "test": "TestTemporalLinkageMissingRecords"
         },
         {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/cmd/smkeys",
+          "test": "TestRetireRefusesReactivation"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys",
+          "test": "TestRetireCannotReactivateKey"
+        },
+        {
           "phase": "conformance",
           "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/conformance",
           "test": "TestConformanceTemporalEvidenceVectors"
@@ -4727,6 +4737,41 @@
           "phase": "integration",
           "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestADR002NewlyEntitledIssuerGainsReadAccessWithoutCreatingInstruction"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestSecDef001RetryAfterKeyRotationIssuesCurrentPermit"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestSecDef002EvidenceWorkerIsolatesFailingRecord"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestSecDef003ObserverWorkerIsolatesFailingRecord"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestSecDef005CleanupWorkerIsolatesFailingRecord"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestRetiredKeyIsRefusedWithoutBackoff"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestWorkerBacklogReportsOldestOwedRecord"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestObserverWorkerDoesNotDuplicateConcurrentReconcile"
         }
       ],
       "required_cases": [
@@ -6920,6 +6965,16 @@
           "test": "TestNewRejectsUnsafeConfig"
         },
         {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/cmd/smkeys",
+          "test": "TestRetireRefusesReactivation"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys",
+          "test": "TestRetireCannotReactivateKey"
+        },
+        {
           "phase": "integration",
           "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestR1HTTPDispatchSettleAndRead"
@@ -6933,6 +6988,41 @@
           "phase": "integration",
           "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestR1HTTPUnconfiguredIsUnavailable"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestSecDef001RetryAfterKeyRotationIssuesCurrentPermit"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestSecDef002EvidenceWorkerIsolatesFailingRecord"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestSecDef003ObserverWorkerIsolatesFailingRecord"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestSecDef005CleanupWorkerIsolatesFailingRecord"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestRetiredKeyIsRefusedWithoutBackoff"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestWorkerBacklogReportsOldestOwedRecord"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestObserverWorkerDoesNotDuplicateConcurrentReconcile"
         },
         {
           "phase": "sdk",
