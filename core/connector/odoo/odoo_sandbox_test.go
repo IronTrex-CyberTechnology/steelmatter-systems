@@ -230,3 +230,26 @@ func TestListReturnsEveryRowInCommitOrder(t *testing.T) {
 		}
 	}
 }
+
+func TestCoverageOfTheSandbox(t *testing.T) {
+	c := sandbox(t)
+	cov := c.Coverage(context.Background())
+	if !cov.Verified || cov.Complete || !cov.Module.Installed || !cov.Module.Supported || !cov.Anchor.Reachable {
+		t.Fatalf("got %+v", cov)
+	}
+	posture := map[string]string{}
+	for _, r := range cov.Routes {
+		posture[r.ID] = r.Posture
+	}
+	for id, want := range map[string]string{"steelmatter_api": odoo.PostureEnforced, "administrators": odoo.PostureUnprotected,
+		"foreign_orders": odoo.PostureObserved, "order_changes": odoo.PostureObserved, "direct_database": odoo.PostureUnknown} {
+		if posture[id] != want {
+			t.Fatalf("route %s: %q, want %q (all: %v)", id, posture[id], want, posture)
+		}
+	}
+	for _, bad := range []string{"executor_bypass", "observer_writes"} {
+		if _, ok := posture[bad]; ok {
+			t.Fatalf("the sandbox identities are misconfigured: %s", bad)
+		}
+	}
+}

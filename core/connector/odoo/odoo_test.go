@@ -362,3 +362,44 @@ func TestNewRejectsUnsafeConfig(t *testing.T) {
 		t.Fatalf("loopback http: %v", err)
 	}
 }
+
+func TestCoverageDecodesAndNeverClaimsCompleteness(t *testing.T) {
+	f, c := newFake(t)
+	f.on("sm_coverage", func([]json.RawMessage) (any, *rpcErr) {
+		return map[string]any{
+			"generated_at": "2026-10-28T10:00:00Z", "database": "smr1", "seq": 9, "incarnation": "abc",
+			"module": map[string]any{"name": "steelmatter_r1", "installed": true, "version": "18.0.0.1.0", "expected_version": "18.0.0.1.0",
+				"odoo": "18.0-20261015", "supported": true},
+			"anchor": map[string]any{"configured": true, "reachable": true},
+			"routes": []any{
+				map[string]any{"id": "steelmatter_api", "route": "r", "posture": "enforced", "detail": "d"},
+				map[string]any{"id": "direct_users", "route": "r", "posture": "unprotected", "detail": "d", "count": 1,
+					"subjects": []any{map[string]any{"login": "admin"}}},
+				map[string]any{"id": "odd", "route": "r", "posture": "fully-safe", "detail": "d"},
+			},
+			"summary": map[string]any{"enforced": 2}, "complete": true,
+		}, nil
+	})
+	cov := c.Coverage(context.Background())
+	if !cov.Verified || cov.Complete || cov.Module.Version != "18.0.0.1.0" || len(cov.Routes) != 3 {
+		t.Fatalf("got %+v", cov)
+	}
+	if cov.Routes[2].Posture != PostureUnknown {
+		t.Fatalf("an unrecognised posture must become unknown: %+v", cov.Routes[2])
+	}
+	if cov.Summary[PostureEnforced] != 1 || cov.Summary[PostureUnprotected] != 1 || cov.Summary[PostureUnknown] != 1 {
+		t.Fatalf("summary must be recounted by the connector: %v", cov.Summary)
+	}
+	if got := f.callsMade(); len(got) != 1 || got[0] != "sm_observer:sm_coverage" {
+		t.Fatalf("coverage must use the observer: %v", got)
+	}
+}
+
+func TestCoverageWithoutTheModuleIsUnverified(t *testing.T) {
+	_, c := newFake(t) // no sm_coverage handler: Odoo answers with an error, as when the module is missing
+	cov := c.Coverage(context.Background())
+	if cov.Verified || cov.Complete || len(cov.Routes) != 1 || cov.Routes[0].Posture != PostureUnknown || cov.Summary[PostureUnknown] != 1 {
+		t.Fatalf("got %+v", cov)
+	}
+	noSecrets(t, cov)
+}
