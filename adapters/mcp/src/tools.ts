@@ -75,10 +75,15 @@ const TOOLS: Tool[] = [
     title: 'Read operation status',
     description:
       'Read an operation you are entitled to see: authorisation, execution, observation and evidence status (four separate ' +
-      'fields) and the target order reference. Use it to confirm an outcome after a timeout before trying anything else.',
+      'fields) and the target order reference. Use it to confirm an outcome after a timeout before trying anything else. ' +
+      'Only execution COMMITTED (outcome_confirmed true) means the order was placed; PENDING, UNRESOLVED, MISMATCH and HELD ' +
+      'are not success, so do not report the order as done and do not try to place it again.',
     inputSchema: object({ operation_id: IDENTIFIER }),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    run: (c, a, signal) => c.getOperation(a.operation_id as string, { signal }),
+    run: async (c, a, signal) => {
+      const res = await c.getOperation(a.operation_id as string, { signal });
+      return { ...res, data: withOutcome(res.data as unknown as Record<string, unknown>) };
+    },
   },
   {
     name: 'steelmatter_get_evidence',
@@ -100,6 +105,27 @@ const TOOLS: Tool[] = [
     run: (c, a, signal) => c.getAdapterAssurance(a.adapter_id as string, { signal }),
   },
 ];
+
+// Outcome wording for execution values that are not success (R1). The
+// adapter adds no policy: it restates the service's execution value so an
+// agent cannot mistake an unknown or held outcome for a placed order.
+const OUTCOME_NOTES: Record<string, string> = {
+  NOT_ADMITTED: 'Not executed yet.',
+  PENDING: 'Not yet confirmed: the order is being sent. Check again later with this operation_id; do not place it again.',
+  UNRESOLVED: 'Not yet confirmed: the outcome is unknown and being resolved. Check again later with this operation_id; do not place it again.',
+  MISMATCH: 'Not confirmed: an order exists but differs from the authorised one. It is held for investigation.',
+  HELD: 'Not confirmed: an earlier attempt may have placed the order, and its outcome is not established. Held for an operator.',
+  FENCED: 'No order was placed and none can be placed for this operation; the allowance was released.',
+  REJECTED: 'Not executed.',
+};
+
+/** Adds outcome_confirmed (true only for COMMITTED) and, otherwise, outcome_note. */
+function withOutcome(data: Record<string, unknown>): Record<string, unknown> {
+  if (typeof data !== 'object' || data === null || typeof data.execution !== 'string') return data;
+  const confirmed = data.execution === 'COMMITTED';
+  const note = confirmed ? undefined : OUTCOME_NOTES[data.execution] ?? 'Not confirmed.';
+  return { ...data, outcome_confirmed: confirmed, ...(note ? { outcome_note: note } : {}) };
+}
 
 const byName = new Map(TOOLS.map((t) => [t.name, t]));
 

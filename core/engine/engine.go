@@ -16,6 +16,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector"
 	"io"
 	"log/slog"
 	"math"
@@ -81,6 +82,9 @@ type Engine struct {
 	Now func() time.Time
 	// Observer performs read-only readback (nil disables observation).
 	Observer *observer.Observer
+	// Connector is the R1 destination connector (D1). Nil disables R1
+	// settlement in the workers and the readiness check before dispatch.
+	Connector connector.Connector
 }
 
 // New validates the configuration and returns an Engine.

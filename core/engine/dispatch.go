@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/auth"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/failpoint"
 )
 
 // R1 execution values for a dispatched operation (draft 7, status model).
@@ -58,6 +61,9 @@ func (e *Engine) Dispatch(ctx context.Context, p auth.Principal, actionJSON []by
 		return nil, err
 	}
 	permit, action := a.permit, a.action
+	if err := e.checkReadiness(ctx, p, a); err != nil {
+		return nil, err
+	}
 	var res *DispatchResult
 	eventID := newID("evt")
 	err = e.inTx(ctx, permit.OperationID, func(tx pgx.Tx) error {
@@ -122,6 +128,9 @@ func (e *Engine) Dispatch(ctx context.Context, p auth.Principal, actionJSON []by
 				return err
 			}
 		}
+		if err := failpoint.Inject(ctx, failpoint.DispatchBeforeCommit); err != nil {
+			return err
+		}
 		res = &DispatchResult{OpRef: permit.OperationID, InstructionID: action.InstructionID, ActionRevision: action.ActionRevision,
 			ActionDigest: a.actionDigest, Execution: DispatchPending, Created: true}
 		return nil
@@ -158,4 +167,35 @@ func (e *Engine) GetDispatch(ctx context.Context, tenant, opRef string) (*Dispat
 		return nil, classify(err)
 	}
 	return r, nil
+}
+
+// checkReadiness asks the destination, read-only, whether it can take this
+// action (D1 readiness). NOT_READY blocks dispatch before anything is
+// consumed or moved, so the caller can retry with the same permit. READY is
+// advisory only: the destination write itself re-checks everything. An
+// identical repeat of a dispatch already recorded skips the check, so a
+// destination outage never hides a stored result. No connector, no check.
+func (e *Engine) checkReadiness(ctx context.Context, p auth.Principal, a *admission) error {
+	if e.Connector == nil {
+		return nil
+	}
+	if d, err := e.GetDispatch(ctx, p.Tenant, a.permit.OperationID); err != nil {
+		return err
+	} else if d != nil {
+		return nil
+	}
+	r, err := e.Connector.Readiness(ctx, toConnectorAction(a.permit.OperationID, e.Cfg.CompanyRef, a.verified.Digest, a.action, 0))
+	if err != nil {
+		return fmt.Errorf("connector readiness: %w", err)
+	}
+	switch {
+	case r.Outcome == connector.Ready:
+		return nil
+	case r.Reason == connector.ReasonSupplierChanged:
+		return fault("SUPPLIER_REVISION_STALE", "destination reports the protected supplier changed after authorisation; re-evaluation required")
+	case r.Reason == connector.ReasonDestinationUnavailable || r.Outcome != connector.NotReady:
+		return fault("SERVICE_UNAVAILABLE", "destination is not reachable; nothing was dispatched")
+	default:
+		return fault("ADAPTER_UNSUPPORTED", "destination is not ready for this action (%s); nothing was dispatched", r.Reason)
+	}
 }

@@ -37,6 +37,26 @@ const (
 
 	// Fence (sm_fence). Also returns Exists, RefusedRestoreSuspected, Unknown.
 	Fenced Outcome = "FENCED" // no order; tombstone written under the same lock as create
+
+	// Readiness: read-only and advisory. NOT_READY blocks dispatch; READY
+	// cannot rule out a change before the write.
+	Ready    Outcome = "READY"
+	NotReady Outcome = "NOT_READY" // Reason says why
+
+	// Observe (read-only observer identity): evidence only, never moves
+	// allowance. Also returns Mismatch.
+	Match                Outcome = "MATCH"
+	InsufficientEvidence Outcome = "INSUFFICIENT_EVIDENCE"
+	NotFound             Outcome = "NOT_FOUND"
+)
+
+// Readiness reason codes.
+const (
+	ReasonMappingMissing         = "MAPPING_MISSING"
+	ReasonVersionUnsupported     = "VERSION_UNSUPPORTED"
+	ReasonCredentialDisabled     = "CREDENTIAL_DISABLED"
+	ReasonDestinationUnavailable = "DESTINATION_UNAVAILABLE"
+	ReasonSupplierChanged        = "SUPPLIER_CHANGED"
 )
 
 // Tombstones reports whether o is a structured module refusal that blocks
@@ -145,6 +165,29 @@ func (r Result) BlockedOverPriorCreate() bool {
 	return (r.Outcome == Fenced || r.Outcome.Tombstones()) && isTrue(r.PriorCreate) && !r.CreateDone
 }
 
+// ListRow is one destination journal row (sm_list_since): an operation the
+// module created, fenced or refused, or a foreign order created outside
+// Steelmatter (no op_ref; a coverage gap, informational only).
+type ListRow struct {
+	Seq          int64  `json:"seq"`
+	OpRef        string `json:"op_ref,omitempty"`
+	State        string `json:"state"` // created, fenced, refused, foreign
+	OrderID      string `json:"order_id,omitempty"`
+	AmountMinor  int64  `json:"amount_minor,omitempty"`
+	Currency     string `json:"currency,omitempty"`
+	PermitDigest string `json:"permit_digest,omitempty"`
+	Tombstoned   bool   `json:"tombstoned"`
+	Foreign      bool   `json:"foreign,omitempty"`
+}
+
+// ListPage is one page of the destination journal, in commit (seq) order.
+type ListPage struct {
+	Rows           []ListRow `json:"rows"`
+	NextCheckpoint int64     `json:"next_checkpoint"`
+	HeadSeq        int64     `json:"head_seq"`
+	Incarnation    string    `json:"incarnation"`
+}
+
 // Connector is the destination side of D1 v1. Implementations must be safe
 // for concurrent use. A transport failure is reported as an Unknown result,
 // never as an error that the caller could mistake for "nothing happened";
@@ -161,4 +204,15 @@ type Connector interface {
 	// (restore-proof record unreadable or the block write failed; nothing
 	// blocked) or Unknown.
 	Fence(ctx context.Context, opRef string, expectedMinSeq int64) (Result, error)
+	// Readiness may return Ready or NotReady (with a reason). Read-only and
+	// advisory: it never proves anything about a later write.
+	Readiness(ctx context.Context, a Action) (Result, error)
+	// Observe compares the destination with the authorised action using the
+	// read-only observer identity. It may return Match, Mismatch,
+	// InsufficientEvidence or NotFound, and never moves allowance.
+	Observe(ctx context.Context, a Action) (Result, error)
+	// List returns journal rows with seq > checkpointSeq, at most limit, in
+	// commit order, using the read-only observer identity (restore check and
+	// reconciliation).
+	List(ctx context.Context, checkpointSeq int64, limit int) (ListPage, error)
 }

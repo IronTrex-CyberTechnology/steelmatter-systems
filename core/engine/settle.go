@@ -10,6 +10,7 @@ import (
 
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/failpoint"
 )
 
 // Settle advances one dispatched R1 operation by one connector round trip
@@ -61,6 +62,9 @@ func (e *Engine) Settle(ctx context.Context, tenant, opRef string, c connector.C
 	if res.OpRef != "" && res.OpRef != opRef {
 		return nil, fmt.Errorf("connector answered for %s, asked for %s", res.OpRef, opRef)
 	}
+	if err := failpoint.Inject(ctx, failpoint.SettleBeforeRecord); err != nil {
+		return nil, err
+	}
 	if err := e.recordOutcome(ctx, d, res); err != nil {
 		return nil, err
 	}
@@ -92,14 +96,20 @@ func (e *Engine) loadDispatchForSettle(ctx context.Context, tenant, opRef string
 }
 
 func (d *dispatchRow) connectorAction() connector.Action {
-	lines := make([]connector.Line, len(d.action.Lines))
-	for i, l := range d.action.Lines {
+	return toConnectorAction(d.opRef, d.companyRef, d.permitDigest, &d.action, d.expectedMinSeq())
+}
+
+// toConnectorAction maps the stored, authorised action to the canonical
+// action the connector sends (D1 v1.2). Nothing caller-supplied is added.
+func toConnectorAction(opRef, companyRef, permitDigest string, a *contract.Action, expectedMinSeq int64) connector.Action {
+	lines := make([]connector.Line, len(a.Lines))
+	for i, l := range a.Lines {
 		lines[i] = connector.Line{ItemRef: l.ItemID, Quantity: l.Quantity, UnitPriceMinor: l.UnitPriceMinor}
 	}
-	return connector.Action{OpRef: d.opRef, ActionRevision: d.action.ActionRevision, CompanyRef: d.companyRef,
-		DeliveryRef: d.action.DeliveryID, SupplierRef: d.action.SupplierID,
-		SupplierRevision: d.action.SupplierRevision, Lines: lines, AmountMinor: d.action.AmountMinor, Currency: d.action.Currency,
-		PermitDigest: d.permitDigest, ExpectedMinSeq: d.expectedMinSeq()}
+	return connector.Action{OpRef: opRef, ActionRevision: a.ActionRevision, CompanyRef: companyRef,
+		DeliveryRef: a.DeliveryID, SupplierRef: a.SupplierID,
+		SupplierRevision: a.SupplierRevision, Lines: lines, AmountMinor: a.AmountMinor, Currency: a.Currency,
+		PermitDigest: permitDigest, ExpectedMinSeq: expectedMinSeq}
 }
 
 // expectedMinSeq is the highest destination sequence the engine has seen.

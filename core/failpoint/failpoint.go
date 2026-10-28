@@ -21,6 +21,8 @@ const (
 	EvidenceBeforeSign          = "evidence.before_sign"           // pending execution record loaded, not yet signed
 	ObserverBeforeReadback      = "observer.before_readback"       // observer key checked, readback not yet run
 	ObserverBeforeStore         = "observer.before_store"          // readback signed, observation not yet stored
+	DispatchBeforeCommit        = "dispatch.before_commit"         // R1 dispatch intent written, transaction not committed
+	SettleBeforeRecord          = "settle.before_record"           // R1 destination reply received, outcome not yet recorded
 )
 
 // Inject runs the action registered for name, if any. A returned error

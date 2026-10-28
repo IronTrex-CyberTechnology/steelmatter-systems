@@ -173,6 +173,8 @@ export interface RevokeResponse {
   control_epoch: number;
   revoked_at: Timestamp;
   buckets: Buckets;
+  /** R1 operations dispatched before the revocation and still PENDING or UNRESOLVED; their amount stays held until settled. */
+  in_flight: Identifier[];
 }
 
 // ---- instructions ----
@@ -281,7 +283,15 @@ export interface OperationResult {
 }
 
 export type AuthorisationStatus = 'PERMITTED' | 'DENIED' | 'REVOKED' | 'EXPIRED';
-export type ExecutionStatus = 'NOT_ADMITTED' | 'COMMITTED' | 'REJECTED';
+/**
+ * COMMITTED is the only success value. R1 dispatched operations may also be
+ * PENDING (dispatch recorded, send in progress), UNRESOLVED (outcome unknown;
+ * lookup and fence in progress), FENCED (destination proved no order;
+ * allowance released), MISMATCH (an order exists but differs; held) or HELD
+ * (blocked over an earlier create attempt whose outcome is not established;
+ * held for an operator finding).
+ */
+export type ExecutionStatus = 'NOT_ADMITTED' | 'PENDING' | 'UNRESOLVED' | 'COMMITTED' | 'FENCED' | 'MISMATCH' | 'HELD' | 'REJECTED';
 export type ObservationStatus = 'NOT_OBSERVED' | 'MATCH' | 'MISMATCH' | 'INSUFFICIENT_EVIDENCE';
 export type EvidenceStatus = 'PENDING' | 'AVAILABLE' | 'INVALID';
 

@@ -20,6 +20,8 @@ const (
 	workerCleanup  = "cleanup"
 	workerEvidence = "evidence"
 	workerObserver = "observer"
+	workerSettle   = "settle"
+	workerOutbox   = "outbox"
 
 	backoffBase = 10 * time.Second // first retry delay; doubles per attempt
 	backoffMax  = time.Hour        // retries continue at most this far apart
@@ -64,15 +66,24 @@ func runIsolated[T any](ctx context.Context, e *Engine, worker string, items []T
 		}
 		okTenants, okRecords = append(okTenants, tenant), append(okRecords, record)
 	}
-	if len(okRecords) > 0 {
-		if _, err := e.Pool.Exec(ctx, `UPDATE steelmatter.worker_backoff w SET resolved_at = clock_timestamp()
-			FROM unnest($2::text[], $3::text[]) AS d(tenant_id, record_id)
-			WHERE w.worker = $1 AND w.tenant_id = d.tenant_id AND w.record_id = d.record_id AND w.resolved_at IS NULL`, worker, okTenants, okRecords); err != nil {
-			return unavailable(err)
-		}
+	if err := e.resolveBackoff(ctx, worker, okTenants, okRecords); err != nil {
+		return err
 	}
 	if failed > 0 {
 		return fmt.Errorf("%d of %d records failed and were backed off; first %w", failed, len(items), first)
+	}
+	return nil
+}
+
+// resolveBackoff marks any open backoff of these records resolved.
+func (e *Engine) resolveBackoff(ctx context.Context, worker string, tenants, records []string) error {
+	if len(records) == 0 {
+		return nil
+	}
+	if _, err := e.Pool.Exec(ctx, `UPDATE steelmatter.worker_backoff w SET resolved_at = clock_timestamp()
+		FROM unnest($2::text[], $3::text[]) AS d(tenant_id, record_id)
+		WHERE w.worker = $1 AND w.tenant_id = d.tenant_id AND w.record_id = d.record_id AND w.resolved_at IS NULL`, worker, tenants, records); err != nil {
+		return unavailable(err)
 	}
 	return nil
 }
@@ -103,14 +114,21 @@ func (e *Engine) recordFailure(ctx context.Context, worker, tenant, record strin
 // waiting: an unsigned execution record or an unobserved operation since
 // commit, an unreleased reservation since expiry. Zero means none. BackedOff
 // counts records currently waiting for a retry.
+//
+// R1: Settle is the oldest dispatched operation still PENDING or UNRESOLVED,
+// since dispatch; Outbox is the oldest undelivered event that has already
+// failed delivery at least once (D6), since it was written; Held counts
+// operations HELD or MISMATCH, which wait for an operator finding.
 type Backlog struct {
 	Evidence, Observer, Cleanup time.Duration
+	Settle, Outbox              time.Duration
 	BackedOff                   int
+	Held                        int
 }
 
 // WorkerBacklog reports the current Backlog.
 func (e *Engine) WorkerBacklog(ctx context.Context) (Backlog, error) {
-	var ev, ob, cl float64
+	var ev, ob, cl, se, ou float64
 	var b Backlog
 	err := e.Pool.QueryRow(ctx, `SELECT
 		COALESCE(extract(epoch FROM clock_timestamp() - (SELECT min(committed_at) FROM steelmatter.operations WHERE execution_jws IS NULL)), 0),
@@ -118,12 +136,17 @@ func (e *Engine) WorkerBacklog(ctx context.Context) (Backlog, error) {
 			WHERE NOT EXISTS (SELECT 1 FROM steelmatter.observations b WHERE b.tenant_id = o.tenant_id AND b.operation_id = o.operation_id))), 0),
 		COALESCE(extract(epoch FROM clock_timestamp() - (SELECT min(expires_at) FROM steelmatter.issuances
 			WHERE status IN ('UNSIGNED', 'ACTIVE') AND expires_at <= clock_timestamp())), 0),
-		(SELECT count(*) FROM steelmatter.worker_backoff WHERE resolved_at IS NULL AND next_attempt_at > clock_timestamp())`).Scan(&ev, &ob, &cl, &b.BackedOff)
+		(SELECT count(*) FROM steelmatter.worker_backoff WHERE resolved_at IS NULL AND next_attempt_at > clock_timestamp()),
+		COALESCE(extract(epoch FROM clock_timestamp() - (SELECT min(created_at) FROM steelmatter.dispatches WHERE status IN ('PENDING', 'UNRESOLVED'))), 0),
+		COALESCE(extract(epoch FROM clock_timestamp() - (SELECT min(o.created_at) FROM steelmatter.outbox o
+			WHERE o.delivered_at IS NULL AND EXISTS (SELECT 1 FROM steelmatter.worker_backoff w WHERE w.worker = 'outbox'
+				AND w.tenant_id = o.tenant_id AND w.record_id = o.event_id AND w.resolved_at IS NULL))), 0),
+		(SELECT count(*) FROM steelmatter.dispatches WHERE status IN ('HELD', 'MISMATCH'))`).Scan(&ev, &ob, &cl, &b.BackedOff, &se, &ou, &b.Held)
 	if err != nil {
 		return Backlog{}, unavailable(err)
 	}
 	sec := func(f float64) time.Duration { return time.Duration(f * float64(time.Second)) }
-	b.Evidence, b.Cleanup = sec(ev), sec(cl)
+	b.Evidence, b.Cleanup, b.Settle, b.Outbox = sec(ev), sec(cl), sec(se), sec(ou)
 	if e.Observer != nil {
 		b.Observer = sec(ob)
 	}
@@ -145,10 +168,15 @@ func (e *Engine) checkBacklog(ctx context.Context) error {
 		{"oldest unsigned execution record", b.Evidence},
 		{"oldest unobserved operation", b.Observer},
 		{"oldest unreleased expired reservation", b.Cleanup},
+		{"oldest unsettled dispatched operation", b.Settle},
+		{"oldest failing outbox event", b.Outbox},
 	} {
 		if w.age > BacklogAlertAge {
 			late = append(late, fmt.Sprintf("%s waiting %s", w.what, w.age.Truncate(time.Second)))
 		}
+	}
+	if b.Held > 0 {
+		late = append(late, fmt.Sprintf("%d dispatched operations HELD or MISMATCH need an operator finding", b.Held))
 	}
 	if len(late) == 0 {
 		return nil

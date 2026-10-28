@@ -15,6 +15,7 @@ package stub
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -61,6 +62,9 @@ type Stub struct {
 	failCommit     map[string]int // op_ref -> creates whose destination commit fails after CREATE_INTENT
 	failBlock      map[string]int // op_ref -> fences whose BLOCK write fails
 	loseCreateDone map[string]int // op_ref -> creates whose best-effort CREATE_DONE write is lost
+
+	notReady string              // readiness reason to report, if set
+	foreign  []connector.ListRow // orders created outside Steelmatter
 }
 
 // Snapshot is a destination backup: the in-Odoo state only.
@@ -392,6 +396,105 @@ func (s *Stub) Fence(_ context.Context, opRef string, expectedMinSeq int64) (con
 		s.dur(opRef).blocked = true
 		return s.result(opRef, "fence", connector.Fenced), nil
 	}
+}
+
+// SetNotReady makes Readiness report NOT_READY with reason (empty clears it).
+func (s *Stub) SetNotReady(reason string) {
+	s.mu.Lock()
+	s.notReady = reason
+	s.mu.Unlock()
+}
+
+// AddForeignOrder records an order created directly in the destination,
+// outside Steelmatter (no op_ref).
+func (s *Stub) AddForeignOrder(amountMinor int64, currency string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.seq++
+	s.nextOrder++
+	id := fmt.Sprintf("PO%05d", s.nextOrder)
+	s.foreign = append(s.foreign, connector.ListRow{Seq: s.seq, State: "foreign", OrderID: id, AmountMinor: amountMinor, Currency: currency, Foreign: true})
+	return id
+}
+
+// Readiness implements connector.Connector. Advisory only.
+func (s *Stub) Readiness(_ context.Context, a connector.Action) (connector.Result, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r := connector.Result{OpRef: a.OpRef, Call: "readiness", Outcome: connector.Ready, Seq: s.seq, Source: "stub/executor"}
+	switch {
+	case s.failing(a.OpRef):
+		r.Outcome, r.Reason = connector.NotReady, connector.ReasonDestinationUnavailable
+	case s.notReady != "":
+		r.Outcome, r.Reason = connector.NotReady, s.notReady
+	default:
+		if want, ok := s.supplierRev[a.SupplierRef]; ok && want != a.SupplierRevision {
+			r.Outcome, r.Reason = connector.NotReady, connector.ReasonSupplierChanged
+		}
+	}
+	return r, nil
+}
+
+// Observe implements connector.Connector (observer identity; read-only).
+func (s *Stub) Observe(_ context.Context, a connector.Action) (connector.Result, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r := connector.Result{OpRef: a.OpRef, Call: "observe", Seq: s.seq, Source: "stub/observer"}
+	rec := s.ops[a.OpRef]
+	switch {
+	case rec == nil || rec.order == nil:
+		r.Outcome = connector.NotFound
+	case rec.order.State != connector.StateConfirmed:
+		r.Outcome = connector.InsufficientEvidence
+	default:
+		o := rec.order
+		r.Outcome = connector.Match
+		if o.CompanyRef != a.CompanyRef || o.DeliveryRef != a.DeliveryRef || o.SupplierRef != a.SupplierRef || o.AmountMinor != a.AmountMinor ||
+			o.Currency != a.Currency || o.PermitDigest != a.PermitDigest || len(o.Lines) != len(a.Lines) {
+			r.Outcome = connector.Mismatch
+		} else {
+			for i := range a.Lines {
+				if o.Lines[i] != a.Lines[i] {
+					r.Outcome = connector.Mismatch
+				}
+			}
+		}
+		c := *o
+		c.Lines = append([]connector.Line(nil), o.Lines...)
+		r.Destination = &c
+	}
+	return r, nil
+}
+
+// List implements connector.Connector (sm_list_since; observer identity).
+func (s *Stub) List(_ context.Context, checkpointSeq int64, limit int) (connector.ListPage, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var rows []connector.ListRow
+	for op, rec := range s.ops {
+		if rec.seq <= checkpointSeq {
+			continue
+		}
+		row := connector.ListRow{Seq: rec.seq, OpRef: op, State: string(rec.state), PermitDigest: rec.digest, Tombstoned: rec.state == Fenced || rec.state == Refused}
+		if rec.order != nil {
+			row.OrderID, row.AmountMinor, row.Currency = rec.order.ID, rec.order.AmountMinor, rec.order.Currency
+		}
+		rows = append(rows, row)
+	}
+	for _, f := range s.foreign {
+		if f.Seq > checkpointSeq {
+			rows = append(rows, f)
+		}
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].Seq < rows[j].Seq })
+	if limit > 0 && len(rows) > limit {
+		rows = rows[:limit]
+	}
+	next := checkpointSeq
+	if len(rows) > 0 {
+		next = rows[len(rows)-1].Seq
+	}
+	return connector.ListPage{Rows: rows, NextCheckpoint: next, HeadSeq: s.seq, Incarnation: "stub-1"}, nil
 }
 
 var _ connector.Connector = (*Stub)(nil)

@@ -597,13 +597,20 @@ components:
     RevokeResponse:
       type: object
       additionalProperties: false
-      required: [mandate_id, status, control_epoch, revoked_at, buckets]
+      required: [mandate_id, status, control_epoch, revoked_at, buckets, in_flight]
       properties:
         mandate_id: { $ref: '#/components/schemas/Identifier' }
         status: { const: REVOKED }
         control_epoch: { $ref: '#/components/schemas/PositiveInteger' }
         revoked_at: { $ref: '#/components/schemas/Timestamp' }
         buckets: { $ref: '#/components/schemas/Buckets' }
+        in_flight:
+          type: array
+          description: |
+            R1 operations dispatched before the revocation and still PENDING or
+            UNRESOLVED (D4). Revocation cannot stop them; each goes straight to
+            lookup and fence and its amount stays unresolved until settled.
+          items: { $ref: '#/components/schemas/Identifier' }
 
     InstructionCreateRequest:
       type: object
@@ -722,7 +729,7 @@ components:
         committed_at: { $ref: '#/components/schemas/Timestamp' }
     OperationStatus:
       description: |
-        Four independent status fields (document 03). OUTCOME_UNKNOWN is R1.
+        Four independent status fields (document 03). An R1 outcome that is not yet known is reported as execution PENDING or UNRESOLVED.
         R0 derivation: authorisation is PERMITTED for an active or consumed
         permit; REVOKED when released by revocation or withdrawn by an
         amendment; EXPIRED when expired (cleaned up or not), released as an
@@ -737,7 +744,17 @@ components:
         operation_id: { $ref: '#/components/schemas/Identifier' }
         instruction_id: { $ref: '#/components/schemas/Identifier' }
         authorisation: { type: string, enum: [PERMITTED, DENIED, REVOKED, EXPIRED] }
-        execution: { type: string, enum: [NOT_ADMITTED, COMMITTED, REJECTED] }
+        execution:
+          type: string
+          enum: [NOT_ADMITTED, PENDING, UNRESOLVED, COMMITTED, FENCED, MISMATCH, HELD, REJECTED]
+          description: |
+            COMMITTED is the only success value. R1 dispatched operations:
+            PENDING (dispatch recorded, send in progress), UNRESOLVED (outcome
+            unknown; lookup and fence in progress), FENCED (the destination
+            proved no order and blocked the reference; amount released),
+            MISMATCH (an order exists but differs; held), HELD (blocked over an
+            earlier create attempt whose outcome is not established; held for
+            an operator finding).
         observation: { type: string, enum: [NOT_OBSERVED, MATCH, MISMATCH, INSUFFICIENT_EVIDENCE] }
         evidence: { type: string, enum: [PENDING, AVAILABLE, INVALID] }
         target_ref: { $ref: '#/components/schemas/TargetRef' }

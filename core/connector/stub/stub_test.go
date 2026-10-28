@@ -286,3 +286,72 @@ func TestRefusalBeforeIntentReleases(t *testing.T) {
 		t.Fatalf("creates %d", s.Creates())
 	}
 }
+
+// Readiness is advisory: READY, or NOT_READY with a reason.
+func TestReadiness(t *testing.T) {
+	s := New()
+	ctx := context.Background()
+	if r, _ := s.Readiness(ctx, action("op-1")); r.Outcome != connector.Ready {
+		t.Fatalf("ready: %+v", r)
+	}
+	s.SetSupplierRevision("supplier-a", 2)
+	if r, _ := s.Readiness(ctx, action("op-1")); r.Outcome != connector.NotReady || r.Reason != connector.ReasonSupplierChanged {
+		t.Fatalf("supplier changed: %+v", r)
+	}
+	s.SetSupplierRevision("supplier-a", 1)
+	s.SetNotReady(connector.ReasonMappingMissing)
+	if r, _ := s.Readiness(ctx, action("op-1")); r.Reason != connector.ReasonMappingMissing {
+		t.Fatalf("mapping: %+v", r)
+	}
+	s.SetNotReady("")
+	s.FailNextCalls("op-1", 1)
+	if r, _ := s.Readiness(ctx, action("op-1")); r.Reason != connector.ReasonDestinationUnavailable {
+		t.Fatalf("unreachable: %+v", r)
+	}
+	if s.Creates() != 0 {
+		t.Fatal("readiness wrote something")
+	}
+}
+
+// Observe compares the destination with the authorised action, read-only.
+func TestObserve(t *testing.T) {
+	s := New()
+	ctx := context.Background()
+	if r, _ := s.Observe(ctx, action("op-1")); r.Outcome != connector.NotFound {
+		t.Fatalf("absent: %s", r.Outcome)
+	}
+	s.Deliver(action("op-1"))
+	if r, _ := s.Observe(ctx, action("op-1")); r.Outcome != connector.Match || r.Destination == nil {
+		t.Fatalf("match: %+v", r)
+	}
+	other := action("op-1")
+	other.AmountMinor = 7000
+	if r, _ := s.Observe(ctx, other); r.Outcome != connector.Mismatch {
+		t.Fatalf("mismatch: %s", r.Outcome)
+	}
+	s.SetOrderState("op-1", "draft")
+	if r, _ := s.Observe(ctx, action("op-1")); r.Outcome != connector.InsufficientEvidence {
+		t.Fatalf("draft: %s", r.Outcome)
+	}
+}
+
+// List pages the journal in commit order and reports foreign orders.
+func TestListInCommitOrder(t *testing.T) {
+	s := New()
+	ctx := context.Background()
+	s.Deliver(action("op-1"))
+	s.Fence(ctx, "op-2", 0)
+	foreign := s.AddForeignOrder(5000, "INR")
+	s.Deliver(action("op-3"))
+	p, _ := s.List(ctx, 0, 2)
+	if len(p.Rows) != 2 || p.Rows[0].OpRef != "op-1" || p.Rows[1].OpRef != "op-2" || !p.Rows[1].Tombstoned || p.HeadSeq != 4 {
+		t.Fatalf("page 1: %+v", p)
+	}
+	p2, _ := s.List(ctx, p.NextCheckpoint, 10)
+	if len(p2.Rows) != 2 || !p2.Rows[0].Foreign || p2.Rows[0].OrderID != foreign || p2.Rows[1].OpRef != "op-3" {
+		t.Fatalf("page 2: %+v", p2)
+	}
+	if p3, _ := s.List(ctx, p2.NextCheckpoint, 10); len(p3.Rows) != 0 || p3.NextCheckpoint != p2.NextCheckpoint {
+		t.Fatalf("page 3: %+v", p3)
+	}
+}
