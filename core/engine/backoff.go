@@ -131,9 +131,15 @@ func (e *Engine) WorkerBacklog(ctx context.Context) (Backlog, error) {
 	var ev, ob, cl, se, ou float64
 	var b Backlog
 	err := e.Pool.QueryRow(ctx, `SELECT
-		COALESCE(extract(epoch FROM clock_timestamp() - (SELECT min(committed_at) FROM steelmatter.evidence_operations WHERE execution_jws IS NULL)), 0),
-		COALESCE(extract(epoch FROM clock_timestamp() - (SELECT min(o.committed_at) FROM steelmatter.evidence_operations o
-			WHERE NOT EXISTS (SELECT 1 FROM steelmatter.evidence_observations b WHERE b.tenant_id = o.tenant_id AND b.operation_id = o.operation_id))), 0),
+		COALESCE(extract(epoch FROM clock_timestamp() - (SELECT min(since) FROM (
+			SELECT committed_at AS since FROM steelmatter.evidence_operations WHERE execution_jws IS NULL
+			UNION ALL SELECT settled_at FROM steelmatter.dispatches d WHERE d.status='COMMITTED' AND NOT EXISTS
+			(SELECT 1 FROM steelmatter.r1_executions x WHERE x.tenant_id=d.tenant_id AND x.operation_id=d.op_ref)) pending)), 0),
+		COALESCE(extract(epoch FROM clock_timestamp() - (SELECT min(since) FROM (
+			SELECT o.committed_at AS since FROM steelmatter.evidence_operations o WHERE NOT EXISTS
+			(SELECT 1 FROM steelmatter.evidence_observations b WHERE b.tenant_id=o.tenant_id AND b.operation_id=o.operation_id)
+			UNION ALL SELECT max(recorded_at)+interval '1 minute' FROM steelmatter.r1_observations
+			GROUP BY tenant_id,operation_id HAVING max(recorded_at)<=clock_timestamp()-interval '1 minute') pending)), 0),
 		COALESCE(extract(epoch FROM clock_timestamp() - (SELECT min(expires_at) FROM steelmatter.issuances
 			WHERE status IN ('UNSIGNED', 'ACTIVE') AND expires_at <= clock_timestamp())), 0),
 		(SELECT count(*) FROM steelmatter.worker_backoff WHERE resolved_at IS NULL AND next_attempt_at > clock_timestamp()),

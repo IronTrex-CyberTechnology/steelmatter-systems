@@ -80,6 +80,33 @@ func sandboxOdoo(t *testing.T, fn string) {
 	}
 }
 
+// A normal Odoo administrator changes an order after Steelmatter committed it.
+// The observation worker must report this without changing historical budget.
+func changeOdooOrder(t *testing.T, op, action string) {
+	t.Helper()
+	root, _ := filepath.Abs("../..")
+	cmd := exec.Command("python3", "-I", "-c", `import sys
+sys.path.insert(0, 'destinations/odoo/tests')
+import sandbox_client as s
+a = s.admin()
+ids = a.call('purchase.order', 'search', [('sm_op_ref', '=', sys.argv[1])])
+assert len(ids) == 1
+if sys.argv[2] == 'edit':
+    lines = a.call('purchase.order.line', 'search', [('order_id', '=', ids[0])])
+    a.call('purchase.order.line', 'write', lines, {'price_unit': 6001})
+elif sys.argv[2] == 'cancel':
+    a.call('purchase.order', 'button_cancel', ids)
+elif sys.argv[2] == 'delete':
+    a.call('purchase.order', 'unlink', ids)
+else:
+    raise ValueError('unsupported test action')
+`, op, action)
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("Odoo %s: %v\n%s", action, err, out)
+	}
+}
+
 type odooRun struct {
 	*anchored
 	conn    *odoo.Connector
@@ -416,5 +443,24 @@ func TestR1OdooEndToEnd(t *testing.T) {
 		}
 		r.outcome(t, p.operation, base, 1, sixL, 0)
 		r.evidence(t, p.operation)
+		assertR1Evidence(t, r.e, p)
+		for _, action := range []string{"edit", "cancel", "delete"} {
+			changeOdooOrder(t, p.operation, action)
+			r.e.admin(`UPDATE steelmatter.r1_observations SET recorded_at=clock_timestamp()-interval '2 minutes' WHERE operation_id=$1`, p.operation)
+			if n, err := r.e.eng.ObserveR1Due(ctx); err != nil || n < 1 {
+				t.Fatalf("Odoo readback %s: %d %v", action, n, err)
+			}
+			st, b := r.e.call("GET", "/v1/operations/"+p.operation+"/evidence", "observer-a", nil)
+			requireStatus(t, action+" evidence", st, b, 200, "")
+			report := r.e.verifyWithCLI(b)
+			want, count := "MISMATCH", 1
+			if action == "delete" {
+				want, count = "INSUFFICIENT_EVIDENCE", 0
+			}
+			if report["linkage"].(map[string]any)["status"] != "COMPLETE" || report["observation"].(map[string]any)["status"] != want {
+				t.Fatalf("%s observation: %v", action, report)
+			}
+			r.outcome(t, p.operation, base, count, sixL, 0)
+		}
 	})
 }

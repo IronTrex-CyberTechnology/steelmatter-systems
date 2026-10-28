@@ -188,6 +188,37 @@ func (e *Engine) ObserveUnobserved(ctx context.Context) (int, error) {
 	return n, err
 }
 
+// ObserveR1Due rechecks external orders at most once a minute per operation.
+// First observation remains the responsibility of ObserveUnobserved. Failed
+// readbacks back off per operation and cannot prevent other orders being read.
+// Observation records never mutate historical commitment or release money.
+func (e *Engine) ObserveR1Due(ctx context.Context) (int, error) {
+	if e.Observer == nil || e.Connector == nil {
+		return 0, nil
+	}
+	ops, err := e.listOps(ctx, `SELECT o.tenant_id,o.operation_id FROM steelmatter.r1_executions o
+		JOIN LATERAL (SELECT max(recorded_at) AS last_read FROM steelmatter.r1_observations b
+			WHERE b.tenant_id=o.tenant_id AND b.operation_id=o.operation_id) b ON true
+		WHERE b.last_read <= clock_timestamp() - interval '1 minute'
+		AND `+notBackedOff(workerObserver, "o.tenant_id", "o.operation_id")+`
+		ORDER BY b.last_read LIMIT 100`)
+	if err != nil || len(ops) == 0 {
+		return 0, err
+	}
+	if err := e.observerKeyCurrent(); err != nil {
+		return 0, err
+	}
+	n := 0
+	err = runIsolated(ctx, e, workerObserver, ops, opKey, func(o [2]string) error {
+		if _, err := e.observe(failpoint.WithKey(ctx, o[1]), o[0], o[1], false); err != nil {
+			return err
+		}
+		n++
+		return nil
+	})
+	return n, err
+}
+
 func opKey(o [2]string) (string, string) { return o[0], o[1] }
 
 func (e *Engine) listOps(ctx context.Context, sql string) ([][2]string, error) {

@@ -112,7 +112,11 @@ func TestR1ObserverDetectsDestinationChangesWithoutMovingMoney(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e.eng.Connector = alteredReadback{a.s, tc.alter}
-			st, b := e.reconcile("observer-a", p.operation)
+			e.admin(`UPDATE steelmatter.r1_observations SET recorded_at=clock_timestamp()-interval '2 minutes' WHERE operation_id=$1`, p.operation)
+			if n, err := e.eng.ObserveR1Due(context.Background()); err != nil || n != 1 {
+				t.Fatalf("automatic readback count %d: %v", n, err)
+			}
+			st, b := e.call("GET", "/v1/operations/"+p.operation, "observer-a", nil)
 			requireStatus(t, tc.name, st, b, 200, "")
 			if b["observation"] != tc.want {
 				t.Fatalf("%s: %v", tc.name, b)
@@ -124,6 +128,9 @@ func TestR1ObserverDetectsDestinationChangesWithoutMovingMoney(t *testing.T) {
 			}
 			requireBuckets(t, "readback cannot refund", e.buckets(p.mandate), r1Committed)
 		})
+	}
+	if n, err := e.eng.ObserveR1Due(context.Background()); err != nil || n != 0 {
+		t.Fatalf("readback refreshed before due: %d %v", n, err)
 	}
 	e.eng.Connector = a.s
 	if a.s.Creates() != 1 {

@@ -239,6 +239,9 @@ func (e *Engine) RunWorkers(ctx context.Context, interval time.Duration, sink Si
 		if _, err := e.ObserveUnobserved(ctx); err != nil {
 			onErr("observer", err)
 		}
+		if _, err := e.ObserveR1Due(ctx); err != nil {
+			onErr("observer-refresh", err)
+		}
 		if err := e.checkBacklog(ctx); err != nil {
 			onErr("backlog", err)
 		}
