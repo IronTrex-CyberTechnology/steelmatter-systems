@@ -1,0 +1,12 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_sm_operation_executor,steelmatter.operation executor,model_steelmatter_operation,group_executor,1,0,0,0
+access_sm_operation_observer,steelmatter.operation observer,model_steelmatter_operation,group_observer,1,0,0,0
+access_sm_operation_purchase,steelmatter.operation purchase user,model_steelmatter_operation,purchase.group_purchase_user,1,0,0,0
+access_sm_journal_executor,steelmatter.journal executor,model_steelmatter_journal,group_executor,1,0,0,0
+access_sm_journal_observer,steelmatter.journal observer,model_steelmatter_journal,group_observer,1,0,0,0
+access_sm_journal_purchase,steelmatter.journal purchase user,model_steelmatter_journal,purchase.group_purchase_user,1,0,0,0
+access_sm_head_executor,steelmatter.head executor,model_steelmatter_head,group_executor,1,0,0,0
+access_sm_head_observer,steelmatter.head observer,model_steelmatter_head,group_observer,1,0,0,0
+access_sm_head_purchase,steelmatter.head purchase user,model_steelmatter_head,purchase.group_purchase_user,1,0,0,0
+access_sm_po_observer,purchase.order observer,purchase.model_purchase_order,group_observer,1,0,0,0
+access_sm_pol_observer,purchase.order.line observer,purchase.model_purchase_order_line,group_observer,1,0,0,0

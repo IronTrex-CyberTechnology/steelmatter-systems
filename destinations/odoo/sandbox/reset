@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Delete the sandbox completely: containers, Odoo database, anchor and their
+# local secrets. Synthetic data only; nothing here is kept.
+source "$(dirname "$0")/lib.sh"
+if [[ -f "$SECRETS" ]]; then load_secrets; else export ODOO_DB_PASSWORD= ANCHOR_PG_PASSWORD= ANCHOR_DEST_URL_IN_NETWORK=; fi
+log "removing containers and volumes"
+compose down -v --remove-orphans
+rm -f "$SECRETS" "$ANCHOR_ENV"
+log "sandbox removed; run destinations/odoo/sandbox/up to start fresh"

@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Start the Steelmatter R1 Odoo sandbox (needs Docker and Go):
+#   1. generate local secrets (.local/odoo-sandbox.env, mode 0600, never committed)
+#   2. start Odoo's PostgreSQL and the separate anchor PostgreSQL
+#   3. provision the recovery anchor with `steelmatter anchor-init` (Uday's schema and roles)
+#   4. create the Odoo database, install steelmatter_r1 and seed synthetic data
+#   5. start Odoo on 127.0.0.1:$ODOO_PORT
+# Safe to re-run: existing secrets, anchor and database are kept.
+source "$(dirname "$0")/lib.sh"
+command -v docker >/dev/null || die "docker is not installed"
+docker info >/dev/null 2>&1 || die "docker daemon is not running"
+
+mkdir -p "$ROOT/.local"; chmod 700 "$ROOT/.local"
+if [[ ! -f "$SECRETS" ]]; then
+  log "generating sandbox secrets in $SECRETS"
+  ( umask 077
+    {
+      echo "# Steelmatter Odoo sandbox secrets (synthetic, local only). Never commit."
+      for k in ODOO_DB_PASSWORD ANCHOR_PG_PASSWORD ODOO_ADMIN_PASSWORD SM_EXECUTOR_PASSWORD SM_OBSERVER_PASSWORD; do
+        printf "%s='%s'\n" "$k" "$(openssl rand -hex 24)"
+      done
+    } > "$SECRETS" )
+fi
+load_secrets
+
+log "starting odoo-db and anchor-db"
+compose up -d --wait odoo-db anchor-db
+
+if [[ ! -f "$ANCHOR_ENV" ]]; then
+  log "provisioning the recovery anchor (anchor-init)"
+  STEELMATTER_ADMIN_URL="postgres://postgres:${ANCHOR_PG_PASSWORD}@127.0.0.1:${ANCHOR_PORT}/postgres?sslmode=disable" \
+    go run "$ROOT/cmd/steelmatter" anchor-init -name steelmatter_anchor_odoo -env-out "$ANCHOR_ENV"
+  load_secrets
+fi
+
+if ! compose exec -T odoo-db psql -U odoo -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '$ODOO_DB_NAME'" | grep -q 1; then
+  log "creating Odoo database $ODOO_DB_NAME and installing steelmatter_r1"
+  compose run --rm --no-deps odoo odoo --database="$ODOO_DB_NAME" --init=steelmatter_r1 --without-demo=all --stop-after-init --log-level=warn
+  log "seeding synthetic company, suppliers, products and identities"
+  compose run --rm --no-deps -T \
+    -e SM_ADMIN_PASSWORD="$ODOO_ADMIN_PASSWORD" -e SM_EXECUTOR_PASSWORD -e SM_OBSERVER_PASSWORD -e STEELMATTER_DESTINATION \
+    odoo odoo shell --database="$ODOO_DB_NAME" --no-http --log-level=warn < "$SANDBOX/seed.py"
+else
+  log "Odoo database $ODOO_DB_NAME exists; upgrading steelmatter_r1"
+  compose run --rm --no-deps odoo odoo --database="$ODOO_DB_NAME" --update=steelmatter_r1 --stop-after-init --log-level=warn
+fi
+
+log "starting Odoo"
+compose up -d odoo
+for _ in $(seq 1 60); do
+  curl -fsS "http://127.0.0.1:$ODOO_PORT/web/health" >/dev/null 2>&1 && break
+  sleep 1
+done
+curl -fsS "http://127.0.0.1:$ODOO_PORT/web/health" >/dev/null || die "Odoo did not become healthy; see: docker compose -f $SANDBOX/compose.yaml logs odoo"
+log "Odoo 18 on http://127.0.0.1:$ODOO_PORT (database $ODOO_DB_NAME, destination $STEELMATTER_DESTINATION)"
+log "identities: sm_executor, sm_observer, admin (passwords in $SECRETS)"
