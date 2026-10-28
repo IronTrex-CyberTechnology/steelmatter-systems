@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -216,6 +217,13 @@ func (e *Engine) RunWorkers(ctx context.Context, interval time.Duration, sink Si
 		}
 		if _, err := e.CleanupExpired(ctx); err != nil {
 			onErr("cleanup", err)
+		}
+		if e.Connector != nil && e.Anchor != nil {
+			if r, err := e.CheckRestore(ctx, e.Connector); err != nil {
+				onErr("restore-check", err)
+			} else if r.WritesDisabled {
+				onErr("restore-check", fmt.Errorf("writes disabled: %d restore signals; reconcile and run the resume gate", len(r.Signals)))
+			}
 		}
 		if e.Connector != nil {
 			if _, err := e.SettleDue(ctx); err != nil {

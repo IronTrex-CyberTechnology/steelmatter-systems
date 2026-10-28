@@ -9,6 +9,14 @@
 //	steelmatter migrate    apply migrations (STEELMATTER_DB_ADMIN_URL: owner URL for the target database)
 //	steelmatter db-init    create a database, its roles and schema (STEELMATTER_ADMIN_URL: cluster admin URL)
 //	steelmatter db-drop -name NAME   drop a db-init database and its roles (STEELMATTER_ADMIN_URL)
+//	steelmatter anchor-init          create a local recovery anchor database and its three roles (STEELMATTER_ADMIN_URL)
+//	steelmatter anchor-drop -name NAME   drop a local anchor-init database and its roles (STEELMATTER_ADMIN_URL)
+//
+// serve also reads STEELMATTER_ANCHOR_URL (the anchor's engine-writer URL;
+// without it R1 runs with no restore protection), STEELMATTER_COMPANY_REF,
+// STEELMATTER_REPAIR_REVIEWERS and STEELMATTER_REPAIR_CONFIRMERS
+// (comma-separated principal IDs, D5).
+//
 //	steelmatter version    print the build version
 package main
 
@@ -23,12 +31,14 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/anchor"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/api"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/auth"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract"
@@ -71,6 +81,10 @@ func main() {
 		err = dbDrop(ctx, os.Args[2:])
 	case "db-init":
 		err = dbInit(ctx, os.Args[2:])
+	case "anchor-init":
+		err = anchorInit(ctx, os.Args[2:])
+	case "anchor-drop":
+		err = anchorDrop(ctx, os.Args[2:])
 	case "version":
 		fmt.Println(version)
 	default:
@@ -84,7 +98,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: steelmatter serve | migrate | db-init [-name NAME] [-env-out PATH] | principal-add -tenant T -id ID -kind KIND | version")
+	fmt.Fprintln(os.Stderr, "usage: steelmatter serve | migrate | db-init [-name NAME] [-env-out PATH] | anchor-init [-name NAME] [-env-out PATH] | principal-add -tenant T -id ID -kind KIND | version")
 }
 
 func requireEnv(name string) (string, error) {
@@ -180,6 +194,25 @@ func serve(ctx context.Context) error {
 		return fmt.Errorf("observer separation: %w", err)
 	}
 	eng.Observer = &observer.Observer{Pool: observerPool, Signer: obsSigner, ObserverID: "steelmatter-observer"}
+	if company := os.Getenv("STEELMATTER_COMPANY_REF"); company != "" {
+		eng.Cfg.CompanyRef = company
+	}
+	eng.RepairReviewers = splitList(os.Getenv("STEELMATTER_REPAIR_REVIEWERS"))
+	eng.RepairConfirmers = splitList(os.Getenv("STEELMATTER_REPAIR_CONFIRMERS"))
+	if anchorDSN := os.Getenv("STEELMATTER_ANCHOR_URL"); anchorDSN != "" {
+		anchorPool, err := newPool(ctx, anchorDSN)
+		if err != nil {
+			return fmt.Errorf("anchor database config: %w", err)
+		}
+		defer anchorPool.Close()
+		ws, err := eng.UseAnchor(ctx, &anchor.Client{Pool: anchorPool})
+		if err != nil {
+			return fmt.Errorf("recovery anchor: %w", err)
+		}
+		slog.Info("recovery anchor connected", "writes_enabled", ws.Enabled, "generation", ws.Generation, "reason", ws.Reason)
+	} else {
+		slog.Warn("no recovery anchor (STEELMATTER_ANCHOR_URL): R1 dispatch runs without restore protection")
+	}
 	authn := &auth.Authenticator{Pool: pool}
 
 	srv := &http.Server{
@@ -233,6 +266,68 @@ func dbDrop(ctx context.Context, args []string) error {
 		return errors.New("-name is required")
 	}
 	return db.Drop(ctx, adminURL, &db.Database{Name: *name, ExecutorRole: *name + "_executor", ObserverRole: *name + "_observer"})
+}
+
+// anchorInit creates a local recovery anchor (D5 v3, option 1: a separate
+// PostgreSQL, tested locally, no paid hosting). Its backups must never be
+// restored together with the engine's or Odoo's.
+func anchorInit(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("anchor-init", flag.ContinueOnError)
+	name := fs.String("name", "steelmatter_anchor_dev", "anchor database name to create")
+	envOut := fs.String("env-out", ".local/anchor.env", "file to write connection URLs to (mode 0600)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	adminURL, err := requireEnv("STEELMATTER_ADMIN_URL")
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(*envOut); err == nil {
+		return fmt.Errorf("%s already exists; remove it and drop the anchor to re-initialise", *envOut)
+	}
+	d, err := anchor.Provision(ctx, adminURL, *name)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(*envOut), 0o700); err != nil {
+		return err
+	}
+	content := fmt.Sprintf("# Local recovery anchor %s. Contains generated passwords; never commit. Back it up separately from the\n"+
+		"# engine database and Odoo, and never restore it together with them.\n"+
+		"STEELMATTER_ANCHOR_URL='%s'\nSTEELMATTER_ANCHOR_DEST_URL='%s'\nSTEELMATTER_ANCHOR_OBSERVER_URL='%s'\nSTEELMATTER_ANCHOR_ADMIN_URL='%s'\n",
+		d.Name, d.EngineURL, d.DestURL, d.ObserverURL, d.AdminURL)
+	if err := os.WriteFile(*envOut, []byte(content), 0o600); err != nil {
+		return err
+	}
+	fmt.Printf("created anchor %s with roles %s, %s and %s; URLs written to %s\n", d.Name, d.EngineRole, d.DestRole, d.ObserverRole, *envOut)
+	return nil
+}
+
+// anchorDrop removes a local anchor created by anchor-init.
+func anchorDrop(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("anchor-drop", flag.ContinueOnError)
+	name := fs.String("name", "", "anchor database name to drop")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	adminURL, err := requireEnv("STEELMATTER_ADMIN_URL")
+	if err != nil {
+		return err
+	}
+	if *name == "" {
+		return errors.New("-name is required")
+	}
+	return anchor.Drop(ctx, adminURL, &anchor.Database{Name: *name, EngineRole: *name + "_engine", DestRole: *name + "_dest", ObserverRole: *name + "_observer"})
+}
+
+func splitList(v string) []string {
+	var out []string
+	for _, p := range strings.Split(v, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // newPool opens a pool whose sessions bound every statement, including reads

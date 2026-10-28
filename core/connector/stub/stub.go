@@ -39,11 +39,38 @@ type record struct {
 	seq    int64
 }
 
-// durable is the per-op_ref restore-proof record; it survives Restore.
-type durable struct {
-	createIntent bool             // CREATE_INTENT: a create was attempted (written before it commits)
-	blocked      bool             // BLOCK: a permanent block committed
-	createDone   *connector.Order // CREATE_DONE: best-effort, after the create committed; carries the order facts
+// memProof is the default in-memory restore-proof record. It survives
+// Restore, like the real anchor's destination stream.
+type memProof struct {
+	m map[string]*connector.Proof
+}
+
+func (p *memProof) get(op string) *connector.Proof {
+	if p.m[op] == nil {
+		p.m[op] = &connector.Proof{}
+	}
+	return p.m[op]
+}
+
+func (p *memProof) Proof(_ context.Context, op string) (connector.Proof, error) {
+	if v := p.m[op]; v != nil {
+		return *v, nil
+	}
+	return connector.Proof{}, nil
+}
+func (p *memProof) RecordCreateIntent(_ context.Context, op, _ string) error {
+	p.get(op).CreateIntent = true
+	return nil
+}
+func (p *memProof) RecordBlock(_ context.Context, op, _ string) error {
+	p.get(op).Blocked = true
+	return nil
+}
+func (p *memProof) RecordCreateDone(_ context.Context, op string, o connector.Order) error {
+	if p.get(op).CreateDone == nil {
+		p.get(op).CreateDone = &o
+	}
+	return nil
 }
 
 // Stub is safe for concurrent use. The zero value is not usable; call New.
@@ -56,7 +83,7 @@ type Stub struct {
 	dropReply   map[string]int // op_ref -> execute replies to drop after the create applies
 	unreachable map[string]int // op_ref -> calls that fail before reaching the destination
 	creates     int
-	durable     map[string]*durable
+	proof       connector.RestoreProof
 
 	anchorDown     bool           // restore-proof record unreadable and unwritable
 	failCommit     map[string]int // op_ref -> creates whose destination commit fails after CREATE_INTENT
@@ -74,10 +101,18 @@ type Snapshot struct {
 	nextOrder int
 }
 
-// New returns an empty stub destination.
+// New returns an empty stub destination with an in-memory restore-proof
+// record.
 func New() *Stub {
+	return NewWithProof(&memProof{m: map[string]*connector.Proof{}})
+}
+
+// NewWithProof returns an empty stub destination whose restore-proof record
+// is p, for example the real anchor's destination stream (anchor.DestStream),
+// as Kaif's Odoo module will use it.
+func NewWithProof(p connector.RestoreProof) *Stub {
 	return &Stub{ops: map[string]*record{}, supplierRev: map[string]int64{}, dropReply: map[string]int{}, unreachable: map[string]int{},
-		durable: map[string]*durable{}, failCommit: map[string]int{}, failBlock: map[string]int{}, loseCreateDone: map[string]int{}}
+		proof: p, failCommit: map[string]int{}, failBlock: map[string]int{}, loseCreateDone: map[string]int{}}
 }
 
 // SetAnchorUnavailable makes the destination's restore-proof record
@@ -149,15 +184,6 @@ func (s *Stub) Restore(b Snapshot) {
 	s.seq, s.nextOrder = b.seq, b.nextOrder
 }
 
-func (s *Stub) dur(opRef string) *durable {
-	d := s.durable[opRef]
-	if d == nil {
-		d = &durable{}
-		s.durable[opRef] = d
-	}
-	return d
-}
-
 // DropNextReplies makes the next n executes for opRef apply at the
 // destination but return UNKNOWN, as if the reply was lost.
 func (s *Stub) DropNextReplies(opRef string, n int) {
@@ -196,7 +222,7 @@ func (s *Stub) SetOrderState(opRef, state string) {
 func (s *Stub) Deliver(a connector.Action) connector.Result {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.create(a)
+	return s.create(context.Background(), a)
 }
 
 // StateOf reports the destination record state for opRef.
@@ -215,25 +241,32 @@ func (s *Stub) Creates() int { s.mu.Lock(); defer s.mu.Unlock(); return s.create
 // Head is the destination's current sequence.
 func (s *Stub) Head() int64 { s.mu.Lock(); defer s.mu.Unlock(); return s.seq }
 
-func (s *Stub) result(opRef, call string, o connector.Outcome) connector.Result {
+// proofOf reads the restore-proof record; ok is false when it is
+// unavailable, and then every flag is unknown.
+func (s *Stub) proofOf(ctx context.Context, opRef string) (connector.Proof, bool) {
+	if s.anchorDown {
+		return connector.Proof{}, false
+	}
+	p, err := s.proof.Proof(ctx, opRef)
+	return p, err == nil
+}
+
+func (s *Stub) result(ctx context.Context, opRef, call string, o connector.Outcome) connector.Result {
 	r := connector.Result{OpRef: opRef, Call: call, Outcome: o, Seq: s.seq, Incarnation: "stub-1",
 		OdooTxTime: time.Now().UTC(), ConnectorReceivedAt: time.Now().UTC(), Source: "stub/executor"}
-	if !s.anchorDown {
-		d := s.durable[opRef]
-		if d == nil {
-			d = &durable{}
-		}
-		r.BlockCommitted, r.PriorCreate = connector.Flag(d.blocked), connector.Flag(d.createIntent)
-		if rec := s.ops[opRef]; d.createDone != nil && (rec == nil || rec.order == nil) {
+	rec := s.ops[opRef]
+	if p, ok := s.proofOf(ctx, opRef); ok {
+		r.BlockCommitted, r.PriorCreate = connector.Flag(p.Blocked), connector.Flag(p.CreateIntent)
+		if p.CreateDone != nil && (rec == nil || rec.order == nil) {
 			// The order was erased (restore); the CREATE_DONE record still
 			// establishes it.
-			o := *d.createDone
-			o.Lines = append([]connector.Line(nil), d.createDone.Lines...)
+			o := *p.CreateDone
+			o.Lines = append([]connector.Line(nil), p.CreateDone.Lines...)
 			r.CreateDone, r.Destination = true, &o
 			r.Reason = "ORDER_ERASED_CREATE_DONE"
 		}
 	}
-	if rec := s.ops[opRef]; rec != nil {
+	if rec != nil {
 		r.Seq = rec.seq
 		if rec.order != nil {
 			o := *rec.order
@@ -242,6 +275,10 @@ func (s *Stub) result(opRef, call string, o connector.Outcome) connector.Result 
 		}
 	}
 	return r
+}
+
+func unavailable(opRef, call, reason string, seq int64) connector.Result {
+	return connector.Result{OpRef: opRef, Call: call, Outcome: connector.Unavailable, Reason: reason, Seq: seq}
 }
 
 func (s *Stub) failing(opRef string) bool {
@@ -253,81 +290,91 @@ func (s *Stub) failing(opRef string) bool {
 }
 
 // create runs under s.mu: the per-op_ref lock of the real module.
-func (s *Stub) create(a connector.Action) connector.Result {
+func (s *Stub) create(ctx context.Context, a connector.Action) connector.Result {
 	if a.ExpectedMinSeq > s.seq {
-		return s.result(a.OpRef, "execute", connector.RefusedRestoreSuspected)
+		return s.result(ctx, a.OpRef, "execute", connector.RefusedRestoreSuspected)
 	}
 	// The block check needs the restore-proof record; if it cannot be read
 	// the create is refused (fail closed) and nothing is written.
-	if s.anchorDown {
-		return connector.Result{OpRef: a.OpRef, Call: "execute", Outcome: connector.Unavailable, Reason: "ANCHOR_UNAVAILABLE", Seq: s.seq}
+	p, ok := s.proofOf(ctx, a.OpRef)
+	if !ok {
+		return unavailable(a.OpRef, "execute", "ANCHOR_UNAVAILABLE", s.seq)
 	}
 	// The restore-proof block is checked first, so a delayed create cannot
 	// slip through after a restore removed the in-Odoo tombstone, whatever
 	// sequence number it carries (D5 v3 case 2).
-	if d := s.durable[a.OpRef]; d != nil && d.blocked {
+	if p.Blocked {
 		if rec := s.ops[a.OpRef]; rec == nil {
 			s.ops[a.OpRef] = &record{state: Fenced, seq: s.seq}
 		}
-		return s.result(a.OpRef, "execute", connector.RefusedFenced)
+		return s.result(ctx, a.OpRef, "execute", connector.RefusedFenced)
 	}
 	rec := s.ops[a.OpRef]
 	if rec != nil {
 		switch rec.state {
 		case Fenced, Refused:
-			return s.result(a.OpRef, "execute", connector.RefusedFenced)
+			return s.result(ctx, a.OpRef, "execute", connector.RefusedFenced)
 		case Created:
 			if rec.digest == a.PermitDigest {
-				return s.result(a.OpRef, "execute", connector.Exists)
+				return s.result(ctx, a.OpRef, "execute", connector.Exists)
 			}
-			return s.result(a.OpRef, "execute", connector.Mismatch)
+			return s.result(ctx, a.OpRef, "execute", connector.Mismatch)
 		}
 	}
 	// A create intent with no destination row means an earlier attempt was
 	// erased by a restore (or its commit failed). Never create again for this
 	// op_ref: block it and refuse (Kaif's case E fix).
-	if d := s.durable[a.OpRef]; d != nil && d.createIntent {
-		s.dur(a.OpRef).blocked = true
+	if p.CreateIntent {
+		if err := s.proof.RecordBlock(ctx, a.OpRef, "prior attempt"); err != nil {
+			return unavailable(a.OpRef, "execute", "ANCHOR_UNAVAILABLE", s.seq)
+		}
 		s.seq++
 		s.ops[a.OpRef] = &record{state: Refused, digest: a.PermitDigest, seq: s.seq}
-		return s.result(a.OpRef, "execute", connector.RefusedPriorAttempt)
+		return s.result(ctx, a.OpRef, "execute", connector.RefusedPriorAttempt)
 	}
 	// Refusals decided before CREATE_INTENT write BLOCK only, so they carry
 	// prior_create = false and can release.
 	if want, ok := s.supplierRev[a.SupplierRef]; ok && want != a.SupplierRevision {
-		s.dur(a.OpRef).blocked = true // block recorded before the refusal is reported
+		if err := s.proof.RecordBlock(ctx, a.OpRef, "supplier stale"); err != nil { // block recorded before the refusal is reported
+			return unavailable(a.OpRef, "execute", "ANCHOR_UNAVAILABLE", s.seq)
+		}
 		s.seq++
 		s.ops[a.OpRef] = &record{state: Refused, digest: a.PermitDigest, seq: s.seq}
-		return s.result(a.OpRef, "execute", connector.RefusedSupplierStale)
+		return s.result(ctx, a.OpRef, "execute", connector.RefusedSupplierStale)
 	}
-	s.dur(a.OpRef).createIntent = true // written before the create commits
+	// Written before the create commits. If it fails the create rolls back
+	// and the answer is UNAVAILABLE, never "not sent": it may have landed.
+	if err := s.proof.RecordCreateIntent(ctx, a.OpRef, a.PermitDigest); err != nil {
+		return unavailable(a.OpRef, "execute", "ANCHOR_UNAVAILABLE", s.seq)
+	}
 	if take(s.failCommit, a.OpRef) {
 		return connector.Result{OpRef: a.OpRef, Call: "execute", Outcome: connector.Unknown, Reason: "COMMIT_FAILED", Seq: s.seq}
 	}
 	s.seq++
 	s.nextOrder++
 	s.creates++
-	s.ops[a.OpRef] = &record{state: Created, digest: a.PermitDigest, seq: s.seq, order: &connector.Order{
+	order := &connector.Order{
 		ID: fmt.Sprintf("PO%05d", s.nextOrder), State: connector.StateConfirmed, CompanyRef: a.CompanyRef, DeliveryRef: a.DeliveryRef,
 		SupplierRef: a.SupplierRef, Lines: append([]connector.Line(nil), a.Lines...), AmountMinor: a.AmountMinor, Currency: a.Currency,
 		PermitDigest: a.PermitDigest,
-	}}
-	if !take(s.loseCreateDone, a.OpRef) {
-		o := *s.ops[a.OpRef].order
-		o.Lines = append([]connector.Line(nil), a.Lines...)
-		s.dur(a.OpRef).createDone = &o
 	}
-	return s.result(a.OpRef, "execute", connector.Created)
+	s.ops[a.OpRef] = &record{state: Created, digest: a.PermitDigest, seq: s.seq, order: order}
+	if !take(s.loseCreateDone, a.OpRef) {
+		o := *order
+		o.Lines = append([]connector.Line(nil), a.Lines...)
+		_ = s.proof.RecordCreateDone(ctx, a.OpRef, o) // best-effort
+	}
+	return s.result(ctx, a.OpRef, "execute", connector.Created)
 }
 
 // Execute implements connector.Connector.
-func (s *Stub) Execute(_ context.Context, a connector.Action) (connector.Result, error) {
+func (s *Stub) Execute(ctx context.Context, a connector.Action) (connector.Result, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.failing(a.OpRef) {
 		return connector.Result{OpRef: a.OpRef, Call: "execute", Outcome: connector.Unknown, Reason: "DESTINATION_UNAVAILABLE"}, nil
 	}
-	r := s.create(a)
+	r := s.create(ctx, a)
 	if s.dropReply[a.OpRef] > 0 {
 		s.dropReply[a.OpRef]--
 		return connector.Result{OpRef: a.OpRef, Call: "execute", Outcome: connector.Unknown, Reason: "REPLY_LOST"}, nil
@@ -336,65 +383,76 @@ func (s *Stub) Execute(_ context.Context, a connector.Action) (connector.Result,
 }
 
 // Lookup implements connector.Connector.
-func (s *Stub) Lookup(_ context.Context, opRef string) (connector.Result, error) {
+func (s *Stub) Lookup(ctx context.Context, opRef string) (connector.Result, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.failing(opRef) {
 		return connector.Result{OpRef: opRef, Call: "lookup", Outcome: connector.Unavailable, Reason: "DESTINATION_UNAVAILABLE"}, nil
 	}
 	rec := s.ops[opRef]
+	if rec == nil {
+		if p, ok := s.proofOf(ctx, opRef); ok && p.CreateDone != nil {
+			return s.result(ctx, opRef, "lookup", connector.Found), nil // order erased; CREATE_DONE establishes it
+		}
+		return s.result(ctx, opRef, "lookup", connector.NotFoundNow), nil
+	}
 	switch {
-	case rec == nil && !s.anchorDown && s.durable[opRef] != nil && s.durable[opRef].createDone != nil:
-		return s.result(opRef, "lookup", connector.Found), nil // order erased; CREATE_DONE establishes it
-	case rec == nil:
-		return s.result(opRef, "lookup", connector.NotFoundNow), nil
 	case rec.state == Fenced || rec.state == Refused:
-		return s.result(opRef, "lookup", connector.Fenced), nil
+		return s.result(ctx, opRef, "lookup", connector.Fenced), nil
 	case rec.order.State != connector.StateConfirmed:
-		return s.result(opRef, "lookup", connector.Mismatch), nil
+		return s.result(ctx, opRef, "lookup", connector.Mismatch), nil
 	default:
-		return s.result(opRef, "lookup", connector.Found), nil
+		return s.result(ctx, opRef, "lookup", connector.Found), nil
 	}
 }
 
 // Fence implements connector.Connector.
-func (s *Stub) Fence(_ context.Context, opRef string, expectedMinSeq int64) (connector.Result, error) {
+func (s *Stub) Fence(ctx context.Context, opRef string, expectedMinSeq int64) (connector.Result, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.failing(opRef) {
 		return connector.Result{OpRef: opRef, Call: "fence", Outcome: connector.Unknown, Reason: "DESTINATION_UNAVAILABLE"}, nil
 	}
 	if expectedMinSeq > s.seq {
-		return s.result(opRef, "fence", connector.RefusedRestoreSuspected), nil
+		return s.result(ctx, opRef, "fence", connector.RefusedRestoreSuspected), nil
 	}
-	if s.anchorDown {
-		return connector.Result{OpRef: opRef, Call: "fence", Outcome: connector.Unavailable, Reason: "ANCHOR_UNAVAILABLE", Seq: s.seq}, nil
+	p, ok := s.proofOf(ctx, opRef)
+	if !ok {
+		return unavailable(opRef, "fence", "ANCHOR_UNAVAILABLE", s.seq), nil
 	}
 	rec := s.ops[opRef]
 	switch {
 	case rec == nil && take(s.failBlock, opRef):
 		// BLOCK write failed: the fence transaction rolls back, nothing is
 		// blocked, and the flag says so.
-		r := s.result(opRef, "fence", connector.Unavailable)
+		r := s.result(ctx, opRef, "fence", connector.Unavailable)
 		r.Reason, r.BlockCommitted = "BLOCK_WRITE_FAILED", connector.Flag(false)
 		return r, nil
-	case rec == nil && s.durable[opRef] != nil && s.durable[opRef].createDone != nil:
+	case rec == nil && p.CreateDone != nil:
 		// Order erased by a restore but CREATE_DONE establishes it: block
 		// any re-create and report the order (case E).
-		s.dur(opRef).blocked = true
+		if err := s.proof.RecordBlock(ctx, opRef, "fenced"); err != nil {
+			return unavailable(opRef, "fence", "ANCHOR_UNAVAILABLE", s.seq), nil
+		}
 		s.seq++
 		s.ops[opRef] = &record{state: Fenced, seq: s.seq}
-		return s.result(opRef, "fence", connector.Exists), nil
+		return s.result(ctx, opRef, "fence", connector.Exists), nil
 	case rec == nil:
-		s.dur(opRef).blocked = true // block recorded before FENCED is reported
+		if err := s.proof.RecordBlock(ctx, opRef, "fenced"); err != nil { // block recorded before FENCED is reported
+			r := unavailable(opRef, "fence", "BLOCK_WRITE_FAILED", s.seq)
+			r.BlockCommitted = connector.Flag(false)
+			return r, nil
+		}
 		s.seq++
 		s.ops[opRef] = &record{state: Fenced, seq: s.seq}
-		return s.result(opRef, "fence", connector.Fenced), nil
+		return s.result(ctx, opRef, "fence", connector.Fenced), nil
 	case rec.state == Created:
-		return s.result(opRef, "fence", connector.Exists), nil
+		return s.result(ctx, opRef, "fence", connector.Exists), nil
 	default:
-		s.dur(opRef).blocked = true
-		return s.result(opRef, "fence", connector.Fenced), nil
+		if err := s.proof.RecordBlock(ctx, opRef, "fenced"); err != nil {
+			return unavailable(opRef, "fence", "ANCHOR_UNAVAILABLE", s.seq), nil
+		}
+		return s.result(ctx, opRef, "fence", connector.Fenced), nil
 	}
 }
 

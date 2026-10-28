@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/anchor"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/failpoint"
@@ -44,17 +45,32 @@ func (e *Engine) Settle(ctx context.Context, tenant, opRef string, c connector.C
 	if d == nil {
 		return nil, fault("NOT_FOUND", "operation not found")
 	}
+	if d.status != DispatchPending && d.status != DispatchUnresolved { // COMMITTED, FENCED, MISMATCH, HELD
+		return e.GetDispatch(ctx, tenant, opRef)
+	}
+	// With the anchor: while writes are off (restore detected, or this
+	// engine's generation is old, or the anchor cannot be read) nothing new
+	// is created; a PENDING operation goes to lookup and fence instead, and
+	// the fence skips the sequence gate because the restore is being
+	// reconciled (sm_create still checks BLOCK whatever the sequence).
+	writes := true
+	if e.Anchor != nil {
+		on, _, werr := e.writesOn(ctx)
+		writes = werr == nil && on
+		if writes {
+			if d.minSeq, err = e.Anchor.ExpectedMinSeq(ctx, d.companyRef); err != nil {
+				return nil, fmt.Errorf("recovery anchor: %w", err)
+			}
+		}
+	}
 	var res connector.Result
-	switch d.status {
-	case DispatchPending:
+	if d.status == DispatchPending && writes {
 		res, err = c.Execute(ctx, d.connectorAction())
-	case DispatchUnresolved:
+	} else {
 		res, err = c.Lookup(ctx, opRef)
 		if err == nil && res.Outcome == connector.NotFoundNow {
-			res, err = c.Fence(ctx, opRef, d.expectedMinSeq())
+			res, err = c.Fence(ctx, opRef, d.minSeq)
 		}
-	default: // COMMITTED, FENCED, MISMATCH, HELD
-		return e.GetDispatch(ctx, tenant, opRef)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("connector %s: %w", opRef, err)
@@ -73,7 +89,7 @@ func (e *Engine) Settle(ctx context.Context, tenant, opRef string, c connector.C
 
 type dispatchRow struct {
 	tenant, opRef, mandateID, companyRef, permitDigest, status string
-	amount, destSeq                                            int64
+	amount, destSeq, minSeq                                    int64
 	action                                                     contract.Action
 }
 
@@ -96,7 +112,7 @@ func (e *Engine) loadDispatchForSettle(ctx context.Context, tenant, opRef string
 }
 
 func (d *dispatchRow) connectorAction() connector.Action {
-	return toConnectorAction(d.opRef, d.companyRef, d.permitDigest, &d.action, d.expectedMinSeq())
+	return toConnectorAction(d.opRef, d.companyRef, d.permitDigest, &d.action, d.minSeq)
 }
 
 // toConnectorAction maps the stored, authorised action to the canonical
@@ -111,11 +127,6 @@ func toConnectorAction(opRef, companyRef, permitDigest string, a *contract.Actio
 		SupplierRevision: a.SupplierRevision, Lines: lines, AmountMinor: a.AmountMinor, Currency: a.Currency,
 		PermitDigest: permitDigest, ExpectedMinSeq: expectedMinSeq}
 }
-
-// expectedMinSeq is the highest destination sequence the engine has seen.
-// TODO(D5): read it from the recovery anchor once the anchor store is chosen;
-// until then 0 disables the destination's restore gate.
-func (d *dispatchRow) expectedMinSeq() int64 { return 0 }
 
 // matches reports whether a destination order is a confirmed order with
 // exactly the approved details (Aakhil's D1 decision: success only when the
@@ -202,6 +213,11 @@ func (e *Engine) recordOutcome(ctx context.Context, d *dispatchRow, r connector.
 			destination_order = COALESCE(NULLIF($5, ''), destination_order), destination_seq = GREATEST(COALESCE(destination_seq, 0), $6),
 			updated_at = clock_timestamp(), settled_at = CASE WHEN $3 IN ('COMMITTED', 'FENCED') THEN clock_timestamp() END
 			WHERE tenant_id = $1 AND op_ref = $2`, d.tenant, d.opRef, status, string(r.Outcome), order, r.Seq); err != nil {
+			return err
+		}
+		if err := e.anchorOutcome(ctx, anchor.OutcomeRecord{Tenant: d.tenant, OpRef: d.opRef, Destination: d.companyRef, Outcome: string(r.Outcome),
+			Status: status, Move: moveFor(status), DestinationOrder: order, DestinationSeq: r.Seq, Incarnation: r.Incarnation,
+			BlockCommitted: r.BlockCommitted, PriorCreate: r.PriorCreate, CreateDone: r.CreateDone}); err != nil {
 			return err
 		}
 		if status != d.status {

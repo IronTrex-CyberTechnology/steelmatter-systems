@@ -7,7 +7,11 @@
 //	mandates → instructions → action_revisions → issuances → target.suppliers
 //
 // and rechecks time with clock_timestamp() after the locks. No external call
-// (including signing) happens inside a mutation transaction.
+// (including signing) happens inside a mutation transaction, with one
+// deliberate exception for R1 (D5 v3): the append to the recovery anchor,
+// which must be durable before the engine commits a dispatch intent or a
+// destination outcome. The anchor never calls back into the engine, so its
+// stream-head lock cannot form a cycle with the engine's locks.
 package engine
 
 import (
@@ -16,18 +20,20 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector"
 	"io"
 	"log/slog"
 	"math"
 	"net"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/anchor"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/observer"
@@ -50,6 +56,11 @@ type Config struct {
 	// RecoveryAge is how old an unsigned issuance must be before the recovery
 	// worker signs it (avoids racing an in-flight evaluation).
 	RecoveryAge time.Duration
+	// RestoreGrace is how old an anchor record must be before the restore
+	// check compares it with the engine database, so a dispatch or outcome
+	// that is between its anchor append and its engine commit is never
+	// mistaken for a restore.
+	RestoreGrace time.Duration
 	// Version is the build version reported by the adapter assurance endpoint.
 	Version string
 	// CompanyRef is the destination company R1 dispatches order for (one
@@ -67,6 +78,7 @@ func DefaultConfig() Config {
 		MaxClockSkew: 2 * time.Second,
 		MaxAttempts:  3,
 		RecoveryAge:  10 * time.Second,
+		RestoreGrace: time.Minute,
 		Version:      "dev",
 		CompanyRef:   "synthetic-company",
 	}
@@ -85,6 +97,14 @@ type Engine struct {
 	// Connector is the R1 destination connector (D1). Nil disables R1
 	// settlement in the workers and the readiness check before dispatch.
 	Connector connector.Connector
+	// Anchor is the recovery anchor (D5 v3); set it with UseAnchor. Nil keeps
+	// R1 working without restore protection (tests and local development).
+	Anchor *anchor.Client
+	// anchorGen is the anchor write generation this engine dispatches under.
+	anchorGen atomic.Int64
+	// RepairReviewers and RepairConfirmers are the principal IDs allowed to
+	// review (Kaif) and confirm (Aakhil) HELD repairs (D5 decision).
+	RepairReviewers, RepairConfirmers []string
 }
 
 // New validates the configuration and returns an Engine.

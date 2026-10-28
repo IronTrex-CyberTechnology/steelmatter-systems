@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/anchor"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/auth"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/failpoint"
@@ -61,6 +62,12 @@ func (e *Engine) Dispatch(ctx context.Context, p auth.Principal, actionJSON []by
 		return nil, err
 	}
 	permit, action := a.permit, a.action
+	if err := e.requireWrites(ctx); err != nil {
+		if d, gerr := e.GetDispatch(ctx, p.Tenant, permit.OperationID); gerr == nil && d != nil && d.ActionDigest == a.actionDigest {
+			return d, nil // an identical repeat of a recorded dispatch still returns its state
+		}
+		return nil, err
+	}
 	if err := e.checkReadiness(ctx, p, a); err != nil {
 		return nil, err
 	}
@@ -126,6 +133,19 @@ func (e *Engine) Dispatch(ctx context.Context, p auth.Principal, actionJSON []by
 		} {
 			if _, err := tx.Exec(ctx, s.sql, s.args...); err != nil {
 				return err
+			}
+		}
+		// Record the intent in the recovery anchor, last, just before commit
+		// (D5 mechanism step 1). No anchor record, no dispatch; and none can be
+		// appended once writes are off or this engine's generation is old.
+		if e.Anchor != nil {
+			ir := anchor.IntentRecord{Tenant: p.Tenant, OpRef: permit.OperationID, InstructionID: action.InstructionID,
+				ActionRevision: action.ActionRevision, MandateID: permit.MandateID, ControlEpoch: permit.ControlEpoch, CompanyRef: e.Cfg.CompanyRef,
+				PermitID: permit.PermitID, PermitJWS: permitJWS, PermitDigest: a.verified.Digest, ActionCanonical: string(a.canonical),
+				ActionDigest: a.actionDigest, AmountMinor: is.Amount, Currency: action.Currency, SupplierRef: action.SupplierID,
+				SupplierRevision: action.SupplierRevision, DeliveryRef: action.DeliveryID}
+			if _, err := e.Anchor.Append(ctx, anchor.DispatchIntent, p.Tenant, permit.OperationID, ir, e.anchorGen.Load()); err != nil {
+				return anchorFault(err)
 			}
 		}
 		if err := failpoint.Inject(ctx, failpoint.DispatchBeforeCommit); err != nil {

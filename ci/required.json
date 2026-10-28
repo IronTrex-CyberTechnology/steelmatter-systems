@@ -4768,7 +4768,7 @@
       ]
     },
     "r1-engine": {
-      "description": "R1 engine work on uday-r1 that does not depend on the D5 anchor decision: dispatch intent, lookup-first settle, the settle worker, R1 status values, revocation of in-flight operations (D4), per-aggregate outbox (D6), readiness, and the D2 budget, crash and race tests, all against the stub connector. Requires every full-R0 test and case as well. Not the active stage: switching to it is a team decision.",
+      "description": "R1 engine work on uday-r1 dispatch intent, lookup-first settle, the settle worker, R1 status values, revocation of in-flight operations (D4), per-aggregate outbox (D6), readiness, and the D2 budget, crash and race tests, all against the stub connector. Requires every full-R0 test and case as well. Not the active stage: switching to it is a team decision. Includes the D5 recovery anchor (separate local PostgreSQL), restore detection, reconciliation, the resume gate with the HELD rule, HELD findings and repairs, and real PostgreSQL recovery and concurrency tests.",
       "phases": [
         "unit",
         "integration",
@@ -6743,6 +6743,106 @@
           "phase": "unit",
           "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestExecutionValuesAgreeAcrossAPISDKAndMCP"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5DispatchAndOutcomesAreRecordedInTheAnchor"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5AnchorUnavailableRefusesDispatch"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5WritesOffStopsCreatesButNotFences"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5StaleGenerationIsRefused"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5EngineRestoredBeforeConfirmedPurchase"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5EngineRestoredBeforeUnsentDispatch"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5BothRestoredHeldRuleAndRepair"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5RepairReleaseNeedsApprovedReview"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5OdooRestoredCommittedOrderMissing"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5OdooRestoredAfterFenceDelayedRequestRefused"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5AnchorBehindNeedsConfirmedRepair"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5GateRefusesMismatchedBuckets"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5ConcurrentDispatchAndSettleWithAnchor"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5DisableWritesRacingDispatches"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5RestoreCheckDuringDispatchBurstHasNoFalseAlarm"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5ConcurrentRepairConfirmationsMoveOnce"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/anchor",
+          "test": "TestAnchorAppendOnlyAndChained"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/anchor",
+          "test": "TestAnchorRoleSeparation"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/anchor",
+          "test": "TestAnchorWriteSwitch"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/anchor",
+          "test": "TestAnchorConcurrentAppendsAndDisable"
         }
       ],
       "required_cases": [

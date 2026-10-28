@@ -216,3 +216,23 @@ type Connector interface {
 	// reconciliation).
 	List(ctx context.Context, checkpointSeq int64, limit int) (ListPage, error)
 }
+
+// Proof is what the destination's restore-proof record (the anchor's
+// destination stream, D5 v3) holds for one op_ref. It is outside Odoo's
+// rollback domain, so it survives an Odoo restore.
+type Proof struct {
+	CreateIntent bool   // CREATE_INTENT: a create was attempted (written before it commits)
+	Blocked      bool   // BLOCK: the op_ref is permanently blocked
+	CreateDone   *Order // CREATE_DONE: best-effort, after the create committed; the order facts
+}
+
+// RestoreProof is the destination module's access to its restore-proof
+// record. Kaif's Odoo module writes it with the steelmatter-dest-writer
+// identity; the stub connector uses the same interface. A read or write
+// error means the record is unavailable: the module must fail closed.
+type RestoreProof interface {
+	Proof(ctx context.Context, opRef string) (Proof, error)
+	RecordCreateIntent(ctx context.Context, opRef, permitDigest string) error
+	RecordBlock(ctx context.Context, opRef, reason string) error
+	RecordCreateDone(ctx context.Context, opRef string, o Order) error
+}
