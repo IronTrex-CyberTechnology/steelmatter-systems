@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -403,4 +404,45 @@ func TestCoverageWithoutTheModuleIsUnverified(t *testing.T) {
 		t.Fatalf("got %+v", cov)
 	}
 	noSecrets(t, cov)
+}
+
+// R1-DEF-16: a redirect is never followed, so the request body (which holds
+// a password) never reaches another host, and the call is not proof.
+func TestRedirectIsNeverFollowed(t *testing.T) {
+	var leaked atomic.Int64
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		leaked.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(other.Close)
+	for _, code := range []int{http.StatusFound, http.StatusTemporaryRedirect, http.StatusPermanentRedirect} {
+		f, c := newFake(t)
+		f.raw = func(w http.ResponseWriter) bool {
+			w.Header().Set("Location", other.URL+"/jsonrpc")
+			w.WriteHeader(code)
+			return true
+		}
+		r, err := c.Execute(context.Background(), act("op-1"))
+		if err != nil || r.Outcome != connector.Unknown || r.Reason != connector.ReasonDestinationUnavailable {
+			t.Fatalf("%d: got %+v %v", code, r, err)
+		}
+		if lk, _ := c.Lookup(context.Background(), "op-1"); lk.Outcome != connector.Unavailable {
+			t.Fatalf("%d: lookup %+v", code, lk)
+		}
+		noSecrets(t, r)
+	}
+	if n := leaked.Load(); n != 0 {
+		t.Fatalf("a redirect was followed to another host %d times", n)
+	}
+}
+
+func TestCallerClientIsNotModified(t *testing.T) {
+	own := &http.Client{Timeout: 5 * time.Second}
+	if _, err := New(Config{URL: "https://odoo.example", Database: "d", Executor: Credentials{"e", "p"},
+		Observer: Credentials{"o", "q"}, HTTPClient: own}); err != nil {
+		t.Fatal(err)
+	}
+	if own.CheckRedirect != nil {
+		t.Fatal("New changed the caller's HTTP client")
+	}
 }

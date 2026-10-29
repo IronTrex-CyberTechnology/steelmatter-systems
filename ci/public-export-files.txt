@@ -173,6 +173,7 @@ destinations/odoo/sandbox/up
 destinations/odoo/tests/anchor_timing.py
 destinations/odoo/tests/coverage_report.py
 destinations/odoo/tests/coverage_test.py
+destinations/odoo/tests/defects_test.py
 destinations/odoo/tests/mail_test.py
 destinations/odoo/tests/race_test.py
 destinations/odoo/tests/restore_test.py

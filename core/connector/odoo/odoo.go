@@ -133,9 +133,16 @@ func New(cfg Config) (*Connector, error) {
 	if c.instance == "" {
 		c.instance = "odoo"
 	}
-	if c.client == nil {
-		c.client = &http.Client{}
+	// Never follow a redirect (R1-DEF-16): every request body carries a
+	// password, and a 307/308 would resend it to whatever host the reply
+	// names. A redirect is reported like any other non-200 reply: UNKNOWN for
+	// writes, never proof. A caller's client is copied, not changed.
+	client := http.Client{}
+	if c.client != nil {
+		client = *c.client
 	}
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	c.client = &client
 	return c, nil
 }
 

@@ -11,7 +11,7 @@ from .operation import append_journal
 
 # Order fields whose change makes an order differ from what was authorised.
 MATERIAL_FIELDS = {"partner_id", "company_id", "currency_id", "dest_address_id", "order_line", "sm_op_ref", "sm_permit_digest", "sm_supplier_revision"}
-LINE_FIELDS = {"product_id", "product_qty", "price_unit", "taxes_id", "order_id", "display_type"}
+LINE_FIELDS = {"product_id", "product_qty", "product_uom", "price_unit", "taxes_id", "order_id", "display_type"}
 
 
 class PurchaseOrder(models.Model):

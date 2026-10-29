@@ -52,6 +52,17 @@ SUPPORTED_SERIES = "18.0"
 
 STATE_CONFIRMED = "purchase"
 
+# Odoo states that are a confirmed purchase. "done" is Odoo 18's Locked: a
+# confirmed order that the company's lock setting (po_lock = lock) or a user
+# has locked. It is reported to the engine as confirmed, so a locked order is
+# still FOUND and verified (R1-DEF-18, R1-DEF-19); the engine and the signed
+# evidence keep one confirmed value. Draft, to approve and cancelled are not.
+CONFIRMED_ODOO_STATES = ("purchase", "done")
+
+
+def reported_state(po):
+    return STATE_CONFIRMED if po.state in CONFIRMED_ODOO_STATES else po.state
+
 # Structured refusal for an action outside the configured scope (mapping
 # missing, other currency, approval not one step, amount not the sum of the
 # lines). Decided before CREATE_INTENT and written with a BLOCK, so it can
@@ -115,14 +126,18 @@ def order_facts(po):
     lines = []
     for ln in po.order_line.filtered(lambda l: not l.display_type).sorted(lambda l: (l.sequence, l.id)):
         qty = ln.product_qty
+        # Quantities are authorised in the product's base unit (R1-DEF-22). A
+        # line in any other unit (a purchase unit such as Dozens, or an edit)
+        # or a fractional quantity never matches.
+        in_base_unit = ln.product_uom == ln.product_id.uom_id
         lines.append({
             "item_ref": ln.product_id.sm_ref or "",
-            "quantity": int(qty) if qty == int(qty) else -1,  # a fractional quantity never matches
+            "quantity": int(qty) if in_base_unit and qty == int(qty) else -1,
             "unit_price_minor": minor(ln.price_unit, cur),
         })
     return {
         "id": po.name,
-        "state": po.state,
+        "state": reported_state(po),
         "company_ref": po.company_id.sm_ref or "",
         "delivery_ref": po.dest_address_id.sm_ref or "",
         "supplier_ref": po.partner_id.sm_ref or "",
@@ -361,6 +376,10 @@ class SteelmatterApi(models.AbstractModel):
                 "product_id": prod.id,
                 "name": prod.display_name,
                 "product_qty": ln["quantity"],
+                # The authorised quantity and price are per base unit. Without
+                # this Odoo uses the product's purchase unit, so 10 would mean
+                # 10 Dozens (R1-DEF-22).
+                "product_uom": prod.uom_id.id,
                 "price_unit": ln["unit_price_minor"] / 10 ** cur.decimal_places,
                 "taxes_id": [(6, 0, [])],
             }) for prod, ln in zip(scope["products"], a["lines"])],
@@ -451,7 +470,7 @@ class SteelmatterApi(models.AbstractModel):
             if not po_id:
                 return self._result(env, op_ref, "lookup", "MISMATCH", "ORDER_DELETED")
             po = env["purchase.order"].browse(po_id)
-            outcome = "FOUND" if po.state == STATE_CONFIRMED else "MISMATCH"
+            outcome = "FOUND" if po.state in CONFIRMED_ODOO_STATES else "MISMATCH"
             return self._result(env, op_ref, "lookup", outcome)
         finally:
             cr.rollback()
