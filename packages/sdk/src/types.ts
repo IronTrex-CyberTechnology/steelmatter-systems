@@ -379,6 +379,8 @@ export interface DispatchResult {
   execution: DispatchExecution;
   last_outcome?: string;
   destination_order?: string;
+  /** A committed order that changed at the destination afterwards; the amount stays committed. */
+  flag?: 'ORDER_MISSING_AFTER_RESTORE' | 'ORDER_DELETED_AT_DESTINATION' | 'ORDER_CHANGED_AT_DESTINATION';
 }
 
 export interface FindingRequest {

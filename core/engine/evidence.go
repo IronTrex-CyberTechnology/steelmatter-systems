@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/auth"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/failpoint"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/observer"
@@ -298,7 +299,28 @@ func (e *Engine) observe(ctx context.Context, tenant, operationID string, firstO
 	if err != nil || !stored {
 		return nil, err
 	}
+	// R1-DEF-13: a committed order that no longer matches the authorised
+	// action (edited or cancelled in Odoo) is flagged on the operation, so
+	// operators see it outside the evidence too. The amount stays committed.
+	if external && r.Status == "MISMATCH" {
+		if err := e.flagChangedFromReadback(ctx, tenant, operationID); err != nil {
+			return nil, err
+		}
+	}
 	return r, nil
+}
+
+func (e *Engine) flagChangedFromReadback(ctx context.Context, tenant, opRef string) error {
+	o := engineOp{tenant: tenant, opRef: opRef}
+	if err := e.Pool.QueryRow(ctx, `SELECT status, COALESCE(flag, ''), mandate_id, amount_minor FROM steelmatter.dispatches
+		WHERE tenant_id = $1 AND op_ref = $2`, tenant, opRef).Scan(&o.status, &o.flag, &o.mandate, &o.amount); err != nil {
+		return classify(err)
+	}
+	if o.status != DispatchCommitted || o.flag != "" {
+		return nil
+	}
+	_, err := e.flagCommittedAs(ctx, o, connector.Result{OpRef: opRef, Outcome: connector.Outcome("ORDER_CHANGED")}, FlagOrderChangedAtDestination)
+	return err
 }
 
 // observerKeyCurrent refuses when the observer's signing key is retired or

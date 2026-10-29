@@ -34,7 +34,12 @@ type DispatchResult struct {
 	Execution        string `json:"execution"`
 	LastOutcome      string `json:"last_outcome,omitempty"`
 	DestinationOrder string `json:"destination_order,omitempty"`
-	Created          bool   `json:"-"`
+	// Flag marks a committed operation whose order changed at the
+	// destination afterwards: ORDER_MISSING_AFTER_RESTORE,
+	// ORDER_DELETED_AT_DESTINATION or ORDER_CHANGED_AT_DESTINATION. The
+	// amount stays committed; an operator records a finding.
+	Flag    string `json:"flag,omitempty"`
+	Created bool   `json:"-"`
 }
 
 // Dispatch records R1 dispatch intent for the exact permitted action. It runs
@@ -217,11 +222,11 @@ func (e *Engine) priorIntent(ctx context.Context, tenant, opRef string) (*anchor
 	return nil, nil
 }
 
-const dispatchCols = `op_ref, instruction_id, action_revision, action_digest, status, COALESCE(last_outcome, ''), COALESCE(destination_order, '')`
+const dispatchCols = `op_ref, instruction_id, action_revision, action_digest, status, COALESCE(last_outcome, ''), COALESCE(destination_order, ''), COALESCE(flag, '')`
 
 func scanDispatch(row pgx.Row) (*DispatchResult, error) {
 	var r DispatchResult
-	err := row.Scan(&r.OpRef, &r.InstructionID, &r.ActionRevision, &r.ActionDigest, &r.Execution, &r.LastOutcome, &r.DestinationOrder)
+	err := row.Scan(&r.OpRef, &r.InstructionID, &r.ActionRevision, &r.ActionDigest, &r.Execution, &r.LastOutcome, &r.DestinationOrder, &r.Flag)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

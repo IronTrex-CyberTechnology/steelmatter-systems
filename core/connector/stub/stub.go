@@ -38,7 +38,8 @@ type record struct {
 	digest  string
 	order   *connector.Order
 	seq     int64
-	deleted bool // the order was deleted at the destination (po_deleted)
+	deleted bool   // the order was deleted at the destination (po_deleted)
+	event   string // latest journal event for the order (po_edited, po_cancelled)
 }
 
 // memProof is the default in-memory restore-proof record. It survives
@@ -628,6 +629,35 @@ func (s *Stub) DeleteOrder(opRef string) bool {
 	return true
 }
 
+// EditOrder changes the committed order for opRef as an Odoo administrator
+// can (the journal records po_edited).
+func (s *Stub) EditOrder(opRef string, change func(*connector.Order)) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec := s.ops[opRef]
+	if rec == nil || rec.state != Created || rec.order == nil {
+		return false
+	}
+	change(rec.order)
+	s.seq++
+	rec.event, rec.seq = "po_edited", s.seq
+	return true
+}
+
+// CancelOrder cancels the committed order for opRef (po_cancelled).
+func (s *Stub) CancelOrder(opRef string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec := s.ops[opRef]
+	if rec == nil || rec.state != Created || rec.order == nil {
+		return false
+	}
+	rec.order.State = "cancel"
+	s.seq++
+	rec.event, rec.seq = "po_cancelled", s.seq
+	return true
+}
+
 // SetOutOfScope makes the module refuse opRef as out of its configured scope
 // with reason (for example CURRENCY_OUT_OF_SCOPE), as Kaif's module does
 // before writing CREATE_INTENT.
@@ -719,6 +749,7 @@ func (s *Stub) List(_ context.Context, checkpointSeq int64, limit int) (connecto
 			continue
 		}
 		row := connector.ListRow{Seq: rec.seq, OpRef: op, State: string(rec.state), PermitDigest: rec.digest, Tombstoned: rec.state == Fenced || rec.state == Refused}
+		row.Event = rec.event
 		if rec.deleted {
 			row.Event = "po_deleted"
 		}

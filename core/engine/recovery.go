@@ -33,6 +33,11 @@ const (
 	// was deleted at the destination; the journal records the deletion, so
 	// it is not a restore and writes stay on (R1-DEF-20).
 	FlagOrderDeletedAtDestination = "ORDER_DELETED_AT_DESTINATION"
+	// FlagOrderChangedAtDestination marks a committed operation whose order
+	// was edited or cancelled at the destination after it was committed: the
+	// journal records po_edited or po_cancelled, or the observer's readback
+	// no longer matches. Not a restore; writes stay on; no refund (R1-DEF-13).
+	FlagOrderChangedAtDestination = "ORDER_CHANGED_AT_DESTINATION"
 	systemTenant                  = "_system"
 	writesDisabledEvent           = "system.writes_disabled"
 	writesEnabledEvent            = "system.writes_enabled"
@@ -262,15 +267,29 @@ func (v *recoveryView) unconfirmedOps() []string {
 func (e *Engine) flagDeletedOrders(ctx context.Context, v *recoveryView) ([]string, error) {
 	out := []string{}
 	keys := make([]dispKey, 0)
+	flags := map[dispKey]string{}
 	for k, o := range v.ops {
-		if o.status == DispatchCommitted && o.flag == "" && v.deletedAtDestination(k[1]) {
-			keys = append(keys, k)
+		if o.status != DispatchCommitted {
+			continue
 		}
+		switch {
+		case v.deletedAtDestination(k[1]) && (o.flag == "" || o.flag == FlagOrderChangedAtDestination):
+			flags[k] = FlagOrderDeletedAtDestination
+		case v.changedAtDestination(k[1]) && o.flag == "":
+			flags[k] = FlagOrderChangedAtDestination // R1-DEF-13
+		default:
+			continue
+		}
+		keys = append(keys, k)
 	}
 	sort.Slice(keys, func(i, j int) bool { return keys[i][1] < keys[j][1] })
 	for _, k := range keys {
-		r := connector.Result{OpRef: k[1], Outcome: connector.Outcome("ORDER_DELETED"), Seq: v.dest[k[1]].Seq}
-		flagged, err := e.flagCommittedAs(ctx, v.ops[k], r, FlagOrderDeletedAtDestination)
+		outcome := "ORDER_DELETED"
+		if flags[k] == FlagOrderChangedAtDestination {
+			outcome = "ORDER_CHANGED"
+		}
+		r := connector.Result{OpRef: k[1], Outcome: connector.Outcome(outcome), Seq: v.dest[k[1]].Seq}
+		flagged, err := e.flagCommittedAs(ctx, v.ops[k], r, flags[k])
 		if err != nil {
 			return out, err
 		}
@@ -285,6 +304,13 @@ func (e *Engine) flagDeletedOrders(ctx context.Context, v *recoveryView) ([]stri
 // row for op records that its order was deleted there (not a restore).
 func (v *recoveryView) deletedAtDestination(op string) bool {
 	return v.dest[op].Event == "po_deleted"
+}
+
+// changedAtDestination reports whether the destination journal's latest row
+// for op records an edit or a cancellation of its order (R1-DEF-13).
+func (v *recoveryView) changedAtDestination(op string) bool {
+	ev := v.dest[op].Event
+	return ev == "po_edited" || ev == "po_cancelled"
 }
 
 // orderPresent reports whether the destination journal holds a created
@@ -719,8 +745,10 @@ func (e *Engine) flagCommittedAs(ctx context.Context, o engineOp, r connector.Re
 		if _, err := lockMandate(ctx, tx, o.tenant, o.mandate, "FOR UPDATE"); err != nil {
 			return err
 		}
+		// A flag is set once; only a deletion may replace a change flag.
 		tag, err := tx.Exec(ctx, `UPDATE steelmatter.dispatches SET flag = $3, updated_at = clock_timestamp()
-			WHERE tenant_id = $1 AND op_ref = $2 AND status = 'COMMITTED' AND flag IS NULL`, o.tenant, o.opRef, flag)
+			WHERE tenant_id = $1 AND op_ref = $2 AND status = 'COMMITTED'
+			AND (flag IS NULL OR (flag = 'ORDER_CHANGED_AT_DESTINATION' AND $3 = 'ORDER_DELETED_AT_DESTINATION'))`, o.tenant, o.opRef, flag)
 		if err != nil || tag.RowsAffected() == 0 {
 			return err
 		}
@@ -821,6 +849,12 @@ func (e *Engine) TryResume(ctx context.Context, c connector.Connector) (*GateRep
 			// its operation row, so the op_ref can never be created again.
 			if !v.findings[k] {
 				held = append(held, k[1]+": order deleted at the destination without a recorded finding")
+			}
+		case o.flag == FlagOrderChangedAtDestination:
+			// Edited or cancelled at the destination (R1-DEF-13): stays
+			// committed; an operator records what happened.
+			if !v.findings[k] {
+				held = append(held, k[1]+": order changed at the destination without a recorded finding")
 			}
 		case o.flag != "":
 			if !v.proofs[k[1]].Blocked {

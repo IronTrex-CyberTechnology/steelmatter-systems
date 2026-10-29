@@ -1263,6 +1263,12 @@ components:
         execution: { type: string, enum: [PENDING, UNRESOLVED, COMMITTED, FENCED, MISMATCH, HELD] }
         last_outcome: { type: string, maxLength: 64, description: Last connector outcome code (D1). }
         destination_order: { type: string, maxLength: 128, description: Destination order reference once committed. }
+        flag:
+          type: string
+          enum: [ORDER_MISSING_AFTER_RESTORE, ORDER_DELETED_AT_DESTINATION, ORDER_CHANGED_AT_DESTINATION]
+          description: >-
+            Set on a committed operation whose order changed at the destination afterwards (lost in a restore,
+            deleted, or edited or cancelled). The amount stays committed; record a finding.
     FindingRequest:
       type: object
       additionalProperties: false

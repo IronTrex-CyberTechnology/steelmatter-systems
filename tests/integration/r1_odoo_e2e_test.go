@@ -613,6 +613,30 @@ func TestR1OdooEndToEnd(t *testing.T) {
 		r.evidence(t, p.operation)
 	})
 
+	t.Run("R1-DEF-13: an order edited or cancelled in Odoo is flagged; it stays committed and writes stay on", func(t *testing.T) {
+		for _, action := range []string{"edit", "cancel"} {
+			base := r.e.buckets(r.mandate)
+			p := r.order(t)
+			mustDispatch(t, r.e, p)
+			requireExecution(t, "commit", r.settle(t, p.operation), engine.DispatchCommitted)
+			changeOdooOrder(t, p.operation, action)
+			rep := r.check(t)
+			if rep.WritesDisabled || len(rep.Signals) != 0 {
+				t.Fatalf("%s: an Odoo change was taken for a restore: %+v", action, rep)
+			}
+			found := false
+			for _, op := range rep.Flagged {
+				found = found || op == p.operation
+			}
+			d, err := r.e.eng.GetDispatch(ctx, tenant, p.operation)
+			if err != nil || !found || d.Flag != engine.FlagOrderChangedAtDestination || d.Execution != engine.DispatchCommitted {
+				t.Fatalf("%s: flagged %v, dispatch %+v %v", action, rep.Flagged, d, err)
+			}
+			r.outcome(t, p.operation, base, 1, sixL, 0)
+			r.evidence(t, p.operation)
+		}
+	})
+
 	// R1 decision 1 (D1 v1.4, R1-DEF-21/22): one dozen desks at ₹72,000 a
 	// dozen with the 18% GST configured on the product. The engine authorises
 	// and holds the full total; Odoo creates the order in dozens with exactly
