@@ -107,30 +107,41 @@ class SteelmatterApiCoverage(models.AbstractModel):
                                      MODULE_VERSION, release.version, "" if module["supported"] else " (unsupported series)")))
 
         # --- people and keys that can make or change orders directly -----
-        direct = []
+        # The module refuses purchase-order writes from everyone but its own
+        # execution path and administrators (R1 decision 6, R1-DEF-10). Users
+        # whose Odoo groups would otherwise allow it are listed as blocked;
+        # administrators keep the ability and are the unprotected route.
+        direct, blocked = [], []
         for u in users - steelmatter_users:
             c, w = can(u, "purchase.order", "create"), can(u, "purchase.order", "write")
             if c or w:
-                direct.append({"login": u.login, "name": u.name, "create": c, "confirm_or_edit": w,
-                               "groups": sorted(g.full_name for g in u.groups_id if g.full_name.startswith(("Purchase", "Administration", "Inventory")))})
+                entry = {"login": u.login, "name": u.name, "create": c, "confirm_or_edit": w,
+                         "groups": sorted(g.full_name for g in u.groups_id if g.full_name.startswith(("Purchase", "Administration", "Inventory")))}
+                (direct if u.has_group("base.group_system") else blocked).append(entry)
         direct.sort(key=lambda s: s["login"])
+        blocked.sort(key=lambda s: s["login"])
         routes.append(_route(
             "direct_users", "Odoo users who can create or confirm purchase orders without Steelmatter",
             UNPROTECTED if direct else ENFORCED,
-            ("granted by: create %s; write %s" % (", ".join(granting_groups("purchase.order", "create")) or "none",
-                                                  ", ".join(granting_groups("purchase.order", "write")) or "none"))
-            if direct else "no internal user outside the Steelmatter identities has create or write access to purchase orders",
+            ("administrators only; %d other users with purchase rights are refused by the module" % len(blocked)) if direct
+            else "no one: %d users with purchase rights are refused by the module" % len(blocked),
             subjects=direct, count=len(direct)))
+        routes[-1]["blocked_by_module"] = blocked
 
         keyed = []
         for u in users - steelmatter_users:
             n = env["res.users.apikeys"].search_count([("user_id", "=", u.id)])
-            if n and (can(u, "purchase.order", "create") or can(u, "purchase.order", "write")):
+            if n and u.has_group("base.group_system"):
                 keyed.append({"login": u.login, "api_keys": n})
-        routes.append(_route("api_keys", "API keys of users who can create or confirm purchase orders",
+        routes.append(_route("api_keys", "API keys of administrators (the only users who can write purchase orders)",
                              UNPROTECTED if keyed else ENFORCED,
                              "an integration holding one of these keys writes orders without Steelmatter" if keyed
                              else "none found", subjects=keyed, count=len(keyed)))
+
+        companies = env["res.company"].search_count([])
+        routes.append(_route("single_company", "One Odoo company per deployment", ENFORCED if companies == 1 else UNKNOWN,
+                             "one company" if companies == 1
+                             else "%d companies: Steelmatter refuses every create until there is one" % companies, count=companies))
 
         admins = [{"login": u.login, "name": u.name} for u in users if u.has_group("base.group_system")]
         routes.append(_route("administrators", "Odoo administrators (Settings)", UNPROTECTED,

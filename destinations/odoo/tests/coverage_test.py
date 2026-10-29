@@ -11,7 +11,7 @@ import unittest
 import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sandbox_client import action, admin, executor, observer, odoo_sql  # noqa: E402
+from sandbox_client import Identity, RPCError, action, admin, executor, observer, odoo_sql  # noqa: E402
 
 RUN = uuid.uuid4().hex[:8]
 EXECUTOR = OBSERVER = ADMIN = None
@@ -68,20 +68,26 @@ class Baseline(unittest.TestCase):
 
 
 class Bypasses(unittest.TestCase):
-    def test_a_new_purchase_user_is_unprotected(self):
-        login = "buyer-%s" % RUN
+    def test_a_purchase_user_is_blocked_by_the_module(self):
+        # R1 decision 6 / R1-DEF-10: only Steelmatter writes purchase orders.
+        # A user Odoo would let buy is refused by the module and reported as
+        # blocked, not as a route around Steelmatter.
+        login, pw = "buyer-%s" % RUN, uuid.uuid4().hex
         uid = ADMIN.call("res.users", "create", {"login": login, "name": "Synthetic buyer", "email": login + "@example.invalid",
-                                                 "groups_id": [(6, 0, [xmlid("purchase", "group_purchase_user")])]},
+                                                 "password": pw, "groups_id": [(6, 0, [xmlid("purchase", "group_purchase_user")])]},
                          context={"no_reset_password": True})
         try:
             r = route(coverage(), "direct_users")
-            self.assertEqual(r["posture"], "unprotected")
-            me = [s for s in r["subjects"] if s["login"] == login]
+            self.assertNotIn(login, [s["login"] for s in r["subjects"]], "a blocked user is not a route")
+            me = [s for s in r["blocked_by_module"] if s["login"] == login]
             self.assertTrue(me and me[0]["create"] and me[0]["confirm_or_edit"], r)
             self.assertIn("Purchase / User", me[0]["groups"])
+            buyer = Identity(login, pw)
+            partner = ADMIN.call("res.partner", "search", [("sm_ref", "=", "sup-desks")])[0]
+            with self.assertRaises(RPCError):
+                buyer.call("purchase.order", "create", {"partner_id": partner})
         finally:
             ADMIN.call("res.users", "write", [uid], {"active": False})
-        self.assertNotIn(login, [s["login"] for s in route(coverage(), "direct_users")["subjects"]])
 
     def test_executor_with_purchase_rights_is_flagged(self):
         uid, gid = user_id("sm_executor"), xmlid("purchase", "group_purchase_user")

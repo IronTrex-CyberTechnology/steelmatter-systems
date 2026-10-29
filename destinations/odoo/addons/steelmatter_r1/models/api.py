@@ -47,10 +47,21 @@ from .purchase import minor
 
 EXECUTOR = "steelmatter_r1.group_executor"
 OBSERVER = "steelmatter_r1.group_observer"
-MODULE_VERSION = "18.0.0.1.0"
+MODULE_VERSION = "18.0.0.2.0"  # D1 v1.4: units, taxes, full total, delivery revision
 SUPPORTED_SERIES = "18.0"
 
 STATE_CONFIRMED = "purchase"
+
+# Odoo states that are a confirmed purchase. "done" is Odoo 18's Locked: a
+# confirmed order that the company's lock setting (po_lock = lock) or a user
+# has locked. It is reported to the engine as confirmed, so a locked order is
+# still FOUND and verified (R1-DEF-18, R1-DEF-19); the engine and the signed
+# evidence keep one confirmed value. Draft, to approve and cancelled are not.
+CONFIRMED_ODOO_STATES = ("purchase", "done")
+
+
+def reported_state(po):
+    return STATE_CONFIRMED if po.state in CONFIRMED_ODOO_STATES else po.state
 
 # Structured refusal for an action outside the configured scope (mapping
 # missing, other currency, approval not one step, amount not the sum of the
@@ -105,41 +116,95 @@ def _check_action(action):
         if not isinstance(ln, dict) or not isinstance(ln.get("item_ref"), str) \
                 or not all(isinstance(ln.get(k), int) and not isinstance(ln.get(k), bool) for k in ("quantity", "unit_price_minor")):
             raise ValueError("action.lines entries need item_ref, quantity and unit_price_minor")
+        if not isinstance(ln.get("unit_ref", ""), str):
+            raise ValueError("action.lines unit_ref must be a string")
+        taxes = ln.get("tax_refs", [])
+        if not isinstance(taxes, list) or not all(isinstance(t, str) and t for t in taxes) or taxes != sorted(set(taxes)):
+            raise ValueError("action.lines tax_refs must be a sorted list of distinct tax refs")
+    # D1 v1.4, optional until every engine sends them (None = not sent).
+    for k in ("amount_untaxed_minor", "tax_minor", "delivery_revision"):
+        v = action.get(k)
+        if v is not None and (not isinstance(v, int) or isinstance(v, bool)):
+            raise ValueError("action.%s must be an integer" % k)
+    if (action.get("amount_untaxed_minor") is None) != (action.get("tax_minor") is None):
+        raise ValueError("action.amount_untaxed_minor and action.tax_minor go together")
     return action
+
+
+def _line_unit(ln):
+    """The unit a line was authorised in: its stored unit ref, or the
+    product's base unit when it has none ("" = base unit, D1 v1.4)."""
+    ref = ln.sm_unit_ref or ""
+    if not ref:
+        return ln.product_id.uom_id
+    return ln.env["uom.uom"].sudo().with_context(active_test=False).search([("sm_ref", "=", ref)], limit=1)
+
+
+def _line_facts(ln, cur):
+    qty = ln.product_qty
+    # Quantities are in the authorised unit, never converted (R1-DEF-22): a
+    # line whose unit was changed after authorisation, or a fractional
+    # quantity, never matches.
+    in_unit = ln.product_uom == _line_unit(ln)
+    out = {
+        "item_ref": ln.product_id.sm_ref or "",
+        "quantity": int(qty) if in_unit and qty == int(qty) else -1,
+        "unit_price_minor": minor(ln.price_unit, cur),
+    }
+    if ln.sm_unit_ref:
+        out["unit_ref"] = ln.sm_unit_ref
+    taxes = sorted(t.sm_ref or "unmapped-tax-%d" % t.id for t in ln.taxes_id)
+    if taxes:
+        out["tax_refs"] = taxes
+    return out
 
 
 def order_facts(po):
     """The destination facts the engine verifies against the authorised
     action (connector.Order)."""
     cur = po.currency_id
-    lines = []
-    for ln in po.order_line.filtered(lambda l: not l.display_type).sorted(lambda l: (l.sequence, l.id)):
-        qty = ln.product_qty
-        lines.append({
-            "item_ref": ln.product_id.sm_ref or "",
-            "quantity": int(qty) if qty == int(qty) else -1,  # a fractional quantity never matches
-            "unit_price_minor": minor(ln.price_unit, cur),
-        })
+    lines = [_line_facts(ln, cur)
+             for ln in po.order_line.filtered(lambda l: not l.display_type).sorted(lambda l: (l.sequence, l.id))]
     return {
         "id": po.name,
-        "state": po.state,
+        "state": reported_state(po),
         "company_ref": po.company_id.sm_ref or "",
         "delivery_ref": po.dest_address_id.sm_ref or "",
         "supplier_ref": po.partner_id.sm_ref or "",
         "supplier_revision": po.sm_supplier_revision,
+        "delivery_revision": po.sm_delivery_revision,
         "lines": lines,
-        "amount_minor": minor(po.amount_total, cur),
+        "amount_untaxed_minor": minor(po.amount_untaxed, cur),
+        "tax_minor": minor(po.amount_tax, cur),
+        "amount_minor": minor(po.amount_total, cur),  # full total including tax
         "currency": cur.name,
         "permit_digest": po.sm_permit_digest or "",
     }
 
 
+def _expected_lines(action):
+    out = []
+    for l in action["lines"]:
+        e = {"item_ref": l["item_ref"], "quantity": l["quantity"], "unit_price_minor": l["unit_price_minor"]}
+        if l.get("unit_ref"):
+            e["unit_ref"] = l["unit_ref"]
+        if l.get("tax_refs"):
+            e["tax_refs"] = list(l["tax_refs"])
+        out.append(e)
+    return out
+
+
 def _same_order(facts, action):
+    if action.get("amount_untaxed_minor") is not None and (
+            facts["amount_untaxed_minor"] != action["amount_untaxed_minor"] or facts["tax_minor"] != action["tax_minor"]):
+        return False
+    if action.get("delivery_revision") is not None and facts["delivery_revision"] != action["delivery_revision"]:
+        return False
     return (facts["company_ref"] == action["company_ref"] and facts["delivery_ref"] == action["delivery_ref"]
-            and facts["supplier_ref"] == action["supplier_ref"] and facts["supplier_revision"] == action["supplier_revision"] and facts["amount_minor"] == action["amount_minor"]
+            and facts["supplier_ref"] == action["supplier_ref"] and facts["supplier_revision"] == action["supplier_revision"]
+            and facts["amount_minor"] == action["amount_minor"]
             and facts["currency"] == action["currency"] and facts["permit_digest"] == action["permit_digest"]
-            and facts["lines"] == [{"item_ref": l["item_ref"], "quantity": l["quantity"], "unit_price_minor": l["unit_price_minor"]}
-                                   for l in action["lines"]])
+            and facts["lines"] == _expected_lines(action))
 
 
 class SteelmatterApi(models.AbstractModel):
@@ -298,6 +363,22 @@ class SteelmatterApi(models.AbstractModel):
             anchor.append(anchor.BLOCK, op_ref, {"op_ref": op_ref, "reason": "supplier stale"})
             self._decide(env, op, "refused", "supplier stale", a["permit_digest"])
             return "REFUSED_SUPPLIER_STALE", "", None
+        # The delivery address is protected the same way (R1 decision 2,
+        # R1-DEF-11): a change after authorisation needs a fresh one. Same
+        # refusal as a stale supplier, with its own reason.
+        cr.execute("SELECT sm_revision FROM res_partner WHERE id = %s FOR SHARE", [scope["delivery"].id])
+        delivery_rev = cr.fetchone()[0]
+        scope["delivery"].invalidate_recordset(["sm_revision"])
+        if a.get("delivery_revision") is not None and delivery_rev != a["delivery_revision"]:
+            anchor.append(anchor.BLOCK, op_ref, {"op_ref": op_ref, "reason": "delivery address stale"})
+            self._decide(env, op, "refused", "delivery address stale", a["permit_digest"])
+            return "REFUSED_SUPPLIER_STALE", "DELIVERY_CHANGED", None
+        try:
+            self._check_totals(env, a, scope)
+        except _OutOfScope as e:
+            anchor.append(anchor.BLOCK, op_ref, {"op_ref": op_ref, "reason": "out of scope: " + e.reason})
+            self._decide(env, op, "refused", e.reason, a["permit_digest"])
+            return REFUSED_OUT_OF_SCOPE, e.reason, None
         # Written before the create commits. If it fails the transaction rolls
         # back and the answer is UNAVAILABLE, never "not sent".
         anchor.append(anchor.CREATE_INTENT, op_ref, {
@@ -317,7 +398,9 @@ class SteelmatterApi(models.AbstractModel):
 
     def _resolve(self, env, a):
         """Maps the engine refs and checks the configured scope. Runs before
-        CREATE_INTENT, so a refusal here carries prior_create = false."""
+        CREATE_INTENT, so a refusal here carries prior_create = false.
+        Unsupported configurations are refused, never adjusted: no quantity is
+        converted and no tax is dropped (R1 decision 1)."""
 
         def one(model, domain, what):
             recs = env[model].search(domain, limit=2)
@@ -325,6 +408,9 @@ class SteelmatterApi(models.AbstractModel):
                 raise _OutOfScope("MAPPING_MISSING:" + what)
             return recs
 
+        # One Odoo company per deployment (R1 decision 6).
+        if env["res.company"].sudo().search_count([]) != 1:
+            raise _OutOfScope("MULTI_COMPANY")
         company = one("res.company", [("sm_ref", "=", a["company_ref"])], "company")
         if company.po_double_validation != "one_step":
             raise _OutOfScope("APPROVAL_NOT_ONE_STEP")
@@ -333,23 +419,47 @@ class SteelmatterApi(models.AbstractModel):
         currency = env["res.currency"].search([("name", "=", a["currency"])], limit=1)
         if not currency or currency != company.currency_id:
             raise _OutOfScope("CURRENCY_OUT_OF_SCOPE")
-        products = []
-        total = 0
+        if env["account.fiscal.position"].with_company(company)._get_fiscal_position(supplier):
+            # A fiscal position would map the authorised taxes to others.
+            raise _OutOfScope("FISCAL_POSITION_NOT_SUPPORTED")
+        lines = []
+        untaxed = 0
         for ln in a["lines"]:
             if ln["quantity"] <= 0 or ln["unit_price_minor"] < 0:
                 raise _OutOfScope("LINE_OUT_OF_SCOPE")
             prod = one("product.product", [("sm_ref", "=", ln["item_ref"]), ("purchase_ok", "=", True),
                                            ("company_id", "in", [False, company.id])], "item")
-            products.append(prod)
-            total += ln["quantity"] * ln["unit_price_minor"]
-        if total != a["amount_minor"]:
+            unit = prod.uom_id
+            if ln.get("unit_ref"):
+                unit = one("uom.uom", [("sm_ref", "=", ln["unit_ref"])], "unit")
+                if unit.category_id != prod.uom_id.category_id:
+                    raise _OutOfScope("UNIT_NOT_SUPPORTED")
+            taxes = env["account.tax"]
+            for ref in ln.get("tax_refs") or []:
+                taxes |= one("account.tax", [("sm_ref", "=", ref), ("type_tax_use", "=", "purchase"),
+                                              ("company_id", "=", company.id)], "tax")
+            configured = prod.supplier_taxes_id.filtered(lambda t: t.company_id == company)
+            if taxes != configured:
+                # The product's configured purchase taxes must be exactly the
+                # authorised ones: a tax is never dropped or added.
+                raise _OutOfScope("TAX_NOT_AUTHORISED")
+            for t in taxes:
+                if t.amount_type not in ("percent", "fixed") or t.price_include or t.include_base_amount:
+                    raise _OutOfScope("TAX_NOT_SUPPORTED")
+            lines.append({"product": prod, "unit": unit, "taxes": taxes, "line": ln})
+            untaxed += ln["quantity"] * ln["unit_price_minor"]
+        if a.get("amount_untaxed_minor") is None:
+            # An engine older than D1 v1.4: an untaxed order whose lines add
+            # up to the held amount.
+            if any(l["taxes"] for l in lines) or untaxed != a["amount_minor"]:
+                raise _OutOfScope("AMOUNT_NOT_SUM_OF_LINES" if untaxed != a["amount_minor"] else "TAX_NOT_AUTHORISED")
+        elif untaxed != a["amount_untaxed_minor"] or a["amount_untaxed_minor"] + a["tax_minor"] != a["amount_minor"]:
             raise _OutOfScope("AMOUNT_NOT_SUM_OF_LINES")
-        return {"company": company, "supplier": supplier, "delivery": delivery, "currency": currency, "products": products}
+        return {"company": company, "supplier": supplier, "delivery": delivery, "currency": currency, "lines": lines}
 
-    def _create_order(self, env, a, scope):
+    def _order_vals(self, a, scope):
         cur = scope["currency"]
-        env = env(context=dict(env.context, allowed_company_ids=[scope["company"].id]))
-        po = env["purchase.order"].with_company(scope["company"]).create({
+        return {
             "company_id": scope["company"].id,
             "partner_id": scope["supplier"].id,
             "dest_address_id": scope["delivery"].id,
@@ -357,14 +467,52 @@ class SteelmatterApi(models.AbstractModel):
             "sm_op_ref": a["op_ref"],
             "sm_permit_digest": a["permit_digest"],
             "sm_supplier_revision": a["supplier_revision"],
+            "sm_delivery_revision": scope["delivery"].sm_revision,
             "order_line": [(0, 0, {
-                "product_id": prod.id,
-                "name": prod.display_name,
-                "product_qty": ln["quantity"],
-                "price_unit": ln["unit_price_minor"] / 10 ** cur.decimal_places,
-                "taxes_id": [(6, 0, [])],
-            }) for prod, ln in zip(scope["products"], a["lines"])],
-        })
+                "product_id": l["product"].id,
+                "name": l["product"].display_name,
+                "product_qty": l["line"]["quantity"],
+                # The authorised unit, never the product's purchase unit: 10
+                # never becomes 10 Dozens (R1-DEF-22).
+                "product_uom": l["unit"].id,
+                "sm_unit_ref": l["line"].get("unit_ref") or "",
+                "price_unit": l["line"]["unit_price_minor"] / 10 ** cur.decimal_places,
+                # Exactly the authorised taxes (R1-DEF-21).
+                "taxes_id": [(6, 0, l["taxes"].ids)],
+            }) for l in scope["lines"]],
+        }
+
+    def _create_env(self, env, scope):
+        return env(context=dict(env.context, allowed_company_ids=[scope["company"].id]))
+
+    def _check_totals(self, env, a, scope):
+        """Odoo's own untaxed amount, tax and total for exactly these lines
+        must equal the authorised figures (R1 decision 1). Computed by
+        building the order in a savepoint that is always rolled back, so
+        Odoo's rounding is what is compared. Runs before CREATE_INTENT."""
+        if not any(l["taxes"] for l in scope["lines"]):
+            return
+        cur = scope["currency"]
+
+        class _Probe(Exception):
+            pass
+
+        got = None
+        try:
+            with env.cr.savepoint():
+                cenv = self._create_env(env, scope)
+                po = cenv["purchase.order"].with_company(scope["company"]).create(self._order_vals(a, scope))
+                po.flush_recordset()
+                got = (minor(po.amount_untaxed, cur), minor(po.amount_tax, cur), minor(po.amount_total, cur))
+                raise _Probe()
+        except _Probe:
+            pass
+        env.invalidate_all()
+        if got != (a["amount_untaxed_minor"], a["tax_minor"], a["amount_minor"]):
+            raise _OutOfScope("TOTAL_DIFFERS_FROM_ODOO")
+
+    def _create_order(self, env, a, scope):
+        po = self._create_env(env, scope)["purchase.order"].with_company(scope["company"]).create(self._order_vals(a, scope))
         po.button_confirm()
         return po
 
@@ -451,7 +599,7 @@ class SteelmatterApi(models.AbstractModel):
             if not po_id:
                 return self._result(env, op_ref, "lookup", "MISMATCH", "ORDER_DELETED")
             po = env["purchase.order"].browse(po_id)
-            outcome = "FOUND" if po.state == STATE_CONFIRMED else "MISMATCH"
+            outcome = "FOUND" if po.state in CONFIRMED_ODOO_STATES else "MISMATCH"
             return self._result(env, op_ref, "lookup", outcome)
         finally:
             cr.rollback()
@@ -495,6 +643,8 @@ class SteelmatterApi(models.AbstractModel):
             scope = self._resolve(env, a)
             if scope["supplier"].commercial_partner_id.sm_revision != a["supplier_revision"]:
                 res.update(outcome="NOT_READY", reason="SUPPLIER_CHANGED")
+            elif a.get("delivery_revision") is not None and scope["delivery"].sm_revision != a["delivery_revision"]:
+                res.update(outcome="NOT_READY", reason="DELIVERY_CHANGED")
             else:
                 anchor.proof(a["op_ref"])
         except _OutOfScope as e:

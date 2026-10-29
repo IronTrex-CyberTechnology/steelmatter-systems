@@ -570,7 +570,7 @@ func (s *Stub) Observe(_ context.Context, a connector.Action) (connector.Result,
 			r.Outcome = connector.Mismatch
 		} else {
 			for i := range a.Lines {
-				if o.Lines[i] != a.Lines[i] {
+				if !o.Lines[i].Equal(a.Lines[i]) {
 					r.Outcome = connector.Mismatch
 				}
 			}
