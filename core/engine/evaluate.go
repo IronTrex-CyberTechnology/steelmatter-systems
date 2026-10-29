@@ -440,8 +440,8 @@ func (e *Engine) checkDeliveryRevision(ctx context.Context, canonical []byte) er
 	if err := json.Unmarshal(canonical, &a); err != nil {
 		return err
 	}
-	if a.DeliveryRevision == nil {
-		return nil
+	if err := e.requireDeliveryRevision(&a); err != nil {
+		return err
 	}
 	cur, err := e.deliveryRevision(ctx, a.DeliveryID)
 	if err != nil {

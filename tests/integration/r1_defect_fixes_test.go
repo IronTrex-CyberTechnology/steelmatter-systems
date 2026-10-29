@@ -61,7 +61,7 @@ func (c claimsFenced) Fence(_ context.Context, opRef string, _ int64) (connector
 // reply claims a clean fence; the anchor's own destination stream records
 // the create attempt, so the operation is HELD and the amount stays held.
 func TestR1DEF09ForgedFenceOverExistingOrderIsHeld(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	mustDispatch(t, e, p)
@@ -77,7 +77,7 @@ func TestR1DEF09ForgedFenceOverExistingOrderIsHeld(t *testing.T) {
 // R1-DEF-09: a claimed fence the destination never recorded (no BLOCK in the
 // anchor) is not proof either: the amount stays held and the fence is retried.
 func TestR1DEF09ClaimedFenceWithoutAnchorBlockKeepsHold(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	mustDispatch(t, e, p)
@@ -109,7 +109,7 @@ func (s switchOffFirst) Execute(ctx context.Context, a connector.Action) (connec
 // the module's CREATE_INTENT, the destination fails closed, and the
 // operation is fenced and released later.
 func TestR1DEF14NoCreateAfterWritesOff(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	mustDispatch(t, e, p)
@@ -134,8 +134,9 @@ func TestR1DEF14NoCreateAfterWritesOff(t *testing.T) {
 // R1-DEF-12: with no connector configured, dispatch is refused with 503 and
 // nothing is consumed or moved.
 func TestR1DEF12DispatchWithoutConnectorChangesNothing(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
+	e.eng.Connector = nil
 	st, body := e.call("POST", "/v1/dispatches", "agent-a", dispatchBody(p))
 	requireStatus(t, "dispatch without connector", st, body, 503, "SERVICE_UNAVAILABLE")
 	requireBuckets(t, "nothing moved", e.buckets(p.mandate), r1Reserved)
@@ -157,7 +158,7 @@ func (failingTransport) Execute(context.Context, connector.Action) (connector.Re
 // R1-DEF-15: an unreachable anchor or destination is a retryable 503 on the
 // recovery endpoints and on settle, never a non-retryable 500.
 func TestR1DEF15DependencyOutagesAre503(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	e.httpOperators()
 	p := e.permitted()
@@ -190,7 +191,7 @@ func TestR1DEF15DependencyOutagesAre503(t *testing.T) {
 // R1-API-06: a principal who may not call an operator endpoint gets 403,
 // whatever the service configuration; 503 is only for operators.
 func TestR1API06RoleIsCheckedBeforeConfiguration(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	e.httpOperators()
 	for _, c := range []struct {
 		path string
@@ -216,7 +217,7 @@ func TestR1API06RoleIsCheckedBeforeConfiguration(t *testing.T) {
 // writes on; other purchases on the same mandate continue; the same
 // dispatch can be retried and commits once.
 func TestR1DEF06FailedDispatchCommitIsNotARestore(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	failpoint.Set(failpoint.DispatchBeforeCommit, func(context.Context) error { return failpoint.ErrInjected })
@@ -260,7 +261,7 @@ func TestR1DEF06FailedDispatchCommitIsNotARestore(t *testing.T) {
 // R1-DEF-06: reconciliation never consumes or fences an unconfirmed
 // dispatch's permit; the gate does not count it as a missing operation.
 func TestR1DEF06ReconcileLeavesUnconfirmedDispatchAlone(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	failpoint.Set(failpoint.DispatchBeforeCommit, func(context.Context) error { return failpoint.ErrInjected })
@@ -289,7 +290,7 @@ func TestR1DEF06ReconcileLeavesUnconfirmedDispatchAlone(t *testing.T) {
 // its own operation; it stays committed (no refund), writes stay on, other
 // purchases continue, and a HELD finding can be recorded.
 func TestR1DEF20DeletedOrderIsFlaggedWithoutOutage(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	mustDispatch(t, e, p)
@@ -331,7 +332,7 @@ func TestR1DEF20DeletedOrderIsFlaggedWithoutOutage(t *testing.T) {
 // R1-DEF-30: a reconciliation that reaches its time budget stops between
 // operations, says it is incomplete, and the next run finishes the work.
 func TestR1DEF30ReconcileStopsAtItsBudgetAndResumes(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	snap := e.snapshotEngine()
@@ -358,7 +359,7 @@ func TestR1DEF30ReconcileStopsAtItsBudgetAndResumes(t *testing.T) {
 // R1-OBS-01: a rebuild that cannot find its permit says so, instead of
 // INTERNAL_ERROR, and the gate stays closed.
 func TestR1OBS01MissingPermitIsNamed(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	m := e.mandate(mandateOpts{})
 	e.assign(m, "agent-a")
@@ -386,7 +387,7 @@ func TestR1OBS01MissingPermitIsNamed(t *testing.T) {
 // R1-P4-DEF-01: concurrent reconciliations and resumes report only their
 // own work: one rebuild, one settle, one resume.
 func TestR1P4DEF01ConcurrentRecoveryReportsOwnWork(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	snap := e.snapshotEngine()
@@ -447,7 +448,7 @@ func TestR1P4DEF01ConcurrentRecoveryReportsOwnWork(t *testing.T) {
 // the new revision and commits; a revision written backwards at the
 // destination never makes the engine forget the newer one.
 func TestR1DEF03SupplierRevisionComesFromTheDestination(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	s := stub.New()
 	e.eng.Connector = s
 	s.SetSupplierRevision("supplier-x", 3)

@@ -75,7 +75,7 @@ const anchorDelay = 20 * time.Millisecond
 
 func TestR1DEF30SlowAnchorReconcileIsResumable(t *testing.T) {
 	const n = 24
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	m, orders := e.smallOrders(n)
 	snap := e.snapshotEngine()
@@ -153,7 +153,7 @@ func TestR1DEF30SlowAnchorReconcileIsResumable(t *testing.T) {
 // The resume gate and the restore check also finish against a slow anchor
 // and are safe to repeat; the gate reads the anchor a bounded number of times.
 func TestR1DEF30SlowAnchorCheckAndGate(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	_, orders := e.smallOrders(3)
 	for _, p := range orders {

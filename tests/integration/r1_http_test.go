@@ -36,7 +36,7 @@ func dispatchBody(p permitted) map[string]any {
 }
 
 func TestR1HTTPDispatchSettleAndRead(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	path := "/v1/dispatches/" + p.operation
@@ -96,7 +96,7 @@ func TestR1HTTPDispatchSettleAndRead(t *testing.T) {
 // check, reconcile, the HELD rule at the gate, finding, prepare, review,
 // confirm, with separation of duties enforced through the endpoints.
 func TestR1HTTPRecoveryHeldRuleAndRepair(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	e.httpOperators()
 	p := e.permitted()

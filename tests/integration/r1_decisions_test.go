@@ -27,7 +27,7 @@ func (e *env) expireMandate(mandate string) {
 // Decision 8: a mandate that expires after dispatch never sends. The worker
 // only looks up and fences the operation; nothing reaches the destination.
 func TestR1ExpiredMandateNeverSends(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	s := stub.New()
 	e.eng.Connector = s
 	p := e.permitted()
@@ -50,7 +50,7 @@ func TestR1ExpiredMandateNeverSends(t *testing.T) {
 // destination answers. A lost reply stays UNRESOLVED (money held), and the
 // later lookup commits the order rather than releasing it.
 func TestR1ExpiryKeepsBudgetOfSentAttempt(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	s := stub.New()
 	e.eng.Connector = s
 	p := e.permitted()
@@ -88,7 +88,7 @@ func requireFault(t *testing.T, what string, err error, code, contains string) {
 // attempt is never released, even with a finding, a review and Aakhil's
 // confirmation. The repair is refused at preparation; COMMIT stays possible.
 func TestR1HeldWithCreateAttemptIsNeverReleased(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	ctx := context.Background()
@@ -108,7 +108,7 @@ func TestR1HeldWithCreateAttemptIsNeverReleased(t *testing.T) {
 // Decision 3: the proof is checked again at confirmation. A create attempt
 // recorded after the repair was prepared blocks the release.
 func TestR1ReleaseRecheckedAtConfirmation(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	ctx := context.Background()
@@ -139,7 +139,7 @@ func TestR1ReleaseRecheckedAtConfirmation(t *testing.T) {
 // Decision 3: a release fences the reference first; after that the anchor
 // refuses any create for it, so a late request can never create an order.
 func TestR1ReleaseBlocksReferencePermanently(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	ctx := context.Background()
@@ -182,7 +182,7 @@ func (e *env) anchorRepair(op, evidence string) error {
 // Decision 4 over HTTP: the anchor repair takes a prepared and reviewed
 // repair_id; an evidence reference alone is no longer accepted.
 func TestR1HTTPAnchorRepairNeedsThreePeople(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p) // before the anchor was attached
 	a := withAnchor(t, e)
@@ -270,7 +270,7 @@ func (e *env) taxedPermitted(tax *int64, lines ...map[string]any) permitted {
 // authorised and held, sent to the destination as authorised and verified
 // on the order it created.
 func TestR1TaxedOrderHoldsFullTotalAndCommits(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	s := taxedDestination(e)
 	p := e.taxedPermitted(i64(gst18), taxedLine("gst-18"))
 	a := p.action
@@ -295,7 +295,7 @@ func TestR1TaxedOrderHoldsFullTotalAndCommits(t *testing.T) {
 // Decision 1: the engine never removes tax or invents a tax amount. Taxes
 // without a tax amount, or a tax amount without taxes, are refused.
 func TestR1TaxFieldsMustComeTogether(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	taxedDestination(e)
 	m := e.mandate(mandateOpts{})
 	e.assign(m, "agent-a")
@@ -325,7 +325,7 @@ func TestR1UnsupportedTaxConfigurationIsRefused(t *testing.T) {
 		{"tax amount differs", i64(gst18 - 1), taxedLine("gst-18"), "TAX_MISMATCH"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			e := newEnv(t)
+			e := newR1Env(t)
 			s := taxedDestination(e)
 			p := e.taxedPermitted(c.tax, c.line)
 			_, err := e.dispatch("agent-a", p)
@@ -341,7 +341,7 @@ func TestR1UnsupportedTaxConfigurationIsRefused(t *testing.T) {
 // dispatch, the create is refused before any create attempt and the money is
 // released; the order is never created with the tax removed.
 func TestR1TaxRefusalAtCreateReleases(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	s := taxedDestination(e)
 	p := e.taxedPermitted(i64(gst18), taxedLine("gst-18"))
 	mustDispatch(t, e, p)
@@ -357,7 +357,7 @@ func TestR1TaxRefusalAtCreateReleases(t *testing.T) {
 // needs a fresh authorisation: at evaluation, at dispatch, and inside the
 // destination create.
 func TestR1DeliveryChangeNeedsFreshAuthorisation(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	s := taxedDestination(e)
 	m := e.mandate(mandateOpts{})
 	e.assign(m, "agent-a")
@@ -398,7 +398,7 @@ func TestR1DeliveryChangeNeedsFreshAuthorisation(t *testing.T) {
 // operator or issuer sends can set them. tax_minor is the only tax input,
 // and delivery_revision is never accepted from the issuer.
 func TestR1DeliveryRevisionIsNotIssuerInput(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	taxedDestination(e)
 	m := e.mandate(mandateOpts{})
 	e.assign(m, "agent-a")
@@ -427,7 +427,7 @@ func TestR1OrderWithDifferentUnitOrDeliveryIsMismatch(t *testing.T) {
 		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			e := newEnv(t)
+			e := newR1Env(t)
 			s := taxedDestination(e)
 			p := e.taxedPermitted(i64(gst18), taxedLine("gst-18"))
 			mustDispatch(t, e, p)
@@ -448,7 +448,7 @@ func TestR1OrderWithDifferentUnitOrDeliveryIsMismatch(t *testing.T) {
 // An R1 deployment serves one tenant: another tenant's actor cannot
 // dispatch and its operators cannot run recovery or repairs.
 func TestR1OneTenantPerDeployment(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	e.eng.Cfg.Tenant = tenant
 	other := e.permittedIn("other-org", "owner-x", "issuer-x", "agent-x", "po-other-r1")
@@ -482,7 +482,7 @@ func TestR1OneTenantPerDeployment(t *testing.T) {
 // anything is consumed, an operation dispatched before the switch is only
 // looked up and fenced, and the restore check keeps running.
 func TestR1ObserveOnlyNeverPurchases(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	earlier := e.permittedIn(tenant, "owner-a", "issuer-a", "agent-a", "po-before-switch")
 	mustDispatch(t, e, earlier)
@@ -501,4 +501,49 @@ func TestR1ObserveOnlyNeverPurchases(t *testing.T) {
 	if r := a.check(); r.WritesDisabled {
 		t.Fatalf("restore check in observe-only: %+v", r)
 	}
+}
+
+// Aakhil, 29 Oct 2026: the delivery check must not be optional. With a
+// destination configured, an action without a delivery address revision is
+// refused at evaluation and at dispatch, before anything is consumed; an
+// amendment builds it again with the revision. A delivery address the
+// destination does not know is refused when the instruction is created.
+func TestR1DeliveryRevisionIsRequired(t *testing.T) {
+	e := newEnv(t) // no destination yet: the action is built without a delivery revision
+	p := e.permitted()
+	if _, ok := p.action["delivery_revision"]; ok {
+		t.Fatalf("action built without a destination has a delivery revision: %v", p.action)
+	}
+	s := stub.New()
+	e.eng.Connector = s
+
+	_, err := e.dispatch("agent-a", p)
+	requireFault(t, "dispatch without delivery revision", err, "DELIVERY_REVISION_STALE", "no delivery address revision")
+	requireBuckets(t, "nothing consumed", e.buckets(p.mandate), r1Reserved)
+	if e.count(`SELECT count(*) FROM steelmatter.dispatches`) != 0 || s.Creates() != 0 {
+		t.Fatal("an action without a delivery revision was dispatched")
+	}
+	st, body := e.evaluate("agent-a", p.instruction, 1)
+	requireStatus(t, "evaluate without delivery revision", st, body, 409, "DELIVERY_REVISION_STALE")
+
+	st, body = e.call("POST", "/v1/instructions/"+p.instruction+"/revisions", "issuer-a", map[string]any{"amendment_id": "amd-delivery",
+		"expected_action_revision": 1, "proposed_action": instructionBody("po-request-001", "")["proposed_action"]})
+	requireStatus(t, "amend", st, body, 201, "")
+	if fmt.Sprint(body["action"].(map[string]any)["delivery_revision"]) != "1" {
+		t.Fatalf("amended action %v", body["action"])
+	}
+	st, body = e.evaluate("agent-a", p.instruction, 2)
+	requireStatus(t, "evaluate the amended action", st, body, 201, "")
+	permit := body["permit"].(map[string]any)
+	p2 := permitted{mandate: p.mandate, instruction: p.instruction, action: body["action"].(map[string]any), jws: body["permit_jws"].(string),
+		permitID: permit["permit_id"].(string), operation: permit["operation_id"].(string)}
+	mustDispatch(t, e, p2)
+	requireExecution(t, "settle", e.settle(p2.operation, s), engine.DispatchCommitted)
+
+	// An address the destination does not know is refused up front.
+	s.SetDeliveryUnmapped("warehouse-a")
+	m := e.mandate(mandateOpts{})
+	e.assign(m, "agent-a")
+	st, body = e.call("POST", "/v1/instructions", "issuer-a", instructionBody("po-unmapped", m))
+	requireStatus(t, "unmapped delivery address", st, body, 422, "ADAPTER_UNSUPPORTED")
 }

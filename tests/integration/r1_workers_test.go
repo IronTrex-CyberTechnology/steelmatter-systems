@@ -46,7 +46,7 @@ func (e *env) heldVia(op string, s *stub.Stub) {
 // destination cannot answer for, retries it later and fences it; final
 // operations are never picked up again.
 func TestR1SettleWorkerSettlesAndBacksOff(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := e.permitted()
 	b := e.permittedIn(tenant, "owner-a", "issuer-a", "agent-a", "po-request-002")
 	mustDispatch(t, e, a)
@@ -87,7 +87,7 @@ func TestR1SettleWorkerSettlesAndBacksOff(t *testing.T) {
 // HELD and MISMATCH are never settled by the worker; they wait for an
 // operator finding and show in the backlog, as does a long-unsettled one.
 func TestR1SettleWorkerLeavesHeldAndBacklogReportsIt(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := e.permitted()
 	b := e.permittedIn(tenant, "owner-a", "issuer-a", "agent-a", "po-request-002")
 	mustDispatch(t, e, a)
@@ -113,7 +113,7 @@ func TestR1SettleWorkerLeavesHeldAndBacklogReportsIt(t *testing.T) {
 // Operation status reports the dispatch status; only COMMITTED shows an
 // order, and HELD is reported as HELD, never as success.
 func TestR1OperationStatusReportsDispatchStatus(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := e.permitted()
 	mustDispatch(t, e, a)
 	status := func() map[string]any {
@@ -151,7 +151,7 @@ func TestR1OperationStatusReportsDispatchStatus(t *testing.T) {
 // unsettled, and sends them straight to lookup and fence. Revocation never
 // releases their amount; only the destination's proof does.
 func TestR1RevokeListsInFlightAndSettlesThem(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p)
 	s := stub.New()
@@ -174,7 +174,7 @@ func TestR1RevokeListsInFlightAndSettlesThem(t *testing.T) {
 }
 
 func TestR1RevokeWithUnreachableDestinationKeepsHold(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p)
 	s := stub.New()
@@ -205,7 +205,7 @@ func TestR1RevokeWithUnreachableDestinationKeepsHold(t *testing.T) {
 // D1 readiness: NOT_READY blocks dispatch before anything is consumed or
 // moved; the same permit works once the destination is ready.
 func TestR1ReadinessBlocksDispatchWithoutConsumingPermit(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	s := stub.New()
 	e.eng.Connector = s
@@ -265,7 +265,7 @@ func (s *recordingSink) seqs(aggregate string) []int64 {
 // operation; every other aggregate is delivered, and once the consumer
 // recovers the held events arrive in aggregate_seq order.
 func TestD6FailingEventHoldsOnlyItsAggregate(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := e.permitted()
 	b := e.permittedIn(tenant, "owner-a", "issuer-a", "agent-a", "po-request-002")
 	mustDispatch(t, e, a)
@@ -334,7 +334,7 @@ func (e *env) requireBudgetMatchesRecords(what, mandate string) {
 // after every step the buckets are nonnegative, sum to the limit and match
 // the operation records; nothing is ever released while an order may exist.
 func TestD2BudgetPropertyUnderRandomOutcomes(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	m := e.mandate(mandateOpts{})
 	e.assign(m, "agent-a")
 	const seed, n = 20261028, 12
@@ -401,7 +401,7 @@ func TestD2BudgetPropertyUnderRandomOutcomes(t *testing.T) {
 // Crash points around dispatch and settle: the amount is always in exactly
 // one bucket and never available while an order may exist.
 func TestD2CrashBeforeDispatchCommitLeavesReservation(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	failpoint.Set(failpoint.DispatchBeforeCommit, func(context.Context) error { return failpoint.ErrInjected })
 	t.Cleanup(failpoint.Clear)
@@ -418,7 +418,7 @@ func TestD2CrashBeforeDispatchCommitLeavesReservation(t *testing.T) {
 }
 
 func TestD2CrashAfterDispatchBeforeSendHoldsAmount(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p) // committed; the process "dies" before any network call
 	requireBuckets(t, "held before send", e.buckets(p.mandate), r1Unresolved)
@@ -429,7 +429,7 @@ func TestD2CrashAfterDispatchBeforeSendHoldsAmount(t *testing.T) {
 }
 
 func TestD2CrashAfterReplyBeforeRecordCommitsOnce(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p)
 	s := stub.New()
@@ -455,6 +455,7 @@ func TestD2CrashAfterReplyBeforeRecordCommitsOnce(t *testing.T) {
 // reservation once. Released or dispatched, never both.
 func TestD2DispatchHoldsLocksAcrossExpiry(t *testing.T) {
 	e := newEnv(t, envOpts{permitTTL: 1e9})
+	e.eng.Connector = stub.New()
 	p := e.permitted()
 	held, release := pauseAt(t, failpoint.AdmissionAfterLocks)
 	errc := make(chan error, 1)
@@ -481,6 +482,7 @@ func TestD2DispatchHoldsLocksAcrossExpiry(t *testing.T) {
 // leaves the unresolved amount alone.
 func TestD2DispatchThenCleanupSkips(t *testing.T) {
 	e := newEnv(t, envOpts{permitTTL: 1e9})
+	e.eng.Connector = stub.New()
 	p := e.permitted()
 	mustDispatch(t, e, p)
 	e.waitExpired(p.permitID)

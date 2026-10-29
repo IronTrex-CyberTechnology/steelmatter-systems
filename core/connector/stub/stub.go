@@ -82,7 +82,8 @@ type Stub struct {
 	seq         int64
 	nextOrder   int
 	supplierRev map[string]int64
-	deliveryRev map[string]int64  // D1 v1.4: protected delivery address revisions
+	deliveryRev map[string]int64  // D1 v1.4: protected delivery address revisions (default 1)
+	unmapped    map[string]bool   // delivery refs the destination does not know
 	taxBP       map[string]int64  // D1 v1.4: tax ref -> rate in basis points
 	itemTaxes   map[string]string // D1 v1.4: item ref -> the purchase taxes it requires (joined, sorted)
 	dropReply   map[string]int    // op_ref -> execute replies to drop after the create applies
@@ -117,7 +118,7 @@ func New() *Stub {
 // is p, for example the real anchor's destination stream (anchor.DestStream),
 // as Kaif's Odoo module will use it.
 func NewWithProof(p connector.RestoreProof) *Stub {
-	return &Stub{ops: map[string]*record{}, supplierRev: map[string]int64{}, deliveryRev: map[string]int64{}, taxBP: map[string]int64{},
+	return &Stub{ops: map[string]*record{}, supplierRev: map[string]int64{}, deliveryRev: map[string]int64{}, unmapped: map[string]bool{}, taxBP: map[string]int64{},
 		itemTaxes: map[string]string{}, dropReply: map[string]int{}, unreachable: map[string]int{},
 		proof: p, failCommit: map[string]int{}, failBlock: map[string]int{}, loseCreateDone: map[string]int{}, outOfScope: map[string]string{}}
 }
@@ -232,10 +233,28 @@ func (s *Stub) SetSupplierRevision(supplierRef string, rev int64) {
 func (s *Stub) DeliveryRevision(_ context.Context, deliveryRef string) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.unmapped[deliveryRef] {
+		return 0, fmt.Errorf("stub: delivery address %q: %s", deliveryRef, connector.ReasonMappingMissing)
+	}
 	if rev, ok := s.deliveryRev[deliveryRef]; ok {
 		return rev, nil
 	}
-	return 0, fmt.Errorf("stub: delivery address %q: %s", deliveryRef, connector.ReasonMappingMissing)
+	return 1, nil // like Odoo: every delivery partner starts at revision 1
+}
+
+func (s *Stub) curDelivery(ref string) int64 {
+	if rev, ok := s.deliveryRev[ref]; ok {
+		return rev
+	}
+	return 1
+}
+
+// SetDeliveryUnmapped makes the destination know no delivery address with
+// this ref (MAPPING_MISSING).
+func (s *Stub) SetDeliveryUnmapped(deliveryRef string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.unmapped[deliveryRef] = true
 }
 
 var _ connector.DeliverySource = (*Stub)(nil)
@@ -445,7 +464,7 @@ func (s *Stub) create(ctx context.Context, a connector.Action) connector.Result 
 		s.ops[a.OpRef] = &record{state: Refused, digest: a.PermitDigest, seq: s.seq}
 		return s.result(ctx, a.OpRef, "execute", connector.RefusedSupplierStale)
 	}
-	if want, ok := s.deliveryRev[a.DeliveryRef]; ok && a.DeliveryRevision != nil && want != *a.DeliveryRevision {
+	if a.DeliveryRevision != nil && s.curDelivery(a.DeliveryRef) != *a.DeliveryRevision {
 		if err := s.proof.RecordBlock(ctx, a.OpRef, "delivery address stale"); err != nil {
 			return unavailable(a.OpRef, "execute", "ANCHOR_UNAVAILABLE", s.seq)
 		}
@@ -470,7 +489,7 @@ func (s *Stub) create(ctx context.Context, a connector.Action) connector.Result 
 	if a.DeliveryRevision != nil {
 		deliveryRev = *a.DeliveryRevision
 	} else {
-		deliveryRev = s.deliveryRev[a.DeliveryRef]
+		deliveryRev = s.curDelivery(a.DeliveryRef)
 	}
 	// Written before the create commits. If it fails the create rolls back
 	// and the answer is UNAVAILABLE, never "not sent": it may have landed.
@@ -650,7 +669,7 @@ func (s *Stub) Readiness(_ context.Context, a connector.Action) (connector.Resul
 	default:
 		if want, ok := s.supplierRev[a.SupplierRef]; ok && want != a.SupplierRevision {
 			r.Outcome, r.Reason = connector.NotReady, connector.ReasonSupplierChanged
-		} else if want, ok := s.deliveryRev[a.DeliveryRef]; ok && a.DeliveryRevision != nil && want != *a.DeliveryRevision {
+		} else if a.DeliveryRevision != nil && s.curDelivery(a.DeliveryRef) != *a.DeliveryRevision {
 			r.Outcome, r.Reason = connector.NotReady, connector.ReasonDeliveryChanged
 		} else if reason, _, _ := s.taxCheck(a); reason != "" {
 			r.Outcome, r.Reason = connector.NotReady, reason

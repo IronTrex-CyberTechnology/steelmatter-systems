@@ -51,7 +51,7 @@ func assertR1Evidence(t *testing.T, e *env, p permitted) map[string]any {
 }
 
 func TestR1EvidenceAfterPermitExpiryAndRestore(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	e.eng.Cfg.PermitTTL = 10 * time.Second
 	p := e.permitted()
@@ -93,7 +93,7 @@ func (c alteredReadback) Observe(ctx context.Context, a connector.Action) (conne
 }
 
 func TestR1ObserverDetectsDestinationChangesWithoutMovingMoney(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	mustDispatch(t, e, p)

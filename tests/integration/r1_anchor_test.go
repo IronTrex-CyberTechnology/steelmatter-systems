@@ -202,7 +202,7 @@ func (e *env) dropEngineConnections(admin *pgx.Conn) {
 // Dispatch records the full intent in the anchor before committing, every
 // destination result is recorded, and the chain verifies.
 func TestD5DispatchAndOutcomesAreRecordedInTheAnchor(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	mustDispatch(t, e, p)
@@ -243,7 +243,7 @@ func TestD5DispatchAndOutcomesAreRecordedInTheAnchor(t *testing.T) {
 // No anchor record, no dispatch: when the anchor cannot take the intent the
 // dispatch rolls back with nothing consumed or moved.
 func TestD5AnchorUnavailableRefusesDispatch(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	ctx := context.Background()
@@ -279,7 +279,7 @@ func TestD5AnchorUnavailableRefusesDispatch(t *testing.T) {
 // While writes are off nothing new is created: dispatch is refused, and a
 // PENDING operation goes to lookup and fence instead of execute.
 func TestD5WritesOffStopsCreatesButNotFences(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	q := e.permittedIn(tenant, "owner-a", "issuer-a", "agent-a", "po-request-002")
@@ -304,7 +304,7 @@ func TestD5WritesOffStopsCreatesButNotFences(t *testing.T) {
 // A process from before a restore keeps its old generation and is refused;
 // the process that ran the resume gate dispatches.
 func TestD5StaleGenerationIsRefused(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	trust, signers, err := contract.LoadKeyring(e.keysDir)
 	if err != nil {
@@ -343,7 +343,7 @@ func TestD5StaleGenerationIsRefused(t *testing.T) {
 // destination confirms it; the gate passes; writes resume. The anchor's
 // history is untouched by the restore.
 func TestD5EngineRestoredBeforeConfirmedPurchase(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	q := e.permittedIn(tenant, "owner-a", "issuer-a", "agent-a", "po-request-002")
@@ -389,7 +389,7 @@ func TestD5EngineRestoredBeforeConfirmedPurchase(t *testing.T) {
 // It is rebuilt as UNRESOLVED and released only after the fence proves no
 // order; a late create is then refused by the anchor's BLOCK.
 func TestD5EngineRestoredBeforeUnsentDispatch(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	snap := e.snapshotEngine()
@@ -417,7 +417,7 @@ func TestD5EngineRestoredBeforeUnsentDispatch(t *testing.T) {
 // while it stays held. Only Kaif's review plus Aakhil's confirmation, after
 // the recovery checks pass, moves the amount.
 func TestD5BothRestoredHeldRuleAndRepair(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	ctx := context.Background()
@@ -502,7 +502,7 @@ func TestD5BothRestoredHeldRuleAndRepair(t *testing.T) {
 // budget; an approved one confirmed by Aakhil releases the held amount, and
 // only because the anchor proves no create was attempted (decision 3).
 func TestD5RepairReleaseNeedsApprovedReview(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	ctx := context.Background()
@@ -542,7 +542,7 @@ func TestD5RepairReleaseNeedsApprovedReview(t *testing.T) {
 // refund); writes resume once Uday records the finding; a retry can never
 // create a second order.
 func TestD5OdooRestoredCommittedOrderMissing(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	destBefore := a.s.Backup()
@@ -583,7 +583,7 @@ func TestD5OdooRestoredCommittedOrderMissing(t *testing.T) {
 // request is refused by the anchor's BLOCK; the restore is detected and the
 // fence re-applied; writes resume with a new destination baseline.
 func TestD5OdooRestoredAfterFenceDelayedRequestRefused(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	mustDispatch(t, e, p)
@@ -613,7 +613,7 @@ func TestD5OdooRestoredAfterFenceDelayedRequestRefused(t *testing.T) {
 // The anchor behind the engine database: writes stop, and the gate fails
 // until Aakhil confirms the anchor repair.
 func TestD5AnchorBehindNeedsConfirmedRepair(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p) // before the anchor was attached
 	a := withAnchor(t, e)
@@ -677,7 +677,7 @@ func TestD5AnchorBehindNeedsConfirmedRepair(t *testing.T) {
 
 // The gate refuses when the rebuilt buckets do not match the stored ones.
 func TestD5GateRefusesMismatchedBuckets(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	mustDispatch(t, e, p)
@@ -696,7 +696,7 @@ func TestD5GateRefusesMismatchedBuckets(t *testing.T) {
 // Many dispatches and settles at once on one mandate: every engine operation
 // has exactly one anchor intent, the chain verifies, and the buckets match.
 func TestD5ConcurrentDispatchAndSettleWithAnchor(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	m := e.mandate(mandateOpts{})
 	e.assign(m, "agent-a")
@@ -748,7 +748,7 @@ func TestD5ConcurrentDispatchAndSettleWithAnchor(t *testing.T) {
 // has its anchor intent, nothing is dispatched after the switch, and no
 // intent lands after it.
 func TestD5DisableWritesRacingDispatches(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	m := e.mandate(mandateOpts{})
 	e.assign(m, "agent-a")
@@ -797,7 +797,7 @@ func TestD5DisableWritesRacingDispatches(t *testing.T) {
 // With the normal grace period, a restore check running during a burst of
 // dispatches never mistakes an in-flight dispatch for a restore.
 func TestD5RestoreCheckDuringDispatchBurstHasNoFalseAlarm(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	e.eng.Cfg.RestoreGrace = time.Minute
 	m := e.mandate(mandateOpts{})
@@ -853,7 +853,7 @@ func TestD5RestoreCheckDuringDispatchBurstHasNoFalseAlarm(t *testing.T) {
 
 // Two confirmations of one repair at once: the amount moves once.
 func TestD5ConcurrentRepairConfirmationsMoveOnce(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	ctx := context.Background()
@@ -921,7 +921,7 @@ func (e *env) destActionForPermit(p permitted) connector.Action {
 // op_ref, verified against the order and committed; writes stay off until
 // Aakhil confirms the anchor repair, then resume.
 func TestD5CaseCOrderOnlyOdooKnowsIsRebuilt(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	if r := a.s.Deliver(e.destActionForPermit(p)); r.Outcome != connector.Created {
@@ -955,7 +955,7 @@ func TestD5CaseCOrderOnlyOdooKnowsIsRebuilt(t *testing.T) {
 // permit, or whose op_ref has no permit at all, is never attributed; the
 // gate stays closed for an operator.
 func TestD5CaseCUnattributableOrdersKeepTheGateClosed(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	forged := e.destActionForPermit(p)
@@ -982,7 +982,7 @@ func TestD5CaseCUnattributableOrdersKeepTheGateClosed(t *testing.T) {
 // and, because the order is gone from Odoo, writes its BLOCK and flags it
 // (case E). The gate stays closed until Uday records the finding.
 func TestD5BothRestoredAfterCommitWithCreateDone(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	snap := e.snapshotEngine()

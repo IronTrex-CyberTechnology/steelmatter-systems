@@ -75,6 +75,11 @@ func (e *Engine) Dispatch(ctx context.Context, p auth.Principal, actionJSON []by
 		}
 		return nil, fault("SERVICE_UNAVAILABLE", "no destination connector is configured; nothing was dispatched")
 	}
+	// The delivery check is never optional: an action without a delivery
+	// address revision is refused before anything is consumed.
+	if err := e.requireDeliveryRevision(action); err != nil {
+		return nil, err
+	}
 	if err := e.requireWrites(ctx); err != nil {
 		if d, gerr := e.GetDispatch(ctx, p.Tenant, permit.OperationID); gerr == nil && d != nil && d.ActionDigest == a.actionDigest {
 			return d, nil // an identical repeat of a recorded dispatch still returns its state

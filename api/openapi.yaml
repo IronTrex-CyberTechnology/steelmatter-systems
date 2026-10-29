@@ -950,8 +950,12 @@ components:
         one taxed line. The action then carries amount_untaxed_minor (the line
         total), tax_minor, and amount_minor = untaxed + tax, the full total
         that is held; the destination recomputes the tax at create and refuses
-        any difference. The engine also stores the destination's delivery
-        address revision (delivery_revision) when the destination has one.
+        any difference. With a destination configured, the engine always
+        stores the destination's delivery address revision (delivery_revision);
+        the delivery check is not optional: an action without one is refused
+        at evaluation and dispatch (409 DELIVERY_REVISION_STALE), and an
+        address the destination does not know is refused (422
+        ADAPTER_UNSUPPORTED).
       type: object
       additionalProperties: false
       required: [supplier_id, delivery_id, currency, lines]

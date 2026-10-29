@@ -50,7 +50,7 @@ func requireDeny(t *testing.T, what string, st int, body map[string]any, reason 
 // an old digest is refused; an approval given before the action, supplier or
 // mandate changed is stale, and a fresh decision is required.
 func TestT17ApprovalDriftIsRejected(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	e.approvalPolicy()
 
 	m, id, digest := e.openInstruction("po-t17-1")
@@ -113,7 +113,7 @@ func TestT17ApprovalDriftIsRejected(t *testing.T) {
 // T18: the requestor cannot approve their own action, and an approver whose
 // rights were removed no longer counts: no permit until a fresh decision.
 func TestT18ApproverAuthority(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	e.approvalPolicy()
 	m, id, digest := e.openInstruction("po-t18-1")
 	for _, who := range []string{"issuer-a", "agent-a", "owner-a"} {
@@ -167,7 +167,7 @@ func TestT18ApproverAuthority(t *testing.T) {
 // approvals reserve nothing; exactly one permit is issued, and the other is
 // denied for capacity.
 func TestT19ApprovalCapacityRace(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	e.approvalPolicy()
 	m := e.mandate(mandateOpts{})
 	e.assign(m, "agent-a")
@@ -214,7 +214,7 @@ func TestT19ApprovalCapacityRace(t *testing.T) {
 
 // Simulation gives the same answer as evaluation for approvals (T30 parity).
 func TestT17SimulationNeedsApprovalToo(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	e.approvalPolicy()
 	_, id, digest := e.openInstruction("po-t17-sim")
 	st, body := e.call("POST", "/v1/actions/simulate", "operator-a", map[string]any{"instruction_id": id, "action_revision": 1})

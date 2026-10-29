@@ -40,6 +40,16 @@ func requireBuckets(t *testing.T, what string, got, want buckets) {
 	}
 }
 
+// newR1Env is an engine with a destination connector configured from the
+// start, as R1 serve runs: every action is built with the delivery address
+// revision the destination requires (Aakhil, 29 Oct 2026). Tests of an
+// unconfigured engine set Connector to nil.
+func newR1Env(t *testing.T) *env {
+	e := newEnv(t)
+	e.eng.Connector = stub.New()
+	return e
+}
+
 func (e *env) dispatch(who string, p permitted) (*engine.DispatchResult, error) {
 	e.t.Helper()
 	// Dispatch refuses without a configured connector (R1-DEF-12). Tests that
@@ -83,7 +93,7 @@ func mustDispatch(t *testing.T, e *env, p permitted) *engine.DispatchResult {
 // D2 move 3: dispatch intent consumes the permit and holds the amount as
 // unresolved before any network call; an identical repeat changes nothing.
 func TestR1DispatchHoldsAmountAsUnresolved(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	requireBuckets(t, "evaluated", e.buckets(p.mandate), r1Reserved)
 	d := mustDispatch(t, e, p)
@@ -106,7 +116,7 @@ func TestR1DispatchHoldsAmountAsUnresolved(t *testing.T) {
 
 // Success only when the destination confirms a matching order.
 func TestR1ConfirmedMatchingOrderCommits(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p)
 	s := stub.New()
@@ -124,7 +134,7 @@ func TestR1ConfirmedMatchingOrderCommits(t *testing.T) {
 // T33 / F1: the order is created but the reply is lost. The amount stays held;
 // lookup finds the order; it commits once, with one order.
 func TestR1LostReplyHeldThenFound(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p)
 	s := stub.New()
@@ -145,7 +155,7 @@ func TestR1LostReplyHeldThenFound(t *testing.T) {
 // releases nothing; the fence does. A create delayed in transit is then
 // refused, so no order appears after the amount was released.
 func TestR1NeverReachedIsFencedThenLateCreateRefused(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p)
 	s := stub.New()
@@ -163,7 +173,7 @@ func TestR1NeverReachedIsFencedThenLateCreateRefused(t *testing.T) {
 // F4: a delayed create lands while the operation is unresolved; the next
 // settle finds it and commits, never fences it.
 func TestR1DelayedCreateDuringLookupCommits(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p)
 	s := stub.New()
@@ -180,7 +190,7 @@ func TestR1DelayedCreateDuringLookupCommits(t *testing.T) {
 // F9: the destination stays unreachable; the amount stays held however many
 // times the engine retries.
 func TestR1UnavailableKeepsHold(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p)
 	s := stub.New()
@@ -194,7 +204,7 @@ func TestR1UnavailableKeepsHold(t *testing.T) {
 // F11: the supplier changed at the destination. The module refuses and
 // tombstones op_ref in the same transaction, which counts as FENCED.
 func TestR1SupplierStaleRefusalReleases(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p)
 	s := stub.New()
@@ -210,7 +220,7 @@ func TestR1SupplierStaleRefusalReleases(t *testing.T) {
 // F10: an order exists for op_ref but is not a confirmed, matching order. It is
 // held for investigation; nothing is committed or released.
 func TestR1NonMatchingOrderIsHeld(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p)
 	s := stub.New()
@@ -224,7 +234,7 @@ func TestR1NonMatchingOrderIsHeld(t *testing.T) {
 // D4: revocation before the dispatch-intent transaction stops the dispatch
 // and releases the reservation; nothing reaches the destination.
 func TestR1RevokeBeforeDispatchStopsIt(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	st, body := e.call("POST", "/v1/mandates/"+p.mandate+"/revoke", "owner-a", nil)
 	requireStatus(t, "revoke", st, body, 200, "")
@@ -243,7 +253,7 @@ func TestR1RevokeBeforeDispatchStopsIt(t *testing.T) {
 // treated as sent and settled by lookup and fence only. Unsent, it is fenced
 // and released; a late create is refused by the block.
 func TestR1RevokeAfterDispatchFencesUnsentOperation(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	s := stub.New()
 	e.eng.Connector = s
 	p := e.permitted()
@@ -266,7 +276,7 @@ func TestR1RevokeAfterDispatchFencesUnsentOperation(t *testing.T) {
 // D4: an order that already reached the destination before the revoke is
 // found by lookup and committed once; revocation never undoes it.
 func TestR1RevokeAfterOrderReachedDestinationCommits(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	s := stub.New()
 	e.eng.Connector = s
 	p := e.permitted()
@@ -285,7 +295,7 @@ func TestR1RevokeAfterOrderReachedDestinationCommits(t *testing.T) {
 // D4 (R1-DEF-01): the settle worker also never sends a PENDING operation of a
 // revoked mandate, even when the revoke itself could not reach the destination.
 func TestR1WorkerNeverSendsAfterRevoke(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	s := stub.New()
 	e.eng.Connector = s
 	p := e.permitted()
@@ -336,7 +346,7 @@ func stubActionFor(t *testing.T, e *env, p permitted) connector.Action {
 
 // Concurrent settlers: exactly one records the commit; the amount moves once.
 func TestR1ConcurrentSettleMovesAmountOnce(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p)
 	s := stub.New()
@@ -367,7 +377,7 @@ func TestR1ConcurrentSettleMovesAmountOnce(t *testing.T) {
 // but the destination's restore-proof journal shows the earlier create, so the
 // earlier outcome is not established: the amount stays held.
 func TestR1ErasedEarlierCreateStaysHeld(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p)
 	s := stub.New()
@@ -393,7 +403,7 @@ func TestR1ErasedEarlierCreateStaysHeld(t *testing.T) {
 // request with an old sequence number arrives afterwards. The destination
 // refuses it, so the released amount never coexists with an order.
 func TestR1DelayedRequestAfterRestoreIsRefused(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p)
 	s := stub.New()
@@ -416,7 +426,7 @@ func TestR1DelayedRequestAfterRestoreIsRefused(t *testing.T) {
 // erased by a restore, so the destination refuses the retry as a prior
 // attempt (Kaif's case E fix) and the amount stays held.
 func TestR1RefusalAfterEarlierCreateIsHeld(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p)
 	s := stub.New()
@@ -436,7 +446,7 @@ func TestR1RefusalAfterEarlierCreateIsHeld(t *testing.T) {
 // Shared interface: company and delivery are part of the match. An order for
 // the right op_ref but another company is held, not committed.
 func TestR1OrderForAnotherCompanyIsHeld(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p)
 	s := stub.New()
@@ -450,7 +460,7 @@ func TestR1OrderForAnotherCompanyIsHeld(t *testing.T) {
 // Anchor unreadable: create and fence report UNAVAILABLE with unknown proof
 // flags; the amount stays unresolved and nothing is created.
 func TestR1AnchorUnreadableKeepsHold(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p)
 	s := stub.New()
@@ -466,7 +476,7 @@ func TestR1AnchorUnreadableKeepsHold(t *testing.T) {
 // CREATE_INTENT written, Odoo commit failed: prior_create = true, so the fence
 // result is HELD and the amount is never released.
 func TestR1IntentWrittenCommitFailedIsHeld(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p)
 	s := stub.New()
@@ -480,7 +490,7 @@ func TestR1IntentWrittenCommitFailedIsHeld(t *testing.T) {
 // BLOCK write fails during fence: block_committed = false, never released;
 // the next fence writes the block and releases.
 func TestR1BlockWriteFailedNeverReleases(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p)
 	s := stub.New()
@@ -497,7 +507,7 @@ func TestR1BlockWriteFailedNeverReleases(t *testing.T) {
 // restore erased it, but CREATE_DONE landed, so the earlier outcome is
 // established: committed, not just held.
 func TestR1CreateDoneAfterRestoreCommits(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p)
 	s := stub.New()
@@ -516,7 +526,7 @@ func TestR1CreateDoneAfterRestoreCommits(t *testing.T) {
 // is decided before any create attempt and blocks the op_ref, so it releases
 // the amount; a later create is refused.
 func TestR1OutOfScopeRefusalReleases(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	mustDispatch(t, e, p)
 	s := stub.New()

@@ -80,7 +80,9 @@ func (e *Engine) settle(ctx context.Context, tenant, opRef string, c connector.C
 	// moved since dispatch, a PENDING operation is treated as sent: lookup
 	// and fence only. Nothing new is ever created after a revoke.
 	var res connector.Result
-	if d.status == DispatchPending && writes && d.mandateLive && !e.Cfg.ObserveOnly {
+	// Never send an action without its delivery address revision: the
+	// destination could not check the address (Aakhil, 29 Oct 2026).
+	if d.status == DispatchPending && writes && d.mandateLive && !e.Cfg.ObserveOnly && d.action.DeliveryRevision != nil {
 		res, err = c.Execute(ctx, d.connectorAction())
 	} else {
 		res, err = c.Lookup(ctx, opRef)

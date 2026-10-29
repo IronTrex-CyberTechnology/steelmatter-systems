@@ -7363,6 +7363,11 @@
           "phase": "integration",
           "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestR1DEF30SlowAnchorCheckAndGate"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1DeliveryRevisionIsRequired"
         }
       ],
       "required_cases": [

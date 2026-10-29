@@ -12,6 +12,7 @@ import (
 
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/anchor"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract"
 )
 
 // UseAnchor connects the engine to the recovery anchor (D5 v3) and adopts
@@ -267,21 +268,41 @@ func (e *Engine) syncSupplier(ctx context.Context, tenant, supplier string) erro
 }
 
 // deliveryRevision reads the destination's protected delivery address
-// revision (R1 decision 2, R1-DEF-11). Nil when the destination does not
-// own one (stub without revisions, R0) or has no such address.
+// revision (R1 decision 2, R1-DEF-11). The delivery check is never
+// optional: with a destination connector configured, a destination that
+// cannot give the revision, or has no such address, refuses (422). Only an
+// R0 deployment without a connector builds actions without one.
 func (e *Engine) deliveryRevision(ctx context.Context, delivery string) (*int64, error) {
-	src, ok := e.Connector.(connector.DeliverySource)
-	if !ok || delivery == "" {
+	if e.Connector == nil {
 		return nil, nil
+	}
+	src, ok := e.Connector.(connector.DeliverySource)
+	if !ok {
+		return nil, fault("ADAPTER_UNSUPPORTED", "the destination provides no delivery address revision; the delivery check is required")
 	}
 	rev, err := src.DeliveryRevision(ctx, delivery)
 	if err != nil {
 		if strings.Contains(err.Error(), connector.ReasonMappingMissing) {
-			return nil, nil
+			return nil, fault("ADAPTER_UNSUPPORTED", "delivery address %s is not mapped at the destination (%s); nothing was authorised", delivery, connector.ReasonMappingMissing)
 		}
 		return nil, dependency("destination", err)
 	}
+	if rev < 1 {
+		return nil, fault("ADAPTER_UNSUPPORTED", "the destination reported no valid revision for delivery address %s", delivery)
+	}
 	return &rev, nil
+}
+
+// requireDeliveryRevision refuses an action without a delivery address
+// revision whenever a destination connector is configured (Aakhil, 29 Oct
+// 2026: the delivery check must not be optional). Such an action was built
+// before the check existed or without a destination; amending it builds a
+// new one with the revision.
+func (e *Engine) requireDeliveryRevision(a *contract.Action) error {
+	if e.Connector != nil && a.DeliveryRevision == nil {
+		return fault("DELIVERY_REVISION_STALE", "the action has no delivery address revision; amend the instruction so it is authorised with one")
+	}
+	return nil
 }
 
 // deliveryRevisionFor reads it only for an issuer, like syncSupplierFor.

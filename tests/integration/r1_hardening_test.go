@@ -15,7 +15,7 @@ import (
 func TestR1RestoredBudgetRefusedBeforeWorkerRuns(t *testing.T) {
 	for _, evaluate := range []bool{false, true} {
 		t.Run(map[bool]string{true: "evaluate", false: "dispatch"}[evaluate], func(t *testing.T) {
-			e := newEnv(t)
+			e := newR1Env(t)
 			a := withAnchor(t, e)
 			p := e.permitted()
 			// Production grace must not create an admission window for a young restore.
@@ -44,7 +44,7 @@ func TestR1RestoredBudgetRefusedBeforeWorkerRuns(t *testing.T) {
 }
 
 func TestR1StartupRefusesRestoredHistory(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	snap := e.snapshotEngine()
@@ -65,7 +65,7 @@ func TestR1StartupRefusesRestoredHistory(t *testing.T) {
 }
 
 func TestR1RequiredAnchorCannotBeOmitted(t *testing.T) {
-	e := newEnv(t)
+	e := newR1Env(t)
 	p := e.permitted()
 	e.eng.Cfg.RequireRecoveryAnchor = true
 	if _, err := e.dispatch("agent-a", p); err == nil {
@@ -81,7 +81,7 @@ func TestR1ConfirmedRepairSurvivesEveryCrashBoundary(t *testing.T) {
 	for _, outcome := range []string{engine.RepairCommit, engine.RepairRelease} {
 		for _, point := range []string{failpoint.RepairAfterDecision, failpoint.RepairAfterOutcome, failpoint.RepairBeforeCommit} {
 			t.Run(outcome+"/"+point, func(t *testing.T) {
-				e := newEnv(t)
+				e := newR1Env(t)
 				a := withAnchor(t, e)
 				p := e.permitted()
 				ctx := context.Background()
