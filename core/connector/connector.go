@@ -58,6 +58,7 @@ const (
 	ReasonCredentialDisabled     = "CREDENTIAL_DISABLED"
 	ReasonDestinationUnavailable = "DESTINATION_UNAVAILABLE"
 	ReasonSupplierChanged        = "SUPPLIER_CHANGED"
+	ReasonDeliveryChanged        = "DELIVERY_CHANGED" // D1 v1.4: the delivery address changed after authorisation
 )
 
 // Tombstones reports whether o is a structured module refusal that blocks
@@ -72,7 +73,29 @@ func (o Outcome) Tombstones() bool {
 type Line struct {
 	ItemRef        string `json:"item_ref"`
 	Quantity       int64  `json:"quantity"`
-	UnitPriceMinor int64  `json:"unit_price_minor"`
+	UnitPriceMinor int64  `json:"unit_price_minor"` // per UnitRef, before tax
+	// UnitRef is the authorised unit of Quantity, mapped like ItemRef (D1
+	// v1.4, Aakhil's decision 1). Empty means the product's base unit. The
+	// destination never converts it or substitutes a purchase unit.
+	UnitRef string `json:"unit_ref,omitempty"`
+	// TaxRefs are the authorised taxes on the line, sorted, mapped like
+	// ItemRef (D1 v1.4). Empty means no tax: a product with a configured
+	// purchase tax is then refused, never bought with the tax removed.
+	TaxRefs []string `json:"tax_refs,omitempty"`
+}
+
+// Equal reports whether two lines are the same, including unit and taxes.
+func (l Line) Equal(o Line) bool {
+	if l.ItemRef != o.ItemRef || l.Quantity != o.Quantity || l.UnitPriceMinor != o.UnitPriceMinor || l.UnitRef != o.UnitRef ||
+		len(l.TaxRefs) != len(o.TaxRefs) {
+		return false
+	}
+	for i := range l.TaxRefs {
+		if l.TaxRefs[i] != o.TaxRefs[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // Action is the canonical action execute sends: only fields the engine
@@ -91,10 +114,23 @@ type Action struct {
 	SupplierRef      string `json:"supplier_ref"`
 	SupplierRevision int64  `json:"supplier_revision"`
 	Lines            []Line `json:"lines"`
-	AmountMinor      int64  `json:"amount_minor"`
-	Currency         string `json:"currency"`
-	PermitDigest     string `json:"permit_digest"`
-	ExpectedMinSeq   int64  `json:"expected_min_seq"`
+	// AmountMinor is the full total including tax: the amount held and
+	// verified against the destination (D1 v1.4).
+	AmountMinor    int64  `json:"amount_minor"`
+	Currency       string `json:"currency"`
+	PermitDigest   string `json:"permit_digest"`
+	ExpectedMinSeq int64  `json:"expected_min_seq"`
+
+	// D1 v1.4 (Aakhil's decisions 1 and 2). Nil means not sent by an engine
+	// older than v1.4: the destination then requires an untaxed order whose
+	// lines sum to AmountMinor, and cannot check the delivery address.
+	AmountUntaxedMinor *int64 `json:"amount_untaxed_minor,omitempty"` // sum of quantity x unit price
+	TaxMinor           *int64 `json:"tax_minor,omitempty"`            // AmountMinor - AmountUntaxedMinor, as the destination computes it
+	// DeliveryRevision is the destination's protected revision of the
+	// delivery address (Odoo res.partner.sm_revision on the delivery
+	// partner), read when the action is authorised and compared inside the
+	// create like SupplierRevision.
+	DeliveryRevision *int64 `json:"delivery_revision,omitempty"`
 }
 
 // Order is what the destination holds for an op_ref.
@@ -106,9 +142,14 @@ type Order struct {
 	DeliveryRef      string `json:"delivery_ref"`
 	SupplierRef      string `json:"supplier_ref"`
 	Lines            []Line `json:"lines"`
-	AmountMinor      int64  `json:"amount_minor"`
+	AmountMinor      int64  `json:"amount_minor"` // full total including tax
 	Currency         string `json:"currency"`
 	PermitDigest     string `json:"permit_digest"`
+	// D1 v1.4: the order's untaxed amount and tax as the destination computed
+	// them, and the delivery address revision stored at creation.
+	AmountUntaxedMinor int64 `json:"amount_untaxed_minor"`
+	TaxMinor           int64 `json:"tax_minor"`
+	DeliveryRevision   int64 `json:"delivery_revision"`
 }
 
 // StateConfirmed is the destination order state that counts as success.

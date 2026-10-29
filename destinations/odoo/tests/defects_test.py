@@ -138,5 +138,156 @@ class SupplierRevision(unittest.TestCase):
         self.assertEqual(odoo_sql("SELECT sm_revision FROM res_partner WHERE id = %d" % pid), ["1"])
 
 
+def taxed_product(name):
+    """A product whose configured purchase tax is the seeded 18% GST."""
+    item = "%s-%s" % (name, RUN)
+    tax = ADMIN.call("account.tax", "search", [("sm_ref", "=", "gst18-purchase")])[0]
+    ADMIN.call("product.product", "create", {"name": "Taxed chair %s" % name, "sm_ref": item, "purchase_ok": True, "type": "consu",
+                                             "supplier_taxes_id": [(6, 0, [tax])], "taxes_id": [(6, 0, [])]})
+    return item
+
+
+def taxed_action(op, item, **over):
+    # 10 chairs at INR 6,000: untaxed 60,000.00, GST 18% 10,800.00, total 70,800.00 (in paise).
+    a = action(op, lines=[{"item_ref": item, "quantity": 10, "unit_price_minor": 600000, "tax_refs": ["gst18-purchase"]}],
+               amount_untaxed_minor=6000000, tax_minor=1080000, amount_minor=7080000)
+    a.update(over)
+    return a
+
+
+class Tax(unittest.TestCase):
+    """R1-DEF-21 / R1 decision 1: authorised tax details and full total."""
+
+    def test_def21_authorised_tax_is_applied_and_the_full_total_verified(self):
+        item, op = taxed_product("tax-ok"), ref("tax-ok")
+        a = taxed_action(op, item)
+        r = EXECUTOR.api("sm_create", a)
+        self.assertEqual(r["outcome"], "CREATED", r)
+        d = r["destination"]
+        self.assertEqual((d["amount_untaxed_minor"], d["tax_minor"], d["amount_minor"]), (6000000, 1080000, 7080000))
+        self.assertEqual(d["lines"][0]["tax_refs"], ["gst18-purchase"])
+        row = odoo_sql("SELECT amount_untaxed, amount_tax, amount_total FROM purchase_order WHERE sm_op_ref = '%s'" % op)[0]
+        self.assertEqual([float(x) for x in row.split("|")], [60000.0, 10800.0, 70800.0], "Odoo holds the taxed order")
+        self.assertEqual(OBSERVER.api("sm_observe", a)["outcome"], "MATCH")
+
+    def test_def21_tax_is_never_silently_dropped(self):
+        item = taxed_product("tax-legacy")
+        # An action with no tax details (an engine before D1 v1.4) for a taxed
+        # product is refused before any create attempt: no order, nothing held
+        # over an earlier create.
+        op = ref("tax-legacy")
+        legacy = action(op, lines=[{"item_ref": item, "quantity": 10, "unit_price_minor": 600000}], amount_minor=6000000)
+        r = EXECUTOR.api("sm_create", legacy)
+        self.assertEqual((r["outcome"], r["reason"]), ("REFUSED_OUT_OF_SCOPE", "TAX_NOT_AUTHORISED"))
+        self.assertEqual((r["block_committed"], r["prior_create"]), (True, False))
+        self.assertEqual(int(odoo_sql("SELECT count(*) FROM purchase_order WHERE sm_op_ref = '%s'" % op)[0]), 0)
+        # Authorising a tax the product does not carry is refused as well.
+        untaxed = ref("tax-extra")
+        r = EXECUTOR.api("sm_create", taxed_action(untaxed, "chair-ergo"))
+        self.assertEqual((r["outcome"], r["reason"]), ("REFUSED_OUT_OF_SCOPE", "TAX_NOT_AUTHORISED"))
+
+    def test_def21_total_that_differs_from_odoo_is_refused_before_any_create(self):
+        item, op = taxed_product("tax-wrong"), ref("tax-wrong")
+        r = EXECUTOR.api("sm_create", taxed_action(op, item, tax_minor=1000000, amount_minor=7000000))
+        self.assertEqual((r["outcome"], r["reason"]), ("REFUSED_OUT_OF_SCOPE", "TOTAL_DIFFERS_FROM_ODOO"))
+        self.assertEqual(anchor_records(op), ["BLOCK"], "refused before CREATE_INTENT, so it can be released")
+        self.assertEqual(int(odoo_sql("SELECT count(*) FROM purchase_order WHERE sm_op_ref = '%s'" % op)[0]), 0)
+
+
+class Units(unittest.TestCase):
+    """R1-DEF-22 / R1 decision 1: the authorised unit, never converted."""
+
+    def test_def22_authorised_unit_is_used_exactly(self):
+        op = ref("unit-dozen")
+        a = action(op, lines=[{"item_ref": "chair-ergo", "quantity": 1, "unit_price_minor": 7200000, "unit_ref": "dozen"}],
+                   amount_minor=7200000)
+        r = EXECUTOR.api("sm_create", a)
+        self.assertEqual(r["outcome"], "CREATED", r)
+        self.assertEqual(r["destination"]["lines"], a["lines"])
+        dozens = xmlid("uom", "product_uom_dozen")
+        row = odoo_sql("SELECT l.product_qty, l.product_uom FROM purchase_order_line l JOIN purchase_order o ON o.id = l.order_id"
+                       " WHERE o.sm_op_ref = '%s'" % op)[0].split("|")
+        self.assertEqual((float(row[0]), int(row[1])), (1.0, dozens))
+        line = int(odoo_sql("SELECT l.id FROM purchase_order_line l JOIN purchase_order o ON o.id = l.order_id"
+                            " WHERE o.sm_op_ref = '%s'" % op)[0])
+        ADMIN.call("purchase.order.line", "write", [line], {"product_uom": xmlid("uom", "product_uom_unit")})
+        self.assertEqual(OBSERVER.api("sm_lookup", op)["destination"]["lines"][0]["quantity"], -1)
+
+    def test_def22_unit_of_another_kind_is_refused(self):
+        r = EXECUTOR.api("sm_create", action(ref("unit-kg"), lines=[{"item_ref": "chair-ergo", "quantity": 10,
+                                                                      "unit_price_minor": 600000, "unit_ref": "no-such-unit"}]))
+        self.assertEqual((r["outcome"], r["reason"]), ("REFUSED_OUT_OF_SCOPE", "MAPPING_MISSING:unit"))
+
+
+class DeliveryAddress(unittest.TestCase):
+    """R1-DEF-11 / R1 decision 2: the delivery address is protected."""
+
+    def delivery(self):
+        return ADMIN.call("res.partner", "search", [("sm_ref", "=", "wh-chennai")])[0]
+
+    def test_def11_address_change_after_authorisation_needs_a_fresh_one(self):
+        rev = supplier_revision("wh-chennai")
+        stale_op = ref("dlv-stale")
+        a = action(stale_op, delivery_revision=rev)
+        ADMIN.call("res.partner", "write", [self.delivery()], {"street": "%s Diverted Road" % RUN})
+        self.assertEqual(supplier_revision("wh-chennai"), rev + 1)
+        ready = EXECUTOR.api("sm_readiness", a)
+        self.assertEqual((ready["outcome"], ready["reason"]), ("NOT_READY", "DELIVERY_CHANGED"))
+        r = EXECUTOR.api("sm_create", a)
+        self.assertEqual((r["outcome"], r["reason"]), ("REFUSED_SUPPLIER_STALE", "DELIVERY_CHANGED"))
+        self.assertEqual(int(odoo_sql("SELECT count(*) FROM purchase_order WHERE sm_op_ref = '%s'" % stale_op)[0]), 0)
+        fresh = EXECUTOR.api("sm_create", action(ref("dlv-fresh"), delivery_revision=rev + 1))
+        self.assertEqual((fresh["outcome"], fresh["destination"]["delivery_revision"]), ("CREATED", rev + 1))
+
+    def test_def11_delivery_revision_cannot_be_set(self):
+        with self.assertRaises(RPCError):
+            ADMIN.call("res.partner", "write", [self.delivery()], {"sm_revision": 1})
+
+
+class OnlySteelmatterWritesOrders(unittest.TestCase):
+    """R1-DEF-10 / R1 decision 6."""
+
+    def test_def10_purchase_user_cannot_create_or_change_orders(self):
+        login, pw = "buyer-%s" % RUN, uuid.uuid4().hex
+        uid = ADMIN.call("res.users", "create", {"login": login, "name": "Synthetic buyer", "email": login + "@example.invalid",
+                                                 "password": pw, "groups_id": [(6, 0, [xmlid("purchase", "group_purchase_user")])]},
+                         context={"no_reset_password": True})
+        try:
+            from sandbox_client import Identity
+            buyer = Identity(login, pw)
+            op = ref("guard")
+            self.assertEqual(EXECUTOR.api("sm_create", action(op))["outcome"], "CREATED")
+            po = po_of(op)
+            partner = ADMIN.call("res.partner", "search", [("sm_ref", "=", "sup-desks")])[0]
+            for call in (lambda: buyer.call("purchase.order", "create", {"partner_id": partner}),
+                         lambda: buyer.call("purchase.order", "write", [po], {"notes": "x"}),
+                         lambda: buyer.call("purchase.order", "button_cancel", [po]),
+                         lambda: buyer.call("purchase.order", "unlink", [po])):
+                with self.assertRaises(RPCError):
+                    call()
+            self.assertEqual(odoo_sql("SELECT state FROM purchase_order WHERE id = %d" % po), ["purchase"])
+        finally:
+            ADMIN.call("res.users", "write", [uid], {"active": False})
+
+    def test_def10_a_caller_context_cannot_skip_the_journal(self):
+        op = ref("ctx")
+        self.assertEqual(EXECUTOR.api("sm_create", action(op))["outcome"], "CREATED")
+        line = int(odoo_sql("SELECT l.id FROM purchase_order_line l JOIN purchase_order o ON o.id = l.order_id"
+                            " WHERE o.sm_op_ref = '%s'" % op)[0])
+        ADMIN.call("purchase.order.line", "write", [line], {"price_unit": 1.0}, context={"steelmatter_create": True})
+        self.assertIn("po_edited", odoo_sql("SELECT event FROM steelmatter_journal WHERE op_ref = '%s'" % op))
+
+    def test_one_odoo_company_per_deployment(self):
+        other = ADMIN.call("res.company", "create", {"name": "Second synthetic company %s" % RUN})
+        try:
+            r = EXECUTOR.api("sm_create", action(ref("two-co")))
+            self.assertEqual((r["outcome"], r["reason"]), ("REFUSED_OUT_OF_SCOPE", "MULTI_COMPANY"))
+            cov = OBSERVER.api("sm_coverage")
+            self.assertEqual([x["posture"] for x in cov["routes"] if x["id"] == "single_company"], ["unknown"])
+        finally:
+            ADMIN.call("res.company", "write", [other], {"active": False})
+        self.assertEqual(EXECUTOR.api("sm_create", action(ref("one-co")))["outcome"], "CREATED")
+
+
 if __name__ == "__main__":
     unittest.main()

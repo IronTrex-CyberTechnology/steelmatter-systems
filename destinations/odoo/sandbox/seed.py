@@ -32,6 +32,14 @@ if not Partner.search([("sm_ref", "=", "wh-chennai")]):
     Partner.create({"name": "Acme Synthetic Chennai Warehouse", "type": "delivery", "sm_ref": "wh-chennai",
                     "parent_id": company.partner_id.id, "city": "Chennai", "country_id": env.ref("base.in").id})
 
+# Units and a purchase tax the engine can authorise by reference (D1 v1.4).
+env.ref("uom.product_uom_unit").sm_ref = "unit"
+env.ref("uom.product_uom_dozen").sm_ref = "dozen"
+Tax = env["account.tax"]
+if not Tax.search([("sm_ref", "=", "gst18-purchase")]):
+    Tax.create({"name": "GST 18% (purchase, synthetic)", "sm_ref": "gst18-purchase", "amount_type": "percent", "amount": 18.0,
+                "type_tax_use": "purchase", "company_id": company.id})
+
 Product = env["product.product"]
 for ref, name, price in [("chair-ergo", "Ergonomic office chair", 6000.0), ("desk-std", "Standard desk", 12000.0)]:
     if not Product.search([("sm_ref", "=", ref)]):

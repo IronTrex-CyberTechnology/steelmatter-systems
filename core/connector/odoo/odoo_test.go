@@ -166,7 +166,8 @@ func TestExecuteSendsOnlyTheCanonicalActionAsExecutor(t *testing.T) {
 		t.Fatalf("flags: %+v", r)
 	}
 	want := map[string]bool{"op_ref": true, "action_revision": true, "company_ref": true, "delivery_ref": true, "supplier_ref": true,
-		"supplier_revision": true, "lines": true, "amount_minor": true, "currency": true, "permit_digest": true, "expected_min_seq": true}
+		"supplier_revision": true, "lines": true, "amount_minor": true, "currency": true, "permit_digest": true, "expected_min_seq": true,
+		"amount_untaxed_minor": true, "tax_minor": true, "delivery_revision": true}
 	for k := range sent {
 		if !want[k] {
 			t.Fatalf("execute sent a field outside the canonical action: %s", k)

@@ -443,16 +443,29 @@ func (c *Connector) List(ctx context.Context, checkpointSeq int64, limit int) (c
 // read-only observer identity, for the engine to store when it authorises
 // an action. The destination compares it again inside the create.
 func (c *Connector) SupplierRevision(ctx context.Context, supplierRef string) (int64, error) {
+	return c.partnerRevision(ctx, "supplier", supplierRef)
+}
+
+// DeliveryRevision reads the protected revision of the delivery address
+// (res.partner.sm_revision on the delivery partner, D1 v1.4, R1 decision 2)
+// with the observer identity, for the engine to store when it authorises an
+// action as Action.DeliveryRevision. The destination compares it again
+// inside the create; a change in between refuses the create.
+func (c *Connector) DeliveryRevision(ctx context.Context, deliveryRef string) (int64, error) {
+	return c.partnerRevision(ctx, "delivery address", deliveryRef)
+}
+
+func (c *Connector) partnerRevision(ctx context.Context, what, ref string) (int64, error) {
 	var rows []struct {
 		Rev int64 `json:"sm_revision"`
 	}
 	err := c.call(ctx, observer, "res.partner", "search_read",
-		[]any{[]any{[]any{"sm_ref", "=", supplierRef}}}, map[string]any{"fields": []string{"sm_revision"}, "limit": 2}, &rows)
+		[]any{[]any{[]any{"sm_ref", "=", ref}}}, map[string]any{"fields": []string{"sm_revision"}, "limit": 2}, &rows)
 	if err != nil {
 		return 0, err
 	}
 	if len(rows) != 1 {
-		return 0, fmt.Errorf("odoo: supplier %q: %s", supplierRef, connector.ReasonMappingMissing)
+		return 0, fmt.Errorf("odoo: %s %q: %s", what, ref, connector.ReasonMappingMissing)
 	}
 	return rows[0].Rev, nil
 }

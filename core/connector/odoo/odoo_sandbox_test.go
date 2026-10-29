@@ -254,3 +254,36 @@ func TestCoverageOfTheSandbox(t *testing.T) {
 		}
 	}
 }
+
+// D1 v1.4 through the real connector: an authorised unit, tax and full total
+// and the delivery revision reach Odoo and come back in the order facts.
+func TestV14UnitTaxTotalAndDeliveryRevision(t *testing.T) {
+	c := sandbox(t)
+	ctx := context.Background()
+	rev, _ := c.SupplierRevision(ctx, supplier)
+	drev, err := c.DeliveryRevision(ctx, "wh-chennai")
+	if err != nil || drev < 1 {
+		t.Fatalf("delivery revision %d %v", drev, err)
+	}
+	if _, err := c.DeliveryRevision(ctx, "no-such-address"); err == nil {
+		t.Fatal("an unknown delivery address must be an error")
+	}
+	untaxed, tax := int64(7200000), int64(0)
+	a := action(opRef("v14"), rev)
+	a.Lines = []connector.Line{{ItemRef: "chair-ergo", Quantity: 1, UnitPriceMinor: 7200000, UnitRef: "dozen"}}
+	a.AmountMinor, a.AmountUntaxedMinor, a.TaxMinor, a.DeliveryRevision = untaxed+tax, &untaxed, &tax, &drev
+	r, _ := c.Execute(ctx, a)
+	if r.Outcome != connector.Created || r.Destination == nil {
+		t.Fatalf("got %+v", r)
+	}
+	o := r.Destination
+	if !o.Lines[0].Equal(a.Lines[0]) || o.AmountUntaxedMinor != untaxed || o.TaxMinor != tax || o.DeliveryRevision != drev {
+		t.Fatalf("order facts %+v do not carry the v1.4 action %+v", o, a)
+	}
+	stale := drev - 1
+	b := action(opRef("v14-stale"), rev)
+	b.DeliveryRevision = &stale
+	if s, _ := c.Execute(ctx, b); s.Outcome != connector.RefusedSupplierStale || s.Reason != connector.ReasonDeliveryChanged || !s.ProvesNoOrder() {
+		t.Fatalf("stale delivery address: %+v", s)
+	}
+}

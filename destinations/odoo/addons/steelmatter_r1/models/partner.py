@@ -1,24 +1,32 @@
-"""Supplier revision (D1 v1.1: one definition everywhere).
+"""Supplier and delivery address revisions (D1 v1.1, v1.4; R1 decision 2).
 
-res.partner.sm_revision is kept on the commercial partner and raised whenever
-a protected supplier field changes, including bank accounts. sm_create compares
-it under FOR SHARE on that row, so a concurrent change either commits first
-(and the create sees the new revision) or waits for the create to commit.
+res.partner.sm_revision is raised whenever a protected field changes,
+including bank accounts:
+  - on the commercial partner (the supplier), the supplier revision;
+  - on any partner that carries an sm_ref itself, such as a delivery address,
+    its own revision (the delivery revision, R1-DEF-11).
+sm_create compares both under FOR SHARE on those rows, so a concurrent change
+either commits first (and the create sees the new revision and refuses) or
+waits for the create to commit. A change before the order is created needs a
+fresh authorisation. The revision only ever increases and cannot be set.
 
-Protected fields are a proposal for D9 (to confirm with Uday and Aakhil).
+Protected fields (R1 decision 2: all listed fields, including the delivery
+address).
 """
 
 from odoo import _, api, fields, models
 from odoo.exceptions import AccessError
 
+ADDRESS_FIELDS = {"street", "street2", "city", "zip", "state_id", "country_id", "type"}
 PROTECTED_FIELDS = {
     "name", "vat", "active", "company_id", "is_company", "parent_id", "country_id",
     "bank_ids", "property_purchase_currency_id", "property_supplier_payment_term_id",
-}
+} | ADDRESS_FIELDS
 
 
 def bump_revision(env, partners):
-    ids = tuple({p.commercial_partner_id.id for p in partners if p.commercial_partner_id})
+    ids = tuple({p.commercial_partner_id.id for p in partners if p.commercial_partner_id}
+                | {p.id for p in partners if p.sm_ref})
     if ids:
         # Plain SQL: the UPDATE takes the row lock that sm_create's FOR SHARE
         # waits on, and needs no write rights for the user editing the partner.
