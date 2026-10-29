@@ -63,10 +63,16 @@ done
 curl -sf -o /dev/null "$URL/v1/ready" || die "service not ready"
 
 "$DIR/bin/smdemo" setup -admin-url "$STEELMATTER_DB_ADMIN_URL" -tokens "$DIR/demo-tokens.json"
+# The commit recorded in the run's trace (T43), marked -dirty when tracked
+# files have uncommitted changes, as demo/build.mjs marks the page build.
+COMMIT="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
+if [[ "$COMMIT" != unknown && -n "$(git -C "$ROOT" status --porcelain --untracked-files=no 2>/dev/null)" ]]; then
+  COMMIT="$COMMIT-dirty"
+fi
 status=0
 "$DIR/bin/smdemo" run -server "$URL" -admin-url "$STEELMATTER_DB_ADMIN_URL" -tokens "$DIR/demo-tokens.json" \
   -scenario "${DEMO_SCENARIO:-all}" -out "$DIR/out" -json "$OUT/demo.json" \
-  -commit "$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)" -reference "$ROOT/fixtures/demo/reference-results-v1.json" || status=$?
+  -commit "$COMMIT" -reference "$ROOT/fixtures/demo/reference-results-v1.json" || status=$?
 
 if [[ -f "$DIR/out/flagship-evidence.json" ]]; then
   if command -v node >/dev/null && [[ -d "$ROOT/packages/verifier/node_modules" ]]; then

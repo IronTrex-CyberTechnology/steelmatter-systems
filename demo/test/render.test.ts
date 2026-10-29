@@ -38,6 +38,10 @@ test('T43: a changed recording is detected', () => {
   assert.ok(problems.some((p) => p.includes('unexpected-scenario')));
 });
 
+test('T43: the pinned recording names a clean, full commit (not unknown, not a dirty working tree)', () => {
+  assert.match(ref.generated_at_commit, /^[0-9a-f]{40}$/);
+});
+
 test('T43: each scenario screen shows its case, every test ID, its fixtures, the recorded commit and simulated status', () => {
   const commit = ref.generated_at_commit.replace(/-dirty$/, '').slice(0, 7);
   for (const card of CARDS.filter((c) => c.scenario)) {
