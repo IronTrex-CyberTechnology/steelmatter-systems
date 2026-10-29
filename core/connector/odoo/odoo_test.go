@@ -117,7 +117,8 @@ func (f *fakeOdoo) callsMade() []string {
 
 func order(opRef string) map[string]any {
 	return map[string]any{"id": "P00001", "state": "purchase", "company_ref": "acme-in", "delivery_ref": "wh-chennai",
-		"supplier_ref": "sup-chairs", "lines": []any{map[string]any{"item_ref": "chair-ergo", "quantity": 10, "unit_price_minor": 600000}},
+		"supplier_ref": "sup-chairs", "supplier_revision": 1,
+		"lines":        []any{map[string]any{"item_ref": "chair-ergo", "quantity": 10, "unit_price_minor": 600000}},
 		"amount_minor": 6000000, "currency": "INR", "permit_digest": "sha256:" + opRef}
 }
 

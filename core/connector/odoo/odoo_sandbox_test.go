@@ -135,6 +135,7 @@ func TestCreatedOrderCarriesTheAuthorisedFacts(t *testing.T) {
 	}
 	o := r.Destination
 	if o.State != connector.StateConfirmed || o.CompanyRef != a.CompanyRef || o.DeliveryRef != a.DeliveryRef || o.SupplierRef != a.SupplierRef ||
+		o.SupplierRevision != a.SupplierRevision ||
 		o.AmountMinor != a.AmountMinor || o.Currency != a.Currency || o.PermitDigest != a.PermitDigest || !reflect.DeepEqual(o.Lines, a.Lines) {
 		t.Fatalf("order facts differ from the action:\n%+v\n%+v", o, a)
 	}

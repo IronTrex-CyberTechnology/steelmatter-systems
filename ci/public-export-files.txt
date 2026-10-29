@@ -38,6 +38,7 @@ cmd/smci/main.go
 cmd/smdemo/main.go
 cmd/smkeys/main.go
 cmd/smkeys/main_test.go
+cmd/smlossproxy/main.go
 cmd/smvectors/main.go
 cmd/smvectors/temporal.go
 cmd/steelmatter/connector.go
@@ -53,7 +54,9 @@ core/api/ratelimit.go
 core/api/ratelimit_test.go
 core/auth/auth.go
 core/connector/connector.go
+core/connector/odoo/coverage.go
 core/connector/odoo/odoo.go
+core/connector/odoo/odoo_proxy_test.go
 core/connector/odoo/odoo_sandbox_test.go
 core/connector/odoo/odoo_test.go
 core/connector/stub/stub.go
@@ -147,6 +150,7 @@ destinations/odoo/addons/steelmatter_r1/__manifest__.py
 destinations/odoo/addons/steelmatter_r1/models/__init__.py
 destinations/odoo/addons/steelmatter_r1/models/anchor.py
 destinations/odoo/addons/steelmatter_r1/models/api.py
+destinations/odoo/addons/steelmatter_r1/models/coverage.py
 destinations/odoo/addons/steelmatter_r1/models/operation.py
 destinations/odoo/addons/steelmatter_r1/models/partner.py
 destinations/odoo/addons/steelmatter_r1/models/purchase.py
@@ -154,12 +158,18 @@ destinations/odoo/addons/steelmatter_r1/models/refs.py
 destinations/odoo/addons/steelmatter_r1/security/groups.xml
 destinations/odoo/addons/steelmatter_r1/security/ir.model.access.csv
 destinations/odoo/sandbox/compose.yaml
+destinations/odoo/sandbox/coverage
 destinations/odoo/sandbox/lib.sh
+destinations/odoo/sandbox/proxy
 destinations/odoo/sandbox/reset
 destinations/odoo/sandbox/seed.py
 destinations/odoo/sandbox/test-connector
 destinations/odoo/sandbox/test-engine
 destinations/odoo/sandbox/up
+destinations/odoo/tests/anchor_timing.py
+destinations/odoo/tests/coverage_report.py
+destinations/odoo/tests/coverage_test.py
+destinations/odoo/tests/mail_test.py
 destinations/odoo/tests/race_test.py
 destinations/odoo/tests/restore_test.py
 destinations/odoo/tests/sandbox_client.py
@@ -286,6 +296,7 @@ tests/integration/r1_evidence_test.go
 tests/integration/r1_hardening_test.go
 tests/integration/r1_http_test.go
 tests/integration/r1_odoo_e2e_test.go
+tests/integration/r1_odoo_proxy_test.go
 tests/integration/r1_workers_test.go
 tests/integration/races_test.go
 tests/integration/readers_test.go
@@ -301,4 +312,6 @@ tools/check-odoo-results.py
 tools/ciagg/ciagg.go
 tools/ciagg/ciagg_test.go
 tools/ciagg/report.go
+tools/lossproxy/lossproxy.go
+tools/lossproxy/lossproxy_test.go
 versions.env

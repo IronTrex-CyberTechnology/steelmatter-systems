@@ -63,6 +63,7 @@ def engine_status(r, a):
     def matches(o):
         return bool(o) and o["state"] == "purchase" and o["company_ref"] == a["company_ref"] \
             and o["delivery_ref"] == a["delivery_ref"] and o["supplier_ref"] == a["supplier_ref"] \
+            and o.get("supplier_revision") == a["supplier_revision"] \
             and o["amount_minor"] == a["amount_minor"] and o["currency"] == a["currency"] \
             and o["permit_digest"] == a["permit_digest"] and o["lines"] == a["lines"]
     if r["create_done"] and r["destination"]:
