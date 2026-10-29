@@ -18,6 +18,13 @@ type ProposedAction struct {
 	DeliveryID string          `json:"delivery_id"`
 	Currency   string          `json:"currency"`
 	Lines      []contract.Line `json:"lines"`
+	// TaxMinor is the issuer's tax amount for lines with tax_ids (D1 v1.4,
+	// R1 decision 1). The engine holds untaxed + tax; the destination
+	// recomputes the tax at create and refuses any difference.
+	TaxMinor *int64 `json:"tax_minor,omitempty"`
+	// DeliveryRevision is read by the engine from the destination, never
+	// proposed (R1 decision 2); it is not part of the request identity.
+	DeliveryRevision *int64 `json:"-"`
 }
 
 // InstructionRequest is the trusted issuer's creation request.
@@ -193,6 +200,30 @@ func buildAction(ctx context.Context, tx pgx.Tx, tenant, instructionID string, r
 	if cerr != nil {
 		return nil, "", nil, fault(string(cerr.Code), "%s", cerr.Detail)
 	}
+	// D1 v1.4 (R1 decision 1): the exact taxes and the full total are
+	// authorised. Taxes without a tax amount, or a tax amount without taxes,
+	// are refused; nothing is ever dropped or recomputed here.
+	taxed := false
+	for _, l := range lines {
+		taxed = taxed || len(l.TaxIDs) > 0
+	}
+	var untaxed, tax *int64
+	amount := total
+	switch {
+	case taxed && pa.TaxMinor == nil:
+		return nil, "", nil, fault("SCHEMA_VIOLATION", "lines with tax_ids require tax_minor")
+	case !taxed && pa.TaxMinor != nil:
+		return nil, "", nil, fault("SCHEMA_VIOLATION", "tax_minor requires at least one line with tax_ids")
+	case taxed:
+		if *pa.TaxMinor < 0 || *pa.TaxMinor > contract.MaxSafeInteger-total {
+			return nil, "", nil, fault("ARITHMETIC_OVERFLOW", "line total + tax_minor exceeds 2^53-1")
+		}
+		u, t := total, *pa.TaxMinor
+		untaxed, tax, amount = &u, &t, total+t
+	}
+	if amount < 1 {
+		return nil, "", nil, fault("SCHEMA_VIOLATION", "the order total must be at least 1")
+	}
 	var supplierRev int64
 	var supplierStatus string
 	err = tx.QueryRow(ctx, `SELECT revision, status FROM target.suppliers WHERE tenant_id = $1 AND supplier_id = $2 FOR SHARE`,
@@ -207,7 +238,8 @@ func buildAction(ctx context.Context, tx pgx.Tx, tenant, instructionID string, r
 		SchemaVersion: contract.SchemaVersion, CryptoProfile: contract.CryptoProfile,
 		TenantID: tenant, InstructionID: instructionID, ActionRevision: revision, ActorID: actor,
 		Audience: m.Audience, Operation: "purchase_order.issue", SupplierID: pa.SupplierID, SupplierRevision: supplierRev,
-		DeliveryID: pa.DeliveryID, Currency: contract.Currency, Lines: lines, AmountMinor: total,
+		DeliveryID: pa.DeliveryID, Currency: contract.Currency, Lines: lines, AmountMinor: amount,
+		AmountUntaxedMinor: untaxed, TaxMinor: tax, DeliveryRevision: pa.DeliveryRevision,
 	}
 	raw, _ := json.Marshal(a)
 	canonical, digest, err = contract.CanonicalDigest(contract.KindAction, raw)
@@ -278,6 +310,9 @@ func (e *Engine) CreateInstruction(ctx context.Context, p auth.Principal, r Inst
 	digest := requestDigest(map[string]any{"source_system": r.SourceSystem, "source_record_id": r.SourceRecordID, "mandate_id": r.MandateID, "proposed_action": norm})
 	instructionID := newID("inst")
 	if err := e.syncSupplierFor(ctx, p, r.Proposed.SupplierID); err != nil {
+		return nil, false, err
+	}
+	if norm.DeliveryRevision, err = e.deliveryRevisionFor(ctx, p, r.Proposed.DeliveryID); err != nil {
 		return nil, false, err
 	}
 
@@ -368,6 +403,9 @@ func (e *Engine) AmendInstruction(ctx context.Context, p auth.Principal, instruc
 	}
 	digest := requestDigest(map[string]any{"amendment_id": r.AmendmentID, "expected_action_revision": r.ExpectedRevision, "proposed_action": norm})
 	if err := e.syncSupplierFor(ctx, p, r.Proposed.SupplierID); err != nil {
+		return nil, false, err
+	}
+	if norm.DeliveryRevision, err = e.deliveryRevisionFor(ctx, p, r.Proposed.DeliveryID); err != nil {
 		return nil, false, err
 	}
 	if p.Kind != auth.Issuer {

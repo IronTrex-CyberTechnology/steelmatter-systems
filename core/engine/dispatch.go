@@ -56,6 +56,12 @@ func (e *Engine) Dispatch(ctx context.Context, p auth.Principal, actionJSON []by
 	if e.Cfg.CompanyRef == "" {
 		return nil, fault("SERVICE_UNAVAILABLE", "no destination company is configured for dispatch")
 	}
+	if err := e.ServesTenant(p.Tenant); err != nil {
+		return nil, err
+	}
+	if e.Cfg.ObserveOnly {
+		return nil, fault("FORBIDDEN", "OBSERVE_ONLY: this deployment observes the destination and does not purchase; nothing was dispatched")
+	}
 	a, err := e.preAdmit(p, actionJSON, permitJWS)
 	if err != nil {
 		return nil, err
@@ -258,6 +264,8 @@ func (e *Engine) checkReadiness(ctx context.Context, p auth.Principal, a *admiss
 		return nil
 	case r.Reason == connector.ReasonSupplierChanged:
 		return fault("SUPPLIER_REVISION_STALE", "destination reports the protected supplier changed after authorisation; re-evaluation required")
+	case r.Reason == connector.ReasonDeliveryChanged:
+		return fault("DELIVERY_REVISION_STALE", "destination reports the delivery address changed after authorisation; amend and re-evaluate")
 	case r.Reason == connector.ReasonDestinationUnavailable || r.Outcome != connector.NotReady:
 		return fault("SERVICE_UNAVAILABLE", "destination is not reachable; nothing was dispatched")
 	default:

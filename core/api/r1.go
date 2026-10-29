@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"unicode/utf8"
 
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/auth"
@@ -35,6 +36,59 @@ func (h *handlers) registerR1(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/recovery/check", h.wrap(h.checkRestore))
 	mux.HandleFunc("POST /v1/recovery/reconcile", h.wrap(h.reconcileRestore))
 	mux.HandleFunc("POST /v1/recovery/resume", h.wrap(h.resume))
+	mux.HandleFunc("POST /v1/instructions/{instruction_id}/approvals", h.wrap(h.recordApproval))
+}
+
+// recordApproval: an entitled approver's decision on the exact current
+// action revision (T17-T19, R1 decision 9).
+func (h *handlers) recordApproval(ctx context.Context, p auth.Principal, r *http.Request) (*response, error) {
+	if err := requireKind(p, auth.Operator, auth.Owner); err != nil {
+		return nil, err
+	}
+	o, err := readBody(r, false)
+	if err != nil {
+		return nil, err
+	}
+	if err := closed(o, "", []string{"action_revision", "action_digest", "approved"}, []string{"note"}); err != nil {
+		return nil, err
+	}
+	var req engine.ApprovalRequest
+	if req.ActionRevision, err = integer(o, "action_revision", "", 1); err != nil {
+		return nil, err
+	}
+	digest, ok := o["action_digest"].(string)
+	if !ok || !sha256Hex.MatchString(digest) {
+		return nil, bad("SCHEMA_VIOLATION", "action_digest must be 64 lowercase hex characters")
+	}
+	req.ActionDigest = digest
+	if req.Approve, ok = o["approved"].(bool); !ok {
+		return nil, bad("SCHEMA_VIOLATION", "approved must be a boolean")
+	}
+	if _, present := o["note"]; present {
+		if req.Note, err = text(o, "note", 2000); err != nil {
+			return nil, err
+		}
+	}
+	req.InstructionID = r.PathValue("instruction_id")
+	if len(req.InstructionID) > 128 || !identifier.MatchString(req.InstructionID) {
+		return nil, bad("NOT_FOUND", "instruction not found")
+	}
+	v, err := h.e.RecordApproval(ctx, p, req)
+	if err != nil {
+		return nil, err
+	}
+	return &response{http.StatusCreated, v}, nil
+}
+
+var sha256Hex = regexp.MustCompile(`^[a-f0-9]{64}$`)
+
+// r1Kind checks the principal kind, then that the principal belongs to the
+// one tenant this deployment serves (R1 decision 6).
+func (h *handlers) r1Kind(p auth.Principal, kinds ...string) error {
+	if err := requireKind(p, kinds...); err != nil {
+		return err
+	}
+	return h.e.ServesTenant(p.Tenant)
 }
 
 func requireKind(p auth.Principal, kinds ...string) error {
@@ -120,7 +174,7 @@ func (h *handlers) dispatch(ctx context.Context, p auth.Principal, r *http.Reque
 }
 
 func (h *handlers) getDispatch(ctx context.Context, p auth.Principal, r *http.Request) (*response, error) {
-	if err := requireKind(p, auth.Observer, auth.Operator); err != nil {
+	if err := h.r1Kind(p, auth.Observer, auth.Operator); err != nil {
 		return nil, err
 	}
 	ref, err := opRef(r)
@@ -138,7 +192,7 @@ func (h *handlers) getDispatch(ctx context.Context, p auth.Principal, r *http.Re
 }
 
 func (h *handlers) settle(ctx context.Context, p auth.Principal, r *http.Request) (*response, error) {
-	if err := requireKind(p, auth.Operator); err != nil {
+	if err := h.r1Kind(p, auth.Operator); err != nil {
 		return nil, err
 	}
 	if err := emptyBody(r); err != nil {
@@ -165,7 +219,7 @@ type findingResponse struct {
 }
 
 func (h *handlers) recordFinding(ctx context.Context, p auth.Principal, r *http.Request) (*response, error) {
-	if err := requireKind(p, auth.Operator); err != nil { // R1-API-06: role before configuration
+	if err := h.r1Kind(p, auth.Operator); err != nil { // R1-API-06: role before configuration
 		return nil, err
 	}
 	o, err := readBody(r, false)
@@ -202,7 +256,7 @@ type repairResponse struct {
 }
 
 func (h *handlers) prepareRepair(ctx context.Context, p auth.Principal, r *http.Request) (*response, error) {
-	if err := requireKind(p, auth.Operator); err != nil { // R1-API-06: role before configuration
+	if err := h.r1Kind(p, auth.Operator); err != nil { // R1-API-06: role before configuration
 		return nil, err
 	}
 	o, err := readBody(r, false)
@@ -213,8 +267,8 @@ func (h *handlers) prepareRepair(ctx context.Context, p auth.Principal, r *http.
 		return nil, err
 	}
 	outcome, _ := o["outcome"].(string)
-	if outcome != engine.RepairCommit && outcome != engine.RepairRelease {
-		return nil, bad("SCHEMA_VIOLATION", "outcome must be COMMIT or RELEASE")
+	if outcome != engine.RepairCommit && outcome != engine.RepairRelease && outcome != engine.RepairAnchor {
+		return nil, bad("SCHEMA_VIOLATION", "outcome must be COMMIT, RELEASE or ANCHOR_REPAIR")
 	}
 	ev, err := text(o, "evidence_ref", 512)
 	if err != nil {
@@ -246,7 +300,7 @@ func repairID(r *http.Request) (string, error) {
 }
 
 func (h *handlers) reviewRepair(ctx context.Context, p auth.Principal, r *http.Request) (*response, error) {
-	if err := requireKind(p, auth.Operator); err != nil { // R1-API-06: role before configuration
+	if err := h.r1Kind(p, auth.Operator); err != nil { // R1-API-06: role before configuration
 		return nil, err
 	}
 	o, err := readBody(r, false)
@@ -281,7 +335,7 @@ func (h *handlers) reviewRepair(ctx context.Context, p auth.Principal, r *http.R
 }
 
 func (h *handlers) confirmRepair(ctx context.Context, p auth.Principal, r *http.Request) (*response, error) {
-	if err := requireKind(p, auth.Operator); err != nil { // R1-API-06: role before configuration
+	if err := h.r1Kind(p, auth.Operator); err != nil { // R1-API-06: role before configuration
 		return nil, err
 	}
 	if err := emptyBody(r); err != nil {
@@ -308,36 +362,37 @@ func (h *handlers) confirmRepair(ctx context.Context, p auth.Principal, r *http.
 
 type anchorRepairResponse struct {
 	OpRef    string `json:"op_ref"`
+	RepairID string `json:"repair_id"`
 	Repaired bool   `json:"repaired"`
 }
 
 func (h *handlers) anchorRepair(ctx context.Context, p auth.Principal, r *http.Request) (*response, error) {
-	if err := requireKind(p, auth.Operator); err != nil { // R1-API-06: role before configuration
+	if err := h.r1Kind(p, auth.Operator); err != nil { // R1-API-06: role before configuration
 		return nil, err
 	}
 	o, err := readBody(r, false)
 	if err != nil {
 		return nil, err
 	}
-	if err := closed(o, "", []string{"evidence_ref"}, nil); err != nil {
+	if err := closed(o, "", []string{"repair_id"}, nil); err != nil {
 		return nil, err
 	}
-	ev, err := text(o, "evidence_ref", 512)
-	if err != nil {
-		return nil, err
+	id, _ := o["repair_id"].(string)
+	if len(id) > 128 || !identifier.MatchString(id) {
+		return nil, bad("SCHEMA_VIOLATION", "repair_id must be an identifier")
 	}
 	ref, err := opRef(r)
 	if err != nil {
 		return nil, err
 	}
-	if err := h.e.ConfirmAnchorRepair(ctx, p, ref, ev); err != nil {
+	if err := h.e.ConfirmAnchorRepair(ctx, p, ref, id); err != nil {
 		return nil, err
 	}
-	return &response{http.StatusOK, anchorRepairResponse{OpRef: ref, Repaired: true}}, nil
+	return &response{http.StatusOK, anchorRepairResponse{OpRef: ref, RepairID: id, Repaired: true}}, nil
 }
 
 func (h *handlers) writeState(ctx context.Context, p auth.Principal, r *http.Request) (*response, error) {
-	if err := requireKind(p, auth.Observer, auth.Operator); err != nil {
+	if err := h.r1Kind(p, auth.Observer, auth.Operator); err != nil {
 		return nil, err
 	}
 	if h.e.Anchor == nil {
@@ -351,7 +406,7 @@ func (h *handlers) writeState(ctx context.Context, p auth.Principal, r *http.Req
 }
 
 func (h *handlers) recoveryCall(p auth.Principal, r *http.Request) (connector.Connector, error) {
-	if err := requireKind(p, auth.Operator); err != nil {
+	if err := h.r1Kind(p, auth.Operator); err != nil {
 		return nil, err
 	}
 	if err := emptyBody(r); err != nil {

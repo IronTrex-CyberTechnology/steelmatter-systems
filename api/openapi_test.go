@@ -90,6 +90,7 @@ var wantOperations = map[string]string{
 	"POST /v1/recovery/check":                                  "checkRestore",
 	"POST /v1/recovery/reconcile":                              "reconcileRestore",
 	"POST /v1/recovery/resume":                                 "resumeWrites",
+	"POST /v1/instructions/{instruction_id}/approvals":         "recordApproval",
 }
 
 var principalKinds = map[string]bool{"owner": true, "issuer": true, "actor": true, "observer": true, "operator": true}

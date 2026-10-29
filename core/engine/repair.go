@@ -25,7 +25,55 @@ import (
 const (
 	RepairCommit  = "COMMIT"  // the earlier order is established: unresolved -> committed
 	RepairRelease = "RELEASE" // no order exists or can exist: unresolved -> available
+	// RepairAnchor re-appends a missing DISPATCH_INTENT to an anchor found
+	// behind the engine database (R1 decision 4). It moves no budget and goes
+	// through the same three people: prepare, review, ConfirmAnchorRepair.
+	RepairAnchor = "ANCHOR_REPAIR"
 )
+
+// releaseProof (R1 decision 3, R1-DEF-08): HELD money is released only with
+// machine proof that no purchase occurred and that the reference is
+// permanently blocked. Human approval alone is not enough. The proof is the
+// anchor's destination stream, written by the module's own identity:
+//
+//   - any CREATE_INTENT or CREATE_DONE means a create was attempted, so
+//     whether a purchase occurred cannot be proven: RELEASE is refused and
+//     the money stays HELD (only COMMIT, or nothing, is possible);
+//   - a BLOCK record makes the reference permanently blocked: the anchor
+//     refuses any later CREATE_INTENT for it, even after an Odoo restore.
+//
+// When there is no BLOCK yet and connector c is given, the engine fences the
+// reference first and reads the proof again. Every HELD produced by today's
+// settle path carries a create attempt, so in practice RELEASE is refused for
+// them; it succeeds only for an operation the anchor shows was never sent.
+func (e *Engine) releaseProof(ctx context.Context, c connector.Connector, opRef string) error {
+	p, err := e.Anchor.ProofFor(ctx, e.Cfg.CompanyRef, opRef)
+	if err != nil {
+		return dependency("recovery anchor", err)
+	}
+	if p.CreateIntent || p.CreateDone != nil {
+		return fault("FORBIDDEN", "RELEASE_NOT_PROVEN: the recovery anchor records a create attempt for %s, so no purchase cannot be proven; the amount stays HELD", opRef)
+	}
+	if p.Blocked {
+		return nil
+	}
+	if c == nil {
+		return nil // checked again, with a fence, at confirmation
+	}
+	if _, err := c.Fence(ctx, opRef, 0); err != nil {
+		return dependency("destination", err)
+	}
+	if p, err = e.Anchor.ProofFor(ctx, e.Cfg.CompanyRef, opRef); err != nil {
+		return dependency("recovery anchor", err)
+	}
+	switch {
+	case p.CreateIntent || p.CreateDone != nil:
+		return fault("FORBIDDEN", "RELEASE_NOT_PROVEN: the recovery anchor records a create attempt for %s; the amount stays HELD", opRef)
+	case !p.Blocked:
+		return fault("FORBIDDEN", "RELEASE_NOT_PROVEN: %s is not permanently blocked (no BLOCK record in the recovery anchor); the amount stays HELD", opRef)
+	}
+	return nil
+}
 
 // FindingRecord is the OPERATOR_FINDING payload.
 type FindingRecord struct {
@@ -95,6 +143,9 @@ func (e *Engine) RecordHeldFinding(ctx context.Context, p auth.Principal, opRef,
 	if err := e.needAnchor(); err != nil {
 		return 0, err
 	}
+	if err := e.ServesTenant(p.Tenant); err != nil {
+		return 0, err
+	}
 	if p.Kind != auth.Operator {
 		return 0, fault("FORBIDDEN", "only an operator records HELD findings")
 	}
@@ -116,14 +167,20 @@ func (e *Engine) PrepareRepair(ctx context.Context, p auth.Principal, opRef, out
 	if err := e.needAnchor(); err != nil {
 		return "", err
 	}
+	if err := e.ServesTenant(p.Tenant); err != nil {
+		return "", err
+	}
 	if p.Kind != auth.Operator {
 		return "", fault("FORBIDDEN", "only an operator prepares repair evidence")
 	}
-	if outcome != RepairCommit && outcome != RepairRelease {
-		return "", fault("SCHEMA_VIOLATION", "repair outcome must be COMMIT or RELEASE")
+	if outcome != RepairCommit && outcome != RepairRelease && outcome != RepairAnchor {
+		return "", fault("SCHEMA_VIOLATION", "repair outcome must be COMMIT, RELEASE or ANCHOR_REPAIR")
 	}
 	if evidenceRef == "" {
 		return "", fault("SCHEMA_VIOLATION", "an evidence reference is required")
+	}
+	if outcome == RepairAnchor {
+		return e.prepareAnchorRepair(ctx, p, opRef, evidenceRef, summary)
 	}
 	o, err := e.heldOp(ctx, p.Tenant, opRef)
 	if err != nil {
@@ -138,6 +195,11 @@ func (e *Engine) PrepareRepair(ctx context.Context, p auth.Principal, opRef, out
 	}
 	if !slices.ContainsFunc(recs, func(r anchor.Record) bool { return r.Type == anchor.OperatorFinding }) {
 		return "", fault("REVISION_STALE", "record the HELD finding before preparing a repair")
+	}
+	if outcome == RepairRelease {
+		if err := e.releaseProof(ctx, nil, opRef); err != nil {
+			return "", err
+		}
 	}
 	id := newID("rep")
 	_, err = e.Anchor.Append(ctx, anchor.RepairEvidence, p.Tenant, opRef,
@@ -177,8 +239,8 @@ func (e *Engine) repairState(ctx context.Context, tenant, opRef, repairID string
 			}
 			if rc.RepairID == repairID {
 				st.confirmed = &rc
-			} else if rc.RepairID != "" {
-				st.otherConfirmation = true
+			} else if rc.RepairID != "" && rc.Outcome != RepairAnchor {
+				st.otherConfirmation = true // anchor repairs move no budget
 			}
 		}
 	}
@@ -192,6 +254,9 @@ func (e *Engine) repairState(ctx context.Context, tenant, opRef, repairID string
 // repair reviewer and must not have prepared the evidence.
 func (e *Engine) ReviewRepair(ctx context.Context, p auth.Principal, opRef, repairID string, approve bool, note string) error {
 	if err := e.needAnchor(); err != nil {
+		return err
+	}
+	if err := e.ServesTenant(p.Tenant); err != nil {
 		return err
 	}
 	if p.Kind != auth.Operator || !slices.Contains(e.RepairReviewers, p.ID) {
@@ -225,6 +290,9 @@ func (e *Engine) ConfirmRepair(ctx context.Context, p auth.Principal, opRef, rep
 	if err := e.recoveryReady(c); err != nil {
 		return nil, err
 	}
+	if err := e.ServesTenant(p.Tenant); err != nil {
+		return nil, err
+	}
 	if p.Kind != auth.Operator || !slices.Contains(e.RepairConfirmers, p.ID) {
 		return nil, fault("FORBIDDEN", "only a configured repair confirmer can confirm a repair")
 	}
@@ -237,6 +305,9 @@ func (e *Engine) ConfirmRepair(ctx context.Context, p auth.Principal, opRef, rep
 		st, err := e.repairState(ctx, p.Tenant, opRef, repairID)
 		if err != nil {
 			return err
+		}
+		if st.evidence.Outcome == RepairAnchor {
+			return fault("REVISION_STALE", "an ANCHOR_REPAIR is confirmed with the anchor-repair endpoint")
 		}
 		if st.otherConfirmation {
 			return fault("ALREADY_COMMITTED", "another repair was already confirmed for this operation")
@@ -266,6 +337,9 @@ func (e *Engine) ConfirmRepair(ctx context.Context, p auth.Principal, opRef, rep
 		ev := st.evidence
 		to := DispatchCommitted
 		if ev.Outcome == RepairRelease {
+			if err := e.releaseProof(ctx, c, opRef); err != nil {
+				return err
+			}
 			to = DispatchFenced
 		}
 		rc := RepairConfirmRecord{RepairID: repairID, Outcome: ev.Outcome, EvidenceRef: ev.EvidenceRef,
@@ -356,7 +430,7 @@ func (e *Engine) replayConfirmedRepairs(ctx context.Context) ([]string, error) {
 		if err := json.Unmarshal(r.Payload, &rc); err != nil {
 			return problems, err
 		}
-		if rc.RepairID == "" {
+		if rc.RepairID == "" || rc.Outcome == RepairAnchor {
 			continue
 		} // anchor-history repair, not a budget decision
 		err := e.inTx(ctx, r.OpRef, func(tx pgx.Tx) error {
@@ -373,35 +447,106 @@ func (e *Engine) replayConfirmedRepairs(ctx context.Context) ([]string, error) {
 	return problems, nil
 }
 
-// ConfirmAnchorRepair is Aakhil's confirmation that an anchor found behind
-// the engine database may be repaired from the engine's own record: the
-// DISPATCH_INTENT is re-appended from the stored dispatch, with a
-// REPAIR_CONFIRMED record naming who confirmed it and the evidence.
-func (e *Engine) ConfirmAnchorRepair(ctx context.Context, p auth.Principal, opRef, evidenceRef string) error {
+// prepareAnchorRepair records Uday's evidence that an anchor found behind
+// the engine database may be repaired for opRef: the engine has the
+// dispatch, the anchor has no DISPATCH_INTENT for it.
+func (e *Engine) prepareAnchorRepair(ctx context.Context, p auth.Principal, opRef, evidenceRef, summary string) (string, error) {
+	var n int
+	if err := e.Pool.QueryRow(ctx, `SELECT count(*) FROM steelmatter.dispatches WHERE tenant_id = $1 AND op_ref = $2`, p.Tenant, opRef).Scan(&n); err != nil {
+		return "", classify(err)
+	}
+	if n == 0 {
+		return "", fault("NOT_FOUND", "operation not found")
+	}
+	recs, err := e.Anchor.RecordsFor(ctx, p.Tenant, opRef)
+	if err != nil {
+		return "", dependency("recovery anchor", err)
+	}
+	if slices.ContainsFunc(recs, func(r anchor.Record) bool { return r.Type == anchor.DispatchIntent }) {
+		return "", fault("REVISION_STALE", "the recovery anchor already records this operation; nothing to repair")
+	}
+	id := newID("rep")
+	if _, err := e.Anchor.Append(ctx, anchor.RepairEvidence, p.Tenant, opRef,
+		RepairEvidenceRecord{RepairID: id, Outcome: RepairAnchor, EvidenceRef: evidenceRef, Summary: summary, PreparedBy: p.ID}, 0); err != nil {
+		return "", dependency("recovery anchor", err)
+	}
+	return id, nil
+}
+
+// ConfirmAnchorRepair is Aakhil's confirmation (R1 decision 4) of an
+// ANCHOR_REPAIR that Uday prepared and Kaif approved: three different
+// people, as for budget repairs. The DISPATCH_INTENT is re-appended from the
+// stored dispatch, then a REPAIR_CONFIRMED record names the three people and
+// the evidence. A repeat is idempotent. It moves no budget; the resume gate
+// still has to pass before writes resume.
+func (e *Engine) ConfirmAnchorRepair(ctx context.Context, p auth.Principal, opRef, repairID string) error {
 	if err := e.needAnchor(); err != nil {
+		return err
+	}
+	if err := e.ServesTenant(p.Tenant); err != nil {
 		return err
 	}
 	if p.Kind != auth.Operator || !slices.Contains(e.RepairConfirmers, p.ID) {
 		return fault("FORBIDDEN", "only a configured repair confirmer can confirm an anchor repair")
 	}
+	return e.inTx(ctx, opRef, func(tx pgx.Tx) error {
+		if _, _, _, _, err := lockRepairOperation(ctx, tx, p.Tenant, opRef); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fault("NOT_FOUND", "operation not found")
+			}
+			return err
+		}
+		st, err := e.repairState(ctx, p.Tenant, opRef, repairID)
+		if err != nil {
+			return err
+		}
+		if st.evidence.Outcome != RepairAnchor {
+			return fault("REVISION_STALE", "repair %s is a %s repair, not an ANCHOR_REPAIR", repairID, st.evidence.Outcome)
+		}
+		if st.confirmed != nil {
+			return nil // already confirmed: the same decision, nothing more to do
+		}
+		if st.review == nil || !st.review.Approved {
+			return fault("FORBIDDEN", "the anchor repair evidence has not been approved by a reviewer")
+		}
+		if p.ID == st.evidence.PreparedBy || p.ID == st.review.ReviewedBy {
+			return fault("FORBIDDEN", "the confirmer must be different from the preparer and the reviewer")
+		}
+		ir, err := intentFromDispatch(ctx, tx, p.Tenant, opRef)
+		if err != nil {
+			return err
+		}
+		if _, err := e.Anchor.Append(ctx, anchor.DispatchIntent, p.Tenant, opRef, ir, 0); err != nil {
+			return dependency("recovery anchor", err)
+		}
+		rc := RepairConfirmRecord{RepairID: repairID, Outcome: RepairAnchor, EvidenceRef: st.evidence.EvidenceRef,
+			PreparedBy: st.evidence.PreparedBy, ReviewedBy: st.review.ReviewedBy, ConfirmedBy: p.ID}
+		if _, err := e.Anchor.Append(ctx, anchor.RepairConfirmed, p.Tenant, opRef, rc, 0); err != nil {
+			return dependency("recovery anchor", err)
+		}
+		return nil
+	})
+}
+
+// intentFromDispatch rebuilds the DISPATCH_INTENT from the stored dispatch,
+// with the same action facts Dispatch writes (found missing by the first
+// engine-plus-Odoo run, case C).
+func intentFromDispatch(ctx context.Context, tx pgx.Tx, tenant, opRef string) (anchor.IntentRecord, error) {
 	var ir anchor.IntentRecord
 	var canonical []byte
-	err := e.Pool.QueryRow(ctx, `SELECT d.instruction_id, d.action_revision, d.mandate_id, d.control_epoch, d.company_ref, d.permit_id,
+	err := tx.QueryRow(ctx, `SELECT d.instruction_id, d.action_revision, d.mandate_id, d.control_epoch, d.company_ref, d.permit_id,
 		COALESCE(i.permit_jws, ''), d.permit_digest, d.action_canonical, d.action_digest, d.amount_minor,
 		COALESCE(to_char(d.admitted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), '')
 		FROM steelmatter.dispatches d JOIN steelmatter.issuances i ON i.tenant_id = d.tenant_id AND i.permit_id = d.permit_id
-		WHERE d.tenant_id = $1 AND d.op_ref = $2`, p.Tenant, opRef).Scan(&ir.InstructionID, &ir.ActionRevision, &ir.MandateID, &ir.ControlEpoch,
+		WHERE d.tenant_id = $1 AND d.op_ref = $2`, tenant, opRef).Scan(&ir.InstructionID, &ir.ActionRevision, &ir.MandateID, &ir.ControlEpoch,
 		&ir.CompanyRef, &ir.PermitID, &ir.PermitJWS, &ir.PermitDigest, &canonical, &ir.ActionDigest, &ir.AmountMinor, &ir.AdmittedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return fault("NOT_FOUND", "operation not found")
+		return ir, fault("NOT_FOUND", "operation not found")
 	}
 	if err != nil {
-		return classify(err)
+		return ir, classify(err)
 	}
-	ir.Tenant, ir.OpRef, ir.ActionCanonical = p.Tenant, opRef, string(canonical)
-	// The repaired intent carries the same action facts as the one Dispatch
-	// writes, taken from the stored canonical action (found missing by the
-	// first engine-plus-Odoo run, case C).
+	ir.Tenant, ir.OpRef, ir.ActionCanonical = tenant, opRef, string(canonical)
 	var act struct {
 		Currency         string `json:"currency"`
 		SupplierID       string `json:"supplier_id"`
@@ -409,13 +554,8 @@ func (e *Engine) ConfirmAnchorRepair(ctx context.Context, p auth.Principal, opRe
 		DeliveryID       string `json:"delivery_id"`
 	}
 	if err := json.Unmarshal(canonical, &act); err != nil {
-		return fmt.Errorf("stored action for %s: %w", opRef, err)
+		return ir, fmt.Errorf("stored action for %s: %w", opRef, err)
 	}
 	ir.Currency, ir.SupplierRef, ir.SupplierRevision, ir.DeliveryRef = act.Currency, act.SupplierID, act.SupplierRevision, act.DeliveryID
-	if _, err := e.Anchor.Append(ctx, anchor.DispatchIntent, p.Tenant, opRef, ir, 0); err != nil {
-		return dependency("recovery anchor", err)
-	}
-	_, err = e.Anchor.Append(ctx, anchor.RepairConfirmed, p.Tenant, opRef, map[string]string{"kind": "ANCHOR_REPAIR",
-		"evidence_ref": evidenceRef, "confirmed_by": p.ID}, 0)
-	return err
+	return ir, nil
 }

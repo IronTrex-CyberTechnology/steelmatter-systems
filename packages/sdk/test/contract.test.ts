@@ -49,14 +49,14 @@ function enumOf(name: string): string[] {
 
 const ops = operations();
 
-const isR1 = (o: Op) => o.path.startsWith('/v1/dispatches') || o.path.startsWith('/v1/recovery');
+const isR1 = (o: Op) => o.path.startsWith('/v1/dispatches') || o.path.startsWith('/v1/recovery') || o.path.endsWith('/approvals');
 
 test('the OpenAPI document declares the 11 documented operations', () => {
   assert.equal(ops.filter((o) => !isR1(o)).length, 11);
 });
 
-test('the OpenAPI document declares the 12 R1 dispatch, repair and recovery operations', () => {
-  assert.equal(ops.filter(isR1).length, 12);
+test('the OpenAPI document declares the 13 R1 dispatch, repair, recovery and approval operations', () => {
+  assert.equal(ops.filter(isR1).length, 13);
 });
 
 // POST operations that take no request body.

@@ -200,7 +200,7 @@ func TestR1API06RoleIsCheckedBeforeConfiguration(t *testing.T) {
 		{"/v1/dispatches/op-1/repairs", map[string]any{"outcome": "COMMIT", "evidence_ref": "e"}},
 		{"/v1/dispatches/op-1/repairs/rep-1/review", map[string]any{"approved": true}},
 		{"/v1/dispatches/op-1/repairs/rep-1/confirm", nil},
-		{"/v1/dispatches/op-1/anchor-repair", map[string]any{"evidence_ref": "e"}},
+		{"/v1/dispatches/op-1/anchor-repair", map[string]any{"repair_id": "rep-1"}},
 	} {
 		for _, who := range []string{"agent-a", "observer-a", "owner-a"} {
 			st, body := e.call("POST", c.path, who, c.body)

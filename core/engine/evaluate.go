@@ -87,11 +87,18 @@ func (e *Engine) Evaluate(ctx context.Context, p auth.Principal, instructionID s
 	// R1-DEF-03: authorise against the destination's current supplier revision.
 	if e.Connector != nil {
 		var supplier string
-		if err := e.Pool.QueryRow(ctx, `SELECT supplier_id FROM steelmatter.action_revisions WHERE tenant_id = $1 AND instruction_id = $2 AND action_revision = $3`,
-			p.Tenant, instructionID, revision).Scan(&supplier); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		var canonical []byte
+		if err := e.Pool.QueryRow(ctx, `SELECT supplier_id, action_canonical FROM steelmatter.action_revisions WHERE tenant_id = $1 AND instruction_id = $2 AND action_revision = $3`,
+			p.Tenant, instructionID, revision).Scan(&supplier, &canonical); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return nil, unavailable(err)
 		}
 		if err := e.syncSupplier(ctx, p.Tenant, supplier); err != nil {
+			return nil, err
+		}
+		// R1 decision 2 (R1-DEF-11): a delivery address changed since the
+		// action was built needs a fresh authorisation. Odoo checks it again
+		// inside the create.
+		if err := e.checkDeliveryRevision(ctx, canonical); err != nil {
 			return nil, err
 		}
 	}
@@ -173,6 +180,14 @@ func (e *Engine) Evaluate(ctx context.Context, p auth.Principal, instructionID s
 		}
 		if liveSupplierRev != supplierRev || supplierStatus != "ACTIVE" {
 			return fault("SUPPLIER_REVISION_STALE", "protected supplier revision changed; amend and re-evaluate")
+		}
+		// T17-T19 (R1 decision 9): above the tenant's approval threshold the
+		// exact action needs a current approval by an entitled approver.
+		if reason, msg, err := approvalDenial(ctx, tx, p.Tenant, instructionID, revision, actionDigest, amount, liveSupplierRev, m, actor); err != nil {
+			return err
+		} else if reason != "" {
+			res = deny(reason, msg, instructionID, revision)
+			return nil
 		}
 
 		if live != nil {
@@ -412,4 +427,28 @@ func (e *Engine) RecoverUnsigned(ctx context.Context) (int, error) {
 		}
 	}
 	return n, nil
+}
+
+// checkDeliveryRevision compares the stored action's delivery_revision with
+// the destination's current one. Actions without one (pre-D1 v1.4, or a
+// destination without delivery revisions) are not checked.
+func (e *Engine) checkDeliveryRevision(ctx context.Context, canonical []byte) error {
+	if len(canonical) == 0 {
+		return nil
+	}
+	var a contract.Action
+	if err := json.Unmarshal(canonical, &a); err != nil {
+		return err
+	}
+	if a.DeliveryRevision == nil {
+		return nil
+	}
+	cur, err := e.deliveryRevision(ctx, a.DeliveryID)
+	if err != nil {
+		return err
+	}
+	if cur == nil || *cur != *a.DeliveryRevision {
+		return fault("DELIVERY_REVISION_STALE", "the protected delivery address changed after the action was built; amend and re-evaluate")
+	}
+	return nil
 }

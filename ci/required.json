@@ -4853,7 +4853,7 @@
       ]
     },
     "r1-engine": {
-      "description": "Active R1 engine gate: all full-R0 requirements plus dispatch, recovery-anchor admission fencing, crash-safe repair, signed R1 evidence and independent readback. Integration uses real PostgreSQL with the stub destination. The required GitHub job also runs TestR1OdooEndToEnd against real Odoo and checks the exact public-source export. Passing this stage does not certify the outstanding full-R1 human-approval scope. T33–T35 are mapped to the engine tests against the stub and real PostgreSQL; the real-Odoo T33–T35 suite runs as a separate required CI step. A PASS here is developer evidence; SDET acceptance is recorded separately.",
+      "description": "Active R1 engine gate: all full-R0 requirements plus dispatch, recovery-anchor admission fencing, crash-safe repair, signed R1 evidence and independent readback. Integration uses real PostgreSQL with the stub destination. The required GitHub job also runs TestR1OdooEndToEnd against real Odoo and checks the exact public-source export. T17–T19 (exact-action human approval, R1 decision 9) are mapped to the engine approval tests. T33–T35 are mapped to the engine tests against the stub and real PostgreSQL; the real-Odoo T33–T35 suite runs as a separate required CI step. A PASS here is developer evidence; SDET acceptance is recorded separately.",
       "phases": [
         "unit",
         "integration",
@@ -7067,7 +7067,7 @@
         {
           "phase": "sdk",
           "package": "packages/sdk",
-          "test": "contract.test.ts/the OpenAPI document declares the 12 R1 dispatch, repair and recovery operations"
+          "test": "contract.test.ts/the OpenAPI document declares the 13 R1 dispatch, repair, recovery and approval operations"
         },
         {
           "phase": "integration",
@@ -7243,6 +7243,126 @@
           "phase": "unit",
           "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
           "test": "TestR1RecoveryOperationsDocumentOnlyProducedErrors"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1ExpiredMandateNeverSends"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1ExpiryKeepsBudgetOfSentAttempt"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1HeldWithCreateAttemptIsNeverReleased"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1ReleaseRecheckedAtConfirmation"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1ReleaseBlocksReferencePermanently"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1HTTPAnchorRepairNeedsThreePeople"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1TaxedOrderHoldsFullTotalAndCommits"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1TaxFieldsMustComeTogether"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1UnsupportedTaxConfigurationIsRefused"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1TaxRefusalAtCreateReleases"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1DeliveryChangeNeedsFreshAuthorisation"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1DeliveryRevisionIsNotIssuerInput"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1OrderWithDifferentUnitOrDeliveryIsMismatch"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1OneTenantPerDeployment"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1ObserveOnlyNeverPurchases"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestT17ApprovalDriftIsRejected"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestT18ApproverAuthority"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestT19ApprovalCapacityRace"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestT17SimulationNeedsApprovalToo"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
+          "test": "TestActionTaxVectors"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
+          "test": "TestActionWithoutTaxKeepsDigest"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
+          "test": "TestNormaliseLinesSortsTaxes"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1DEF30SlowAnchorReconcileIsResumable"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1DEF30SlowAnchorCheckAndGate"
         }
       ],
       "required_cases": [
@@ -7262,6 +7382,9 @@
         "T14",
         "T15",
         "T16",
+        "T17",
+        "T18",
+        "T19",
         "T20",
         "T21",
         "T22",
@@ -9066,6 +9189,41 @@
           "phase": "integration",
           "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestR1DEF06FailedDispatchCommitIsNotARestore"
+        }
+      ]
+    },
+    "T17": {
+      "complete": true,
+      "tests": [
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestT17ApprovalDriftIsRejected"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestT17SimulationNeedsApprovalToo"
+        }
+      ]
+    },
+    "T18": {
+      "complete": true,
+      "tests": [
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestT18ApproverAuthority"
+        }
+      ]
+    },
+    "T19": {
+      "complete": true,
+      "tests": [
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestT19ApprovalCapacityRace"
         }
       ]
     }

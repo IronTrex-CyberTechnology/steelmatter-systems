@@ -162,7 +162,7 @@ func (e *Engine) guardMandateHistory(ctx context.Context, tx pgx.Tx, tenant, man
 			if err := json.Unmarshal(r.Payload, &rc); err != nil {
 				return anchorFault(err)
 			}
-			if rc.RepairID != "" {
+			if rc.RepairID != "" && rc.Outcome != RepairAnchor { // an anchor repair moves no budget
 				h.repairStatus, h.repair = rc.ToStatus, rc.RepairID
 			}
 		}
@@ -264,6 +264,32 @@ func (e *Engine) syncSupplier(ctx context.Context, tenant, supplier string) erro
 		return classify(err)
 	}
 	return nil
+}
+
+// deliveryRevision reads the destination's protected delivery address
+// revision (R1 decision 2, R1-DEF-11). Nil when the destination does not
+// own one (stub without revisions, R0) or has no such address.
+func (e *Engine) deliveryRevision(ctx context.Context, delivery string) (*int64, error) {
+	src, ok := e.Connector.(connector.DeliverySource)
+	if !ok || delivery == "" {
+		return nil, nil
+	}
+	rev, err := src.DeliveryRevision(ctx, delivery)
+	if err != nil {
+		if strings.Contains(err.Error(), connector.ReasonMappingMissing) {
+			return nil, nil
+		}
+		return nil, dependency("destination", err)
+	}
+	return &rev, nil
+}
+
+// deliveryRevisionFor reads it only for an issuer, like syncSupplierFor.
+func (e *Engine) deliveryRevisionFor(ctx context.Context, p auth.Principal, delivery string) (*int64, error) {
+	if p.Kind != auth.Issuer {
+		return nil, nil
+	}
+	return e.deliveryRevision(ctx, delivery)
 }
 
 // syncSupplierFor syncs only for an issuer (the only principal that can

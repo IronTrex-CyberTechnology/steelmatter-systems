@@ -19,7 +19,10 @@
 // protection), STEELMATTER_COMPANY_REF (must equal the Odoo company's
 // sm_ref and the module's STEELMATTER_DESTINATION),
 // STEELMATTER_REPAIR_REVIEWERS and STEELMATTER_REPAIR_CONFIRMERS
-// (comma-separated principal IDs, D5).
+// (comma-separated principal IDs, D5), STEELMATTER_TENANT (the one tenant an
+// R1 deployment serves; required with a connector, R1 decision 6) and
+// STEELMATTER_OBSERVE_ONLY (true: observe the destination, never purchase;
+// R1 decision 10).
 //
 //	steelmatter version    print the build version
 package main
@@ -214,7 +217,19 @@ func serve(ctx context.Context) error {
 	}
 	eng.Connector = conn
 	eng.Cfg.RequireRecoveryAnchor = conn != nil
-	slog.Info("R1 destination connector", "kind", connKind, "company_ref", eng.Cfg.CompanyRef)
+	eng.Cfg.Tenant = os.Getenv("STEELMATTER_TENANT")
+	if conn != nil && eng.Cfg.Tenant == "" {
+		return errors.New("STEELMATTER_TENANT is required with an R1 destination connector: one tenant and one company per deployment")
+	}
+	switch v := os.Getenv("STEELMATTER_OBSERVE_ONLY"); v {
+	case "", "false":
+	case "true":
+		eng.Cfg.ObserveOnly = true
+	default:
+		return fmt.Errorf("STEELMATTER_OBSERVE_ONLY must be true or false, not %q", v)
+	}
+	slog.Info("R1 destination connector", "kind", connKind, "company_ref", eng.Cfg.CompanyRef, "tenant", eng.Cfg.Tenant,
+		"observe_only", eng.Cfg.ObserveOnly)
 	if anchorDSN := os.Getenv("STEELMATTER_ANCHOR_URL"); anchorDSN != "" {
 		anchorPool, err := newPool(ctx, anchorDSN)
 		if err != nil {

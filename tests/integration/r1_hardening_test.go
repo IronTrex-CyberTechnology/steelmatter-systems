@@ -86,7 +86,11 @@ func TestR1ConfirmedRepairSurvivesEveryCrashBoundary(t *testing.T) {
 				p := e.permitted()
 				ctx := context.Background()
 				mustDispatch(t, e, p)
-				e.heldVia(p.operation, a.s)
+				if outcome == engine.RepairRelease {
+					e.heldNeverSent(p.operation, a.s) // RELEASE needs anchor proof of no create (decision 3)
+				} else {
+					e.heldVia(p.operation, a.s)
+				}
 				if _, err := e.eng.RecordHeldFinding(ctx, uday, p.operation, "reviewed outcome", "fixture-evidence"); err != nil {
 					t.Fatal(err)
 				}

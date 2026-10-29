@@ -325,9 +325,11 @@ func stubActionFor(t *testing.T, e *env, p permitted) connector.Action {
 		t.Fatal(err)
 	}
 	a := connector.Action{OpRef: p.operation, CompanyRef: company, DeliveryRef: act.DeliveryID, SupplierRef: act.SupplierID, SupplierRevision: act.SupplierRevision, Currency: act.Currency,
-		AmountMinor: act.AmountMinor, PermitDigest: digest}
+		AmountMinor: act.AmountMinor, PermitDigest: digest,
+		AmountUntaxedMinor: act.AmountUntaxedMinor, TaxMinor: act.TaxMinor, DeliveryRevision: act.DeliveryRevision}
 	for _, l := range act.Lines {
-		a.Lines = append(a.Lines, connector.Line{ItemRef: l.ItemID, Quantity: l.Quantity, UnitPriceMinor: l.UnitPriceMinor})
+		a.Lines = append(a.Lines, connector.Line{ItemRef: l.ItemID, Quantity: l.Quantity, UnitPriceMinor: l.UnitPriceMinor,
+			UnitRef: l.UnitID, TaxRefs: l.TaxIDs})
 	}
 	return a
 }

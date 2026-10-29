@@ -204,7 +204,7 @@ func TestValidateAcceptsByteOrderedLines(t *testing.T) {
 }
 
 func TestNormaliseLines(t *testing.T) {
-	in := []Line{{"item-c", 1, 1}, {"item-a", 2, 2}, {"Item-b", 3, 3}}
+	in := []Line{{ItemID: "item-c", Quantity: 1, UnitPriceMinor: 1}, {ItemID: "item-a", Quantity: 2, UnitPriceMinor: 2}, {ItemID: "Item-b", Quantity: 3, UnitPriceMinor: 3}}
 	out, err := NormaliseLines(in)
 	if err != nil {
 		t.Fatal(err)
@@ -212,7 +212,7 @@ func TestNormaliseLines(t *testing.T) {
 	if out[0].ItemID != "Item-b" || out[1].ItemID != "item-a" || out[2].ItemID != "item-c" || in[0].ItemID != "item-c" {
 		t.Fatalf("normalised %v (input %v)", out, in)
 	}
-	_, err = NormaliseLines([]Line{{"x", 1, 1}, {"x", 2, 1}})
+	_, err = NormaliseLines([]Line{{ItemID: "x", Quantity: 1, UnitPriceMinor: 1}, {ItemID: "x", Quantity: 2, UnitPriceMinor: 1}})
 	requireCode(t, err, CodeDuplicateLineItem)
 }
 
@@ -230,8 +230,8 @@ func TestProposalOrderDoesNotChangeDigest(t *testing.T) {
 		}
 		return d
 	}
-	a := digestOf([]Line{{"item-a", 1, 3}, {"item-b", 2, 2}})
-	b := digestOf([]Line{{"item-b", 2, 2}, {"item-a", 1, 3}})
+	a := digestOf([]Line{{ItemID: "item-a", Quantity: 1, UnitPriceMinor: 3}, {ItemID: "item-b", Quantity: 2, UnitPriceMinor: 2}})
+	b := digestOf([]Line{{ItemID: "item-b", Quantity: 2, UnitPriceMinor: 2}, {ItemID: "item-a", Quantity: 1, UnitPriceMinor: 3}})
 	if a != b {
 		t.Fatalf("digests differ: %s %s", a, b)
 	}

@@ -58,6 +58,55 @@ func (l *lossy) Execute(ctx context.Context, a connector.Action) (connector.Resu
 	return r, err
 }
 
+// SupplierRevision and DeliveryRevision forward to the real connector, so
+// the engine reads Odoo's protected revisions through the test wrapper.
+func (l *lossy) SupplierRevision(ctx context.Context, ref string) (int64, error) {
+	return l.Connector.(connector.SupplierSource).SupplierRevision(ctx, ref)
+}
+
+func (l *lossy) DeliveryRevision(ctx context.Context, ref string) (int64, error) {
+	return l.Connector.(connector.DeliverySource).DeliveryRevision(ctx, ref)
+}
+
+// changeDeliveryAddress edits the delivery address in Odoo as an
+// administrator would; the module raises its protected revision.
+func changeDeliveryAddress(t *testing.T) {
+	t.Helper()
+	root, _ := filepath.Abs("../..")
+	cmd := exec.Command("python3", "-I", "-c", `import sys, time
+sys.path.insert(0, 'destinations/odoo/tests')
+import sandbox_client as s
+a = s.admin()
+ids = a.call('res.partner', 'search', [('sm_ref', '=', 'wh-chennai')])
+assert len(ids) == 1
+a.call('res.partner', 'write', ids, {'street': 'Gate %d, Synthetic Industrial Estate' % time.time_ns()})
+`)
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("change delivery address: %v\n%s", err, out)
+	}
+}
+
+// taxDesks configures 18% purchase GST on desk-std in Odoo, as a buyer's
+// product setup would (the seed products are untaxed).
+func taxDesks(t *testing.T) {
+	t.Helper()
+	root, _ := filepath.Abs("../..")
+	cmd := exec.Command("python3", "-I", "-c", `import sys
+sys.path.insert(0, 'destinations/odoo/tests')
+import sandbox_client as s
+a = s.admin()
+tax = a.call('account.tax', 'search', [('sm_ref', '=', 'gst18-purchase')])
+prod = a.call('product.product', 'search', [('sm_ref', '=', 'desk-std')])
+assert len(tax) == 1 and len(prod) == 1
+a.call('product.product', 'write', prod, {'supplier_taxes_id': [(6, 0, tax)]})
+`)
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("configure product tax: %v\n%s", err, out)
+	}
+}
+
 func requireEnvVar(t *testing.T, name string) string {
 	t.Helper()
 	v := os.Getenv(name)
@@ -162,18 +211,29 @@ func setupOdoo(t *testing.T) *odooRun {
 // order evaluates one ₹60,000 order (10 chairs at ₹6,000) on the mandate.
 func (r *odooRun) order(t *testing.T) permitted {
 	t.Helper()
-	r.n++
-	st, inst := r.e.call("POST", "/v1/instructions", "issuer-a", map[string]any{"source_system": source,
-		"source_record_id": fmt.Sprintf("odoo-e2e-%d-%d", time.Now().UnixNano(), r.n), "mandate_id": r.mandate,
-		"proposed_action": map[string]any{"supplier_id": "sup-chairs", "delivery_id": "wh-chennai", "currency": "INR",
-			"lines": []map[string]any{line("chair-ergo", 10, 600000)}}})
-	requireStatus(t, "create instruction", st, inst, 201, "")
-	id := inst["instruction_id"].(string)
+	return r.orderOf(t, map[string]any{"supplier_id": "sup-chairs", "delivery_id": "wh-chennai", "currency": "INR",
+		"lines": []map[string]any{line("chair-ergo", 10, 600000)}})
+}
+
+// orderOf creates and evaluates an instruction for the proposed action.
+func (r *odooRun) orderOf(t *testing.T, proposed map[string]any) permitted {
+	t.Helper()
+	id := r.instructionOf(t, proposed)
 	st, body := r.e.evaluate("agent-a", id, 1)
 	requireStatus(t, "evaluate", st, body, 201, "")
 	permit := body["permit"].(map[string]any)
 	return permitted{mandate: r.mandate, instruction: id, action: body["action"].(map[string]any), jws: body["permit_jws"].(string),
 		permitID: permit["permit_id"].(string), operation: permit["operation_id"].(string)}
+}
+
+func (r *odooRun) instructionOf(t *testing.T, proposed map[string]any) string {
+	t.Helper()
+	r.n++
+	st, inst := r.e.call("POST", "/v1/instructions", "issuer-a", map[string]any{"source_system": source,
+		"source_record_id": fmt.Sprintf("odoo-e2e-%d-%d", time.Now().UnixNano(), r.n), "mandate_id": r.mandate,
+		"proposed_action": proposed})
+	requireStatus(t, "create instruction", st, inst, 201, "")
+	return inst["instruction_id"].(string)
 }
 
 func (r *odooRun) settle(t *testing.T, op string) *engine.DispatchResult {
@@ -408,7 +468,7 @@ func TestR1OdooEndToEnd(t *testing.T) {
 		if rec := r.reconcile(t); len(rec.FromOdoo) != 1 || len(rec.Problems) != 0 {
 			t.Fatalf("reconcile %+v", rec)
 		}
-		if err := r.e.eng.ConfirmAnchorRepair(ctx, aakhil, p.operation, "e2e"); err != nil {
+		if err := r.e.anchorRepair(p.operation, "e2e"); err != nil {
 			t.Fatal(err)
 		}
 		r.resume(t)
@@ -551,5 +611,79 @@ func TestR1OdooEndToEnd(t *testing.T) {
 		mustDispatch(t, r.e, next)
 		requireExecution(t, "unrelated purchase", r.settle(t, next.operation), engine.DispatchCommitted)
 		r.evidence(t, p.operation)
+	})
+
+	// R1 decision 1 (D1 v1.4, R1-DEF-21/22): one dozen desks at ₹72,000 a
+	// dozen with the 18% GST configured on the product. The engine authorises
+	// and holds the full total; Odoo creates the order in dozens with exactly
+	// that tax.
+	taxDesks(t)
+	taxed := func() map[string]any {
+		l := line("desk-std", 1, 7_200_000)
+		l["unit_id"], l["tax_ids"] = "dozen", []string{"gst18-purchase"}
+		return map[string]any{"supplier_id": "sup-chairs", "delivery_id": "wh-chennai", "currency": "INR",
+			"lines": []map[string]any{l}, "tax_minor": 1_296_000}
+	}
+	const taxedTotal = int64(7_200_000 + 1_296_000)
+
+	t.Run("decision 1: a taxed order in dozens is created with the exact tax and committed", func(t *testing.T) {
+		base := r.e.buckets(r.mandate)
+		p := r.orderOf(t, taxed())
+		if fmt.Sprint(p.action["amount_minor"]) != fmt.Sprint(taxedTotal) || p.action["delivery_revision"] == nil {
+			t.Fatalf("authorised action %v", p.action)
+		}
+		mustDispatch(t, r.e, p)
+		requireExecution(t, "commit", r.settle(t, p.operation), engine.DispatchCommitted)
+		r.outcome(t, p.operation, base, 1, taxedTotal, 0)
+		r.evidence(t, p.operation)
+	})
+
+	t.Run("decision 1: a product tax left out is refused, never dropped", func(t *testing.T) {
+		proposed := taxed()
+		delete(proposed, "tax_minor")
+		delete(proposed["lines"].([]map[string]any)[0], "tax_ids")
+		p := r.orderOf(t, proposed)
+		_, err := r.e.dispatch("agent-a", p)
+		requireFault(t, "dispatch", err, "ADAPTER_UNSUPPORTED", "TAX_NOT_AUTHORISED")
+		if n := odooOrders(t, p.operation); n != 0 {
+			t.Fatalf("%d Odoo orders with the tax removed", n)
+		}
+	})
+
+	t.Run("decision 1: a wrong tax amount is refused by Odoo, never adjusted", func(t *testing.T) {
+		base := r.e.buckets(r.mandate)
+		proposed := taxed()
+		proposed["tax_minor"] = 1_295_999
+		p := r.orderOf(t, proposed)
+		if _, err := r.e.dispatch("agent-a", p); err == nil {
+			mustNotCommit := r.settle(t, p.operation)
+			if mustNotCommit.Execution == engine.DispatchCommitted {
+				t.Fatal("an order with a different tax was committed")
+			}
+		}
+		if n := odooOrders(t, p.operation); n != 0 {
+			t.Fatalf("%d Odoo orders for a wrong tax", n)
+		}
+		if got := r.e.buckets(r.mandate); got.Committed != base.Committed || got.Unresolved != base.Unresolved {
+			t.Fatalf("budget moved for a refused order: %+v (before %+v)", got, base)
+		}
+	})
+
+	t.Run("decision 2: a delivery address changed after dispatch is refused by Odoo and released", func(t *testing.T) {
+		base := r.e.buckets(r.mandate)
+		p := r.order(t)
+		mustDispatch(t, r.e, p)
+		changeDeliveryAddress(t)
+		requireExecution(t, "refused", r.settle(t, p.operation), engine.DispatchFenced)
+		r.outcome(t, p.operation, base, 0, 0, 0)
+		r.evidence(t, p.operation)
+	})
+
+	t.Run("decision 2: a delivery address changed before evaluation needs a fresh authorisation", func(t *testing.T) {
+		id := r.instructionOf(t, map[string]any{"supplier_id": "sup-chairs", "delivery_id": "wh-chennai", "currency": "INR",
+			"lines": []map[string]any{line("chair-ergo", 10, 600000)}})
+		changeDeliveryAddress(t)
+		st, body := r.e.evaluate("agent-a", id, 1)
+		requireStatus(t, "evaluate", st, body, 409, "DELIVERY_REVISION_STALE")
 	})
 }

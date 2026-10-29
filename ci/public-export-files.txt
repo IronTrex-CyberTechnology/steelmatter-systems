@@ -72,6 +72,7 @@ core/contract/keyring.go
 core/contract/payloads.go
 core/contract/r1_evidence_test.go
 core/contract/strictjson.go
+core/contract/tax_test.go
 core/contract/temporal.go
 core/contract/temporal_test.go
 core/db/harness_integration_test.go
@@ -93,6 +94,7 @@ core/db/migrations/0013_repair_replay.sql
 core/db/migrations/0014_r1_evidence.sql
 core/db/migrations/0015_r1_deleted_order_flag.sql
 core/db/migrations/0016_r1_supplier_sync.sql
+core/db/migrations/0017_r1_approvals.sql
 core/db/provision.go
 core/db/roles.go
 core/dbtest/anchor.go
@@ -100,6 +102,7 @@ core/dbtest/harness.go
 core/engine/admit.go
 core/engine/admitcheck.go
 core/engine/anchorwrites.go
+core/engine/approvals.go
 core/engine/backoff.go
 core/engine/dispatch.go
 core/engine/engine.go
@@ -186,6 +189,8 @@ docs/contracts/I02-contract.md
 docs/engine.md
 docs/evidence.md
 docs/quickstart.md
+docs/r1-decisions.md
+docs/r1-recovery-timeout.md
 docs/r1-release-hardening.md
 docs/r1-sdet-defect-fixes.md
 examples/procurement/accounting.go
@@ -203,6 +208,7 @@ fixtures/packet/negative-cases.json
 fixtures/packet/observation.payload.json
 fixtures/packet/permit.payload.json
 fixtures/requests/amendment-negative.json
+fixtures/vectors/action-tax-v1.json
 fixtures/vectors/depth-v1.json
 fixtures/vectors/evidence-temporal-v1.json
 fixtures/vectors/evidence-v1.json
@@ -254,6 +260,7 @@ packages/verifier/test/evidence.test.ts
 packages/verifier/test/gojson-reporter.mjs
 packages/verifier/test/package.test.ts
 packages/verifier/test/r1-evidence.test.ts
+packages/verifier/test/tax.test.ts
 packages/verifier/test/temporal.test.ts
 packages/verifier/test/truststore.test.ts
 packages/verifier/test/vectors.test.ts
@@ -297,6 +304,8 @@ tests/integration/flow_test.go
 tests/integration/mcp_test.go
 tests/integration/quota_test.go
 tests/integration/r1_anchor_test.go
+tests/integration/r1_approvals_test.go
+tests/integration/r1_decisions_test.go
 tests/integration/r1_defect_fixes_test.go
 tests/integration/r1_dispatch_test.go
 tests/integration/r1_evidence_test.go
@@ -304,6 +313,7 @@ tests/integration/r1_hardening_test.go
 tests/integration/r1_http_test.go
 tests/integration/r1_odoo_e2e_test.go
 tests/integration/r1_odoo_proxy_test.go
+tests/integration/r1_slow_anchor_test.go
 tests/integration/r1_workers_test.go
 tests/integration/races_test.go
 tests/integration/readers_test.go

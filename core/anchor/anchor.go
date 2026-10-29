@@ -37,6 +37,9 @@ const (
 // ErrWritesDisabled: writes are off, or the caller's generation is old.
 var ErrWritesDisabled = errors.New("anchor: writes are disabled or the generation changed")
 
+// ErrBlocked: the reference has a BLOCK record, so no create may start.
+var ErrBlocked = errors.New("anchor: reference is permanently blocked")
+
 // Client is the engine's connection to the anchor, using the
 // anchor_engine_writer identity: it appends engine records and reads both
 // streams; it cannot write destination records or change any record.
@@ -470,6 +473,9 @@ func classify(err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "SM003" {
 		return fmt.Errorf("%w: %s", ErrWritesDisabled, pgErr.Message)
+	}
+	if errors.As(err, &pgErr) && pgErr.Code == "SM005" {
+		return fmt.Errorf("%w: %s", ErrBlocked, pgErr.Message)
 	}
 	return err
 }

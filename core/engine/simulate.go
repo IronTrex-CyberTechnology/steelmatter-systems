@@ -55,11 +55,11 @@ func (e *Engine) Simulate(ctx context.Context, p auth.Principal, instructionID s
 		if err := currentEntitlement(ctx, tx, auth.Principal{ID: actor, Tenant: p.Tenant, Kind: auth.Actor}, sourceSystem, mandateID, m, actor); err != nil {
 			return err
 		}
-		var aStatus, supplier, delivery string
+		var aStatus, supplier, delivery, actionDigest string
 		var supplierRev, amount int64
-		err = tx.QueryRow(ctx, `SELECT status, supplier_id, supplier_revision, delivery_id, amount_minor FROM steelmatter.action_revisions
+		err = tx.QueryRow(ctx, `SELECT status, supplier_id, supplier_revision, delivery_id, amount_minor, action_digest FROM steelmatter.action_revisions
 			WHERE tenant_id = $1 AND instruction_id = $2 AND action_revision = $3`, p.Tenant, instructionID, revision).
-			Scan(&aStatus, &supplier, &supplierRev, &delivery, &amount)
+			Scan(&aStatus, &supplier, &supplierRev, &delivery, &amount, &actionDigest)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fault("REVISION_STALE", "action revision %d does not exist", revision)
 		}
@@ -100,6 +100,11 @@ func (e *Engine) Simulate(ctx context.Context, p auth.Principal, instructionID s
 		}
 		if liveSupplierRev != supplierRev || supplierStatus != "ACTIVE" {
 			return fault("SUPPLIER_REVISION_STALE", "protected supplier revision changed; amend and re-evaluate")
+		}
+		if reason, _, err := approvalDenial(ctx, tx, p.Tenant, instructionID, revision, actionDigest, amount, liveSupplierRev, m, actor); err != nil {
+			return err
+		} else if reason != "" {
+			return deny(reason)
 		}
 		// The same branches as evaluate: return or complete the live issuance,
 		// otherwise count what releasing it would return to the allowance.

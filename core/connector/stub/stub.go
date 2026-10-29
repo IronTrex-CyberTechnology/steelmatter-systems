@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -81,8 +82,11 @@ type Stub struct {
 	seq         int64
 	nextOrder   int
 	supplierRev map[string]int64
-	dropReply   map[string]int // op_ref -> execute replies to drop after the create applies
-	unreachable map[string]int // op_ref -> calls that fail before reaching the destination
+	deliveryRev map[string]int64  // D1 v1.4: protected delivery address revisions
+	taxBP       map[string]int64  // D1 v1.4: tax ref -> rate in basis points
+	itemTaxes   map[string]string // D1 v1.4: item ref -> the purchase taxes it requires (joined, sorted)
+	dropReply   map[string]int    // op_ref -> execute replies to drop after the create applies
+	unreachable map[string]int    // op_ref -> calls that fail before reaching the destination
 	creates     int
 	proof       connector.RestoreProof
 
@@ -113,7 +117,8 @@ func New() *Stub {
 // is p, for example the real anchor's destination stream (anchor.DestStream),
 // as Kaif's Odoo module will use it.
 func NewWithProof(p connector.RestoreProof) *Stub {
-	return &Stub{ops: map[string]*record{}, supplierRev: map[string]int64{}, dropReply: map[string]int{}, unreachable: map[string]int{},
+	return &Stub{ops: map[string]*record{}, supplierRev: map[string]int64{}, deliveryRev: map[string]int64{}, taxBP: map[string]int64{},
+		itemTaxes: map[string]string{}, dropReply: map[string]int{}, unreachable: map[string]int{},
 		proof: p, failCommit: map[string]int{}, failBlock: map[string]int{}, loseCreateDone: map[string]int{}, outOfScope: map[string]string{}}
 }
 
@@ -220,6 +225,78 @@ func (s *Stub) SetSupplierRevision(supplierRef string, rev int64) {
 	s.mu.Lock()
 	s.supplierRev[supplierRef] = rev
 	s.mu.Unlock()
+}
+
+// DeliveryRevision implements connector.DeliverySource: the revision set
+// with SetDeliveryRevision, or MAPPING_MISSING.
+func (s *Stub) DeliveryRevision(_ context.Context, deliveryRef string) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if rev, ok := s.deliveryRev[deliveryRef]; ok {
+		return rev, nil
+	}
+	return 0, fmt.Errorf("stub: delivery address %q: %s", deliveryRef, connector.ReasonMappingMissing)
+}
+
+var _ connector.DeliverySource = (*Stub)(nil)
+
+// SetDeliveryRevision sets the destination's protected delivery address revision.
+func (s *Stub) SetDeliveryRevision(deliveryRef string, rev int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.deliveryRev[deliveryRef] = rev
+}
+
+// SetTax defines a tax the destination knows, with its rate in basis points
+// (1800 = 18%). Line taxes are computed per line and rounded half up.
+func (s *Stub) SetTax(taxRef string, basisPoints int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.taxBP[taxRef] = basisPoints
+}
+
+// SetItemTaxes makes the destination require exactly these purchase taxes on
+// the item, like an Odoo product with configured taxes (D1 v1.4: an order
+// that leaves them out is refused, never created with the tax removed).
+func (s *Stub) SetItemTaxes(itemRef string, taxRefs ...string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.itemTaxes[itemRef] = strings.Join(taxRefs, ",")
+}
+
+// taxCheck mirrors the module's _check_action and _check_totals for D1 v1.4:
+// every tax must be known, each item's required taxes must be authorised
+// exactly, and the computed tax must equal the authorised one. It returns
+// the refusal reason, or "".
+func (s *Stub) taxCheck(a connector.Action) (reason string, untaxed, tax int64) {
+	if (a.AmountUntaxedMinor == nil) != (a.TaxMinor == nil) {
+		return "TAX_AMOUNTS_INCOMPLETE", 0, 0
+	}
+	for _, l := range a.Lines {
+		if want, ok := s.itemTaxes[l.ItemRef]; ok && want != strings.Join(l.TaxRefs, ",") {
+			return "TAX_NOT_AUTHORISED", 0, 0
+		}
+		lineUntaxed := l.Quantity * l.UnitPriceMinor
+		untaxed += lineUntaxed
+		for _, t := range l.TaxRefs {
+			bp, ok := s.taxBP[t]
+			if !ok {
+				return connector.ReasonMappingMissing, 0, 0
+			}
+			tax += (lineUntaxed*bp + 5000) / 10000
+		}
+	}
+	if a.AmountUntaxedMinor == nil {
+		if tax != 0 {
+			return "TAX_NOT_AUTHORISED", 0, 0
+		}
+	} else if *a.AmountUntaxedMinor != untaxed || *a.TaxMinor != tax {
+		return "TAX_MISMATCH", 0, 0
+	}
+	if untaxed+tax != a.AmountMinor {
+		return "TOTAL_MISMATCH", 0, 0
+	}
+	return "", untaxed, tax
 }
 
 // SetOrderState changes an existing order's state, as an Odoo user might.
@@ -368,6 +445,33 @@ func (s *Stub) create(ctx context.Context, a connector.Action) connector.Result 
 		s.ops[a.OpRef] = &record{state: Refused, digest: a.PermitDigest, seq: s.seq}
 		return s.result(ctx, a.OpRef, "execute", connector.RefusedSupplierStale)
 	}
+	if want, ok := s.deliveryRev[a.DeliveryRef]; ok && a.DeliveryRevision != nil && want != *a.DeliveryRevision {
+		if err := s.proof.RecordBlock(ctx, a.OpRef, "delivery address stale"); err != nil {
+			return unavailable(a.OpRef, "execute", "ANCHOR_UNAVAILABLE", s.seq)
+		}
+		s.seq++
+		s.ops[a.OpRef] = &record{state: Refused, digest: a.PermitDigest, seq: s.seq}
+		r := s.result(ctx, a.OpRef, "execute", connector.RefusedSupplierStale)
+		r.Reason = connector.ReasonDeliveryChanged
+		return r
+	}
+	reason, untaxed, tax := s.taxCheck(a)
+	if reason != "" {
+		if err := s.proof.RecordBlock(ctx, a.OpRef, "out of scope: "+reason); err != nil {
+			return unavailable(a.OpRef, "execute", "ANCHOR_UNAVAILABLE", s.seq)
+		}
+		s.seq++
+		s.ops[a.OpRef] = &record{state: Refused, digest: a.PermitDigest, seq: s.seq}
+		r := s.result(ctx, a.OpRef, "execute", connector.RefusedOutOfScope)
+		r.Reason = reason
+		return r
+	}
+	var deliveryRev int64
+	if a.DeliveryRevision != nil {
+		deliveryRev = *a.DeliveryRevision
+	} else {
+		deliveryRev = s.deliveryRev[a.DeliveryRef]
+	}
 	// Written before the create commits. If it fails the create rolls back
 	// and the answer is UNAVAILABLE, never "not sent": it may have landed.
 	if err := s.proof.RecordCreateIntent(ctx, a.OpRef, a.PermitDigest); err != nil {
@@ -382,7 +486,7 @@ func (s *Stub) create(ctx context.Context, a connector.Action) connector.Result 
 	order := &connector.Order{
 		ID: fmt.Sprintf("PO%05d", s.nextOrder), State: connector.StateConfirmed, CompanyRef: a.CompanyRef, DeliveryRef: a.DeliveryRef,
 		SupplierRef: a.SupplierRef, SupplierRevision: a.SupplierRevision, Lines: append([]connector.Line(nil), a.Lines...), AmountMinor: a.AmountMinor, Currency: a.Currency,
-		PermitDigest: a.PermitDigest,
+		PermitDigest: a.PermitDigest, AmountUntaxedMinor: untaxed, TaxMinor: tax, DeliveryRevision: deliveryRev,
 	}
 	s.ops[a.OpRef] = &record{state: Created, digest: a.PermitDigest, seq: s.seq, order: order}
 	if !take(s.loseCreateDone, a.OpRef) {
@@ -546,6 +650,10 @@ func (s *Stub) Readiness(_ context.Context, a connector.Action) (connector.Resul
 	default:
 		if want, ok := s.supplierRev[a.SupplierRef]; ok && want != a.SupplierRevision {
 			r.Outcome, r.Reason = connector.NotReady, connector.ReasonSupplierChanged
+		} else if want, ok := s.deliveryRev[a.DeliveryRef]; ok && a.DeliveryRevision != nil && want != *a.DeliveryRevision {
+			r.Outcome, r.Reason = connector.NotReady, connector.ReasonDeliveryChanged
+		} else if reason, _, _ := s.taxCheck(a); reason != "" {
+			r.Outcome, r.Reason = connector.NotReady, reason
 		}
 	}
 	return r, nil

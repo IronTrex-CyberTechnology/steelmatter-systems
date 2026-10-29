@@ -154,6 +154,40 @@ paths:
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/Internal' }
         '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/instructions/{instruction_id}/approvals:
+    post:
+      tags: [instructions]
+      operationId: recordApproval
+      summary: R1. An entitled approver approves or rejects the exact current action revision (T17-T19).
+      description: >-
+        R1 decision 9. Above the tenant's approval threshold, evaluation issues a permit only with a current
+        approval: the latest decision on that action revision is APPROVED, it names the current action digest,
+        supplier revision, mandate revision and control epoch, and its approver still holds approval rights.
+        Otherwise evaluation returns DENY APPROVAL_REQUIRED or APPROVAL_STALE. The issuer and actor of an action
+        can never approve it (403). An approval reserves nothing; capacity is checked when the permit is issued.
+        Each call records one decision; approvals are never changed or deleted.
+      x-steelmatter-principals: [operator, owner]
+      parameters:
+        - $ref: '#/components/parameters/InstructionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApprovalRequest' }
+      responses:
+        '201':
+          description: Decision recorded.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApprovalResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
   /v1/actions/evaluate:
     post:
       tags: [actions]
@@ -465,8 +499,13 @@ paths:
     post:
       tags: [dispatches]
       operationId: prepareRepair
-      summary: R1. Operator prepares repair evidence proposing COMMIT or RELEASE. Nothing moves yet.
-      description: Requires a recorded finding and a HELD or MISMATCH operation. Returns the repair ID.
+      summary: R1. Operator prepares repair evidence proposing COMMIT, RELEASE or ANCHOR_REPAIR. Nothing moves yet.
+      description: >-
+        COMMIT and RELEASE require a recorded finding and a HELD or MISMATCH operation. RELEASE is refused
+        (403, RELEASE_NOT_PROVEN) when the recovery anchor records a create attempt for the operation: HELD
+        money is released only with proof that no purchase occurred, and confirmation fences the reference
+        first so it is permanently blocked. ANCHOR_REPAIR applies to an operation the engine has and the
+        recovery anchor does not; it moves no budget and is confirmed with anchor-repair. Returns the repair ID.
       x-steelmatter-principals: [operator]
       parameters:
         - $ref: '#/components/parameters/OpRef'
@@ -553,7 +592,11 @@ paths:
     post:
       tags: [recovery]
       operationId: confirmAnchorRepair
-      summary: R1. A configured confirmer repairs an anchor found behind the engine from the engine's own dispatch record.
+      summary: R1. A configured confirmer confirms a prepared and approved ANCHOR_REPAIR, re-appending the intent from the engine's own dispatch record.
+      description: >-
+        Three different people (R1 decision 4): an operator prepares the ANCHOR_REPAIR evidence, a configured
+        reviewer approves it, and a configured confirmer who is neither confirms it here. A repeat is idempotent.
+        Writes still resume only through the resume gate.
       x-steelmatter-principals: [operator]
       parameters:
         - $ref: '#/components/parameters/OpRef'
@@ -826,6 +869,7 @@ components:
         - AUDIENCE_MISMATCH
         - AUTHORITY_REVOKED
         - CLOCK_UNHEALTHY
+        - DELIVERY_REVISION_STALE
         - DUPLICATE_KEY
         - DUPLICATE_LINE_ITEM
         - FORBIDDEN
@@ -866,6 +910,8 @@ components:
     DenyReason:
       type: string
       enum:
+        - APPROVAL_REQUIRED
+        - APPROVAL_STALE
         - AUTHORITY_REVOKED
         - CAPACITY_EXHAUSTED
         - DELIVERY_NOT_PERMITTED
@@ -879,7 +925,18 @@ components:
       properties:
         item_id: { $ref: '#/components/schemas/Identifier' }
         quantity: { $ref: '#/components/schemas/PositiveInteger' }
-        unit_price_minor: { $ref: '#/components/schemas/NonNegativeInteger' }
+        unit_price_minor:
+          allOf: [{ $ref: '#/components/schemas/NonNegativeInteger' }]
+          description: Per unit_id (the product's base unit when absent), before tax.
+        unit_id:
+          allOf: [{ $ref: '#/components/schemas/Identifier' }]
+          description: D1 v1.4. The authorised unit of quantity; absent means the product's base unit. Never converted.
+        tax_ids:
+          description: D1 v1.4. The authorised taxes on the line, normalised to sorted order; a repeat is refused. Absent means no tax.
+          type: array
+          minItems: 1
+          maxItems: 10
+          items: { $ref: '#/components/schemas/Identifier' }
     ProposedAction:
       description: |
         Material fields an issuer may propose. Server-owned fields are not
@@ -888,6 +945,13 @@ components:
         supplier record) and amount_minor (computed with checked arithmetic).
         Lines are normalised before authorisation: duplicate item_id rejects,
         order is sorted by item_id bytes.
+        D1 v1.4 (R1 decisions 1 and 2): lines may carry unit_id and tax_ids.
+        Lines with tax_ids require tax_minor, and tax_minor requires at least
+        one taxed line. The action then carries amount_untaxed_minor (the line
+        total), tax_minor, and amount_minor = untaxed + tax, the full total
+        that is held; the destination recomputes the tax at create and refuses
+        any difference. The engine also stores the destination's delivery
+        address revision (delivery_revision) when the destination has one.
       type: object
       additionalProperties: false
       required: [supplier_id, delivery_id, currency, lines]
@@ -900,6 +964,7 @@ components:
           minItems: 1
           maxItems: 100
           items: { $ref: '#/components/schemas/Line' }
+        tax_minor: { $ref: '#/components/schemas/NonNegativeInteger' }
 
     MandateCreateRequest:
       description: tenant_id, issuer_id (the authenticated owner), mandate_id, revision, control_epoch and issued_at are server-owned.
@@ -1213,7 +1278,7 @@ components:
       additionalProperties: false
       required: [outcome, evidence_ref]
       properties:
-        outcome: { type: string, enum: [COMMIT, RELEASE] }
+        outcome: { type: string, enum: [COMMIT, RELEASE, ANCHOR_REPAIR] }
         evidence_ref: { type: string, minLength: 1, maxLength: 512 }
         summary: { type: string, minLength: 1, maxLength: 2000 }
     ReviewRequest:
@@ -1230,20 +1295,41 @@ components:
       properties:
         op_ref: { $ref: '#/components/schemas/Identifier' }
         repair_id: { $ref: '#/components/schemas/Identifier' }
-        outcome: { type: string, enum: [COMMIT, RELEASE] }
+        outcome: { type: string, enum: [COMMIT, RELEASE, ANCHOR_REPAIR] }
         approved: { type: boolean }
     AnchorRepairRequest:
       type: object
       additionalProperties: false
-      required: [evidence_ref]
+      required: [repair_id]
       properties:
-        evidence_ref: { type: string, minLength: 1, maxLength: 512 }
+        repair_id: { $ref: '#/components/schemas/Identifier' }
+    ApprovalRequest:
+      type: object
+      additionalProperties: false
+      required: [action_revision, action_digest, approved]
+      properties:
+        action_revision: { $ref: '#/components/schemas/PositiveInteger' }
+        action_digest: { type: string, pattern: '^[a-f0-9]{64}$' }
+        approved: { type: boolean }
+        note: { type: string, minLength: 1, maxLength: 2000 }
+    ApprovalResult:
+      type: object
+      additionalProperties: false
+      required: [approval_id, instruction_id, action_revision, action_digest, decision, approver_id]
+      properties:
+        approval_id: { $ref: '#/components/schemas/Identifier' }
+        instruction_id: { $ref: '#/components/schemas/Identifier' }
+        action_revision: { $ref: '#/components/schemas/PositiveInteger' }
+        action_digest: { type: string, pattern: '^[a-f0-9]{64}$' }
+        decision: { type: string, enum: [APPROVED, REJECTED] }
+        approver_id: { $ref: '#/components/schemas/Identifier' }
     AnchorRepairResult:
       type: object
       additionalProperties: false
-      required: [op_ref, repaired]
+      required: [op_ref, repair_id, repaired]
       properties:
         op_ref: { $ref: '#/components/schemas/Identifier' }
+        repair_id: { $ref: '#/components/schemas/Identifier' }
         repaired: { const: true }
     WriteState:
       type: object

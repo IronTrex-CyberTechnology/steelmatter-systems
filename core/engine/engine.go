@@ -71,6 +71,23 @@ type Config struct {
 	// missing. Real connector deployments enable this; unanchored stubs are
 	// permitted only for isolated mechanism tests.
 	RequireRecoveryAnchor bool
+	// Tenant is the one tenant an R1 deployment serves (R1 decision 6). When
+	// set, dispatch, settle, findings, repairs and the recovery endpoints
+	// refuse principals of any other tenant. R1 serve requires it.
+	Tenant string
+	// ObserveOnly runs an R1 deployment without purchasing (R1 decision 10):
+	// dispatch is refused and nothing is ever sent to the destination, while
+	// the observer, coverage reports, the restore check and the recovery
+	// endpoints keep running against it.
+	ObserveOnly bool
+}
+
+// ServesTenant refuses a tenant other than the one this deployment serves.
+func (e *Engine) ServesTenant(tenant string) error {
+	if e.Cfg.Tenant != "" && tenant != e.Cfg.Tenant {
+		return fault("FORBIDDEN", "this deployment serves one tenant; %s is not it", tenant)
+	}
+	return nil
 }
 
 // DefaultConfig returns the R0 defaults.

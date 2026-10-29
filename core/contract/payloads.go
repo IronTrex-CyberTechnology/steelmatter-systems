@@ -61,7 +61,14 @@ type Mandate struct {
 type Line struct {
 	ItemID         string `json:"item_id"`
 	Quantity       int64  `json:"quantity"`
-	UnitPriceMinor int64  `json:"unit_price_minor"`
+	UnitPriceMinor int64  `json:"unit_price_minor"` // per UnitID, before tax
+	// UnitID is the authorised unit of Quantity (D1 v1.4, R1 decision 1).
+	// Absent means the product's base unit; the destination never converts.
+	UnitID string `json:"unit_id,omitempty"`
+	// TaxIDs are the authorised taxes on the line, sorted and unique (D1
+	// v1.4). Absent means no tax: a taxed product is then refused at the
+	// destination, never bought with the tax removed.
+	TaxIDs []string `json:"tax_ids,omitempty"`
 }
 
 // Action is the exact proposed purchase order. It is digested, not signed;
@@ -80,7 +87,19 @@ type Action struct {
 	DeliveryID       string `json:"delivery_id"`
 	Currency         string `json:"currency"`
 	Lines            []Line `json:"lines"`
-	AmountMinor      int64  `json:"amount_minor"`
+	// AmountMinor is the full total including tax: the amount held.
+	AmountMinor int64 `json:"amount_minor"`
+
+	// D1 v1.4 (R1 decisions 1 and 2), optional so every v1 action and test
+	// vector keeps its digest. AmountUntaxedMinor and TaxMinor come together:
+	// untaxed = Σ quantity × unit_price_minor and amount = untaxed + tax.
+	// Without them the action has no tax and no line may carry tax_ids.
+	AmountUntaxedMinor *int64 `json:"amount_untaxed_minor,omitempty"`
+	TaxMinor           *int64 `json:"tax_minor,omitempty"`
+	// DeliveryRevision is the destination's protected revision of the
+	// delivery address when the action was authorised; the destination
+	// refuses the create if it changed (R1 decision 2).
+	DeliveryRevision *int64 `json:"delivery_revision,omitempty"`
 }
 
 // Permit is the signed, time-limited permission for one action revision.
@@ -204,7 +223,7 @@ func schemaFor(k Kind) (*jsonschema.Schema, error) {
 
 // knownFields returns the closed property set for an object schema.
 var knownFields = map[Kind]map[string]bool{}
-var lineFields = map[string]bool{"item_id": true, "quantity": true, "unit_price_minor": true}
+var lineFields = map[string]bool{"item_id": true, "quantity": true, "unit_price_minor": true, "unit_id": true, "tax_ids": true}
 
 func init() {
 	for k, v := range map[Kind]any{KindMandate: Mandate{}, KindAction: Action{}, KindPermit: Permit{}, KindExecution: Execution{}, KindObservation: Observation{}} {
@@ -219,6 +238,9 @@ func init() {
 	// Optional v2 fields are omitted by zero-value marshaling above.
 	for _, f := range []string{"admitted_at", "company_ref"} {
 		knownFields[KindExecution][f] = true
+	}
+	for _, f := range []string{"amount_untaxed_minor", "tax_minor", "delivery_revision"} {
+		knownFields[KindAction][f] = true
 	}
 	for _, f := range []string{"expected_company_ref", "observed_company_ref", "observed_state", "expected_permit_digest", "observed_permit_digest"} {
 		knownFields[KindObservation][f] = true
@@ -332,7 +354,7 @@ func ParseTimestamp(s string) (time.Time, error) {
 func checkSemantics(p any) *Error {
 	switch v := p.(type) {
 	case *Action:
-		return checkLines(v.Lines, v.AmountMinor)
+		return checkAction(v)
 	case *Mandate:
 		return checkRange(v.IssuedAt, v.ExpiresAt, 0)
 	case *Permit:
@@ -378,6 +400,43 @@ func checkLines(lines []Line, amount int64) *Error {
 	return nil
 }
 
+// checkAction adds the D1 v1.4 tax rules to checkLines: tax_ids sorted and
+// unique per line; amount_untaxed_minor and tax_minor together, with
+// untaxed = line total and amount = untaxed + tax; no tax_ids without them.
+func checkAction(a *Action) *Error {
+	taxed := false
+	for i, l := range a.Lines {
+		for j := 1; j < len(l.TaxIDs); j++ {
+			if l.TaxIDs[j-1] >= l.TaxIDs[j] {
+				return errf(CodeLinesNotCanonical, fmt.Sprintf("/lines/%d/tax_ids/%d", i, j), "tax_ids must be sorted and unique")
+			}
+		}
+		taxed = taxed || len(l.TaxIDs) > 0
+	}
+	if (a.AmountUntaxedMinor == nil) != (a.TaxMinor == nil) {
+		return errf(CodeSchemaViolation, "/tax_minor", "amount_untaxed_minor and tax_minor must be given together")
+	}
+	if a.AmountUntaxedMinor == nil {
+		if taxed {
+			return errf(CodeSchemaViolation, "/tax_minor", "lines with tax_ids require amount_untaxed_minor and tax_minor")
+		}
+		return checkLines(a.Lines, a.AmountMinor)
+	}
+	if err := checkLines(a.Lines, *a.AmountUntaxedMinor); err != nil {
+		if err.Code == CodeAmountMismatch {
+			err.Path = "/amount_untaxed_minor"
+		}
+		return err
+	}
+	if *a.TaxMinor > MaxSafeInteger-*a.AmountUntaxedMinor {
+		return errf(CodeArithmeticOverflow, "/amount_minor", "amount_untaxed_minor + tax_minor exceeds 2^53-1")
+	}
+	if *a.AmountUntaxedMinor+*a.TaxMinor != a.AmountMinor {
+		return errf(CodeAmountMismatch, "/amount_minor", "amount_minor %d does not equal amount_untaxed_minor %d + tax_minor %d", a.AmountMinor, *a.AmountUntaxedMinor, *a.TaxMinor)
+	}
+	return nil
+}
+
 // LineTotal returns Σ quantity × unit_price_minor, rejecting any intermediate
 // value above 2^53-1.
 func LineTotal(lines []Line) (int64, *Error) {
@@ -408,6 +467,18 @@ func NormaliseLines(lines []Line) ([]Line, *Error) {
 			return nil, errf(CodeDuplicateLineItem, fmt.Sprintf("/lines/%d/item_id", i), "item_id %q appears more than once", l.ItemID)
 		}
 		seen[l.ItemID] = true
+		if len(l.TaxIDs) > 0 {
+			taxes := append([]string(nil), l.TaxIDs...)
+			sort.Strings(taxes)
+			for j := 1; j < len(taxes); j++ {
+				if taxes[j-1] == taxes[j] {
+					return nil, errf(CodeSchemaViolation, fmt.Sprintf("/lines/%d/tax_ids", i), "tax %q appears more than once", taxes[j])
+				}
+			}
+			l.TaxIDs = taxes
+		} else {
+			l.TaxIDs = nil
+		}
 		out[i] = l
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ItemID < out[j].ItemID })

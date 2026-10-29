@@ -236,7 +236,7 @@ func proposed(o obj, key string) (engine.ProposedAction, error) {
 		return pa, bad("SCHEMA_VIOLATION", "%s must be an object", key)
 	}
 	path := key + "."
-	if err := closed(po, path, []string{"supplier_id", "delivery_id", "currency", "lines"}, nil); err != nil {
+	if err := closed(po, path, []string{"supplier_id", "delivery_id", "currency", "lines"}, []string{"tax_minor"}); err != nil {
 		return pa, err
 	}
 	var err error
@@ -260,7 +260,7 @@ func proposed(o obj, key string) (engine.ProposedAction, error) {
 		if !ok {
 			return pa, bad("SCHEMA_VIOLATION", "%s must be an object", lp)
 		}
-		if err := closed(lo, lp, []string{"item_id", "quantity", "unit_price_minor"}, nil); err != nil {
+		if err := closed(lo, lp, []string{"item_id", "quantity", "unit_price_minor"}, []string{"unit_id", "tax_ids"}); err != nil {
 			return pa, err
 		}
 		var line contract.Line
@@ -273,7 +273,32 @@ func proposed(o obj, key string) (engine.ProposedAction, error) {
 		if line.UnitPriceMinor, err = integer(lo, "unit_price_minor", lp, 0); err != nil {
 			return pa, err
 		}
+		if _, present := lo["unit_id"]; present {
+			if line.UnitID, err = ident(lo, "unit_id", lp); err != nil {
+				return pa, err
+			}
+		}
+		if _, present := lo["tax_ids"]; present {
+			arr, ok := lo["tax_ids"].([]any)
+			if !ok || len(arr) < 1 || len(arr) > 10 {
+				return pa, bad("SCHEMA_VIOLATION", "%stax_ids must be an array of 1..10 identifiers", lp)
+			}
+			for _, v := range arr {
+				t, ok := v.(string)
+				if !ok || len(t) > 128 || !identifier.MatchString(t) {
+					return pa, bad("SCHEMA_VIOLATION", "%stax_ids must contain identifiers", lp)
+				}
+				line.TaxIDs = append(line.TaxIDs, t)
+			}
+		}
 		pa.Lines = append(pa.Lines, line)
+	}
+	if _, present := po["tax_minor"]; present {
+		t, err := integer(po, "tax_minor", path, 0)
+		if err != nil {
+			return pa, err
+		}
+		pa.TaxMinor = &t
 	}
 	return pa, nil
 }

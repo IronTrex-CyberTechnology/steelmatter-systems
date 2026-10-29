@@ -80,7 +80,7 @@ func (e *Engine) settle(ctx context.Context, tenant, opRef string, c connector.C
 	// moved since dispatch, a PENDING operation is treated as sent: lookup
 	// and fence only. Nothing new is ever created after a revoke.
 	var res connector.Result
-	if d.status == DispatchPending && writes && d.mandateLive {
+	if d.status == DispatchPending && writes && d.mandateLive && !e.Cfg.ObserveOnly {
 		res, err = c.Execute(ctx, d.connectorAction())
 	} else {
 		res, err = c.Lookup(ctx, opRef)
@@ -112,7 +112,7 @@ type dispatchRow struct {
 	tenant, opRef, mandateID, companyRef, permitDigest, status string
 	amount, destSeq, minSeq                                    int64
 	action                                                     contract.Action
-	mandateLive                                                bool // mandate ACTIVE at the dispatch's control epoch
+	mandateLive                                                bool // mandate ACTIVE, unexpired, at the dispatch's control epoch
 }
 
 // checkProofOfNoOrder (R1-DEF-09): the destination's reply alone never
@@ -153,7 +153,7 @@ func (e *Engine) loadDispatchForSettle(ctx context.Context, tenant, opRef string
 	d := dispatchRow{tenant: tenant, opRef: opRef}
 	var canonical []byte
 	err := e.Pool.QueryRow(ctx, `SELECT d.mandate_id, d.company_ref, d.permit_digest, d.status, d.amount_minor, COALESCE(d.destination_seq, 0), d.action_canonical,
-		m.status = 'ACTIVE' AND m.control_epoch = d.control_epoch
+		m.status = 'ACTIVE' AND m.control_epoch = d.control_epoch AND clock_timestamp() < m.expires_at
 		FROM steelmatter.dispatches d JOIN steelmatter.mandates m ON m.tenant_id = d.tenant_id AND m.mandate_id = d.mandate_id
 		WHERE d.tenant_id = $1 AND d.op_ref = $2`, tenant, opRef).
 		Scan(&d.mandateID, &d.companyRef, &d.permitDigest, &d.status, &d.amount, &d.destSeq, &canonical, &d.mandateLive)
@@ -176,14 +176,21 @@ func (d *dispatchRow) connectorAction() connector.Action {
 // toConnectorAction maps the stored, authorised action to the canonical
 // action the connector sends (D1 v1.2). Nothing caller-supplied is added.
 func toConnectorAction(opRef, companyRef, permitDigest string, a *contract.Action, expectedMinSeq int64) connector.Action {
-	lines := make([]connector.Line, len(a.Lines))
-	for i, l := range a.Lines {
-		lines[i] = connector.Line{ItemRef: l.ItemID, Quantity: l.Quantity, UnitPriceMinor: l.UnitPriceMinor}
-	}
 	return connector.Action{OpRef: opRef, ActionRevision: a.ActionRevision, CompanyRef: companyRef,
 		DeliveryRef: a.DeliveryID, SupplierRef: a.SupplierID,
-		SupplierRevision: a.SupplierRevision, Lines: lines, AmountMinor: a.AmountMinor, Currency: a.Currency,
-		PermitDigest: permitDigest, ExpectedMinSeq: expectedMinSeq}
+		SupplierRevision: a.SupplierRevision, Lines: connectorLines(a.Lines), AmountMinor: a.AmountMinor, Currency: a.Currency,
+		PermitDigest: permitDigest, ExpectedMinSeq: expectedMinSeq,
+		// D1 v1.4: sent exactly as authorised; absent stays absent.
+		AmountUntaxedMinor: a.AmountUntaxedMinor, TaxMinor: a.TaxMinor, DeliveryRevision: a.DeliveryRevision}
+}
+
+func connectorLines(in []contract.Line) []connector.Line {
+	lines := make([]connector.Line, len(in))
+	for i, l := range in {
+		lines[i] = connector.Line{ItemRef: l.ItemID, Quantity: l.Quantity, UnitPriceMinor: l.UnitPriceMinor, UnitRef: l.UnitID,
+			TaxRefs: append([]string(nil), l.TaxIDs...)}
+	}
+	return lines
 }
 
 // matches reports whether a destination order is a confirmed order with
@@ -196,9 +203,14 @@ func (d *dispatchRow) matches(o *connector.Order) bool {
 		len(o.Lines) != len(d.action.Lines) {
 		return false
 	}
-	for i, l := range d.action.Lines {
-		ol := o.Lines[i]
-		if ol.ItemRef != l.ItemID || ol.Quantity != l.Quantity || ol.UnitPriceMinor != l.UnitPriceMinor {
+	// D1 v1.4: units, taxes, the untaxed amount, the tax and the delivery
+	// address revision must match too, whenever the action authorised them.
+	if a := d.action; (a.AmountUntaxedMinor != nil && (o.AmountUntaxedMinor != *a.AmountUntaxedMinor || a.TaxMinor == nil || o.TaxMinor != *a.TaxMinor)) ||
+		(a.DeliveryRevision != nil && o.DeliveryRevision != *a.DeliveryRevision) {
+		return false
+	}
+	for i, l := range connectorLines(d.action.Lines) {
+		if !l.Equal(o.Lines[i]) {
 			return false
 		}
 	}

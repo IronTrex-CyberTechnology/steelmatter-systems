@@ -10,6 +10,9 @@
 -- so fencing and recording an order that already exists keep working.
 -- Checked under a share lock on the engine head, so it is ordered against
 -- every write-switch change.
+-- A CREATE_INTENT after a BLOCK for the same reference is refused too (R1
+-- decision 3): a BLOCK in the anchor blocks the reference permanently, even
+-- if an Odoo restore erases the module's own tombstone.
 CREATE OR REPLACE FUNCTION anchor.append_destination(p_type text, p_destination text, p_op_ref text, p_payload jsonb)
 RETURNS bigint LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, anchor AS $$
 DECLARE
@@ -26,6 +29,10 @@ BEGIN
     IF p_type = 'CREATE_INTENT' THEN
         -- Serialise with set_write_state (which locks the engine head).
         PERFORM 1 FROM anchor.stream_heads WHERE stream = 'engine' FOR SHARE;
+    END IF;
+    IF p_type = 'CREATE_INTENT' AND EXISTS (SELECT 1 FROM anchor.destination_records
+            WHERE destination = p_destination AND op_ref = p_op_ref AND record_type = 'BLOCK') THEN
+        RAISE EXCEPTION 'reference % is permanently blocked; no create may start', p_op_ref USING ERRCODE = 'SM005';
     END IF;
     IF p_type = 'CREATE_INTENT' AND NOT (anchor.current_write_state()->>'enabled')::boolean THEN
         RAISE EXCEPTION 'engine writes are disabled; no new create may start' USING ERRCODE = 'SM003';

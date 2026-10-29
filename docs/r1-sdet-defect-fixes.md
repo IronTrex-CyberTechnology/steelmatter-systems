@@ -5,8 +5,10 @@ findings that need no owner decision. Each fix has a regression test named after
 its defect ID. Most are in `tests/integration/r1_defect_fixes_test.go`. Real-Odoo
 checks for DEF-01, DEF-14 and DEF-20 are in `tests/integration/r1_odoo_e2e_test.go`.
 
-Still open: DEF-04, DEF-08 and DEF-40 wait for owner decisions; DEF-10, 11, 16,
-18, 19, 21 and 22 are in the Odoo module and connector.
+DEF-04, DEF-08 and DEF-40 waited for owner decisions; they are implemented with
+Aakhil's decisions of 29 Oct 2026 in [r1-decisions.md](r1-decisions.md), with the
+engine side of DEF-11, DEF-21 and DEF-22 (D1 v1.4). DEF-10, 16, 18 and 19 are in
+the Odoo module and connector (Kaif).
 
 | ID | Behaviour now |
 |---|---|
@@ -18,7 +20,7 @@ Still open: DEF-04, DEF-08 and DEF-40 wait for owner decisions; DEF-10, 11, 16,
 | R1-DEF-14 | The anchor refuses a new `CREATE_INTENT` while engine writes are off. The check is ordered against the write switch. The module writes `CREATE_INTENT` before its create commits, so a create that is already past the engine's own check fails closed in Odoo. BLOCK and CREATE_DONE are never refused. |
 | R1-DEF-15 | When the recovery anchor or the destination is unreachable, `check`, `reconcile`, `resume` and `settle` return 503 SERVICE_UNAVAILABLE (retryable). They no longer return a non-retryable 500. |
 | R1-DEF-20 | An order deleted in Odoo shows up in Odoo's journal as `po_deleted`, so it is not treated as a restore. Its operation is flagged `ORDER_DELETED_AT_DESTINATION` (migration 0015) and stays committed with no refund, and writes stay on. A HELD finding can be recorded against it. If writes are later turned off for another reason, the resume gate asks for a finding on each such operation. |
-| R1-DEF-30 | Reconciliation keeps 10 seconds back before its request deadline. If it runs out of time, it stops between operations and returns `complete: false`. Running it again continues from there. The recovery time SLO is still an owner decision. |
+| R1-DEF-30 | Reconciliation keeps 10 seconds back before its request deadline. If it runs out of time, it stops between operations and returns `complete: false`. Running it again continues from there. The timeout is documented from slow-anchor measurements in [r1-recovery-timeout.md](r1-recovery-timeout.md) (decision 5). |
 | R1-OBS-01 | When reconciliation cannot rebuild an operation, the problem now names the cause, for example `PERMIT_MISSING` (the engine was restored to before its permit was issued) or `INSUFFICIENT_BUDGET`. It no longer says INTERNAL_ERROR. |
 | R1-P4-DEF-01 | Reconciliation and the resume gate take an engine-wide lock and run one at a time across processes. Each run reports only what it did: one rebuild, one settle and one resume. |
 | R1-API-06 | Operator-only endpoints check the caller's role before any configuration check. A non-operator always gets 403. |

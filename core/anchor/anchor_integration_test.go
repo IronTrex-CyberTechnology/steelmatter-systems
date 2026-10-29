@@ -92,6 +92,11 @@ func TestAnchorRoleSeparation(t *testing.T) {
 	if _, err := h.Observer.Exec(ctx, `SELECT count(*) FROM anchor.destination_records`); err != nil {
 		t.Fatalf("observer cannot read the destination stream: %v", err)
 	}
+	// R1 decision 11: the engine stream carries the signed permits; only the
+	// engine's recovery identity reads it.
+	if _, err := h.Observer.Exec(ctx, `SELECT payload->>'permit_jws' FROM anchor.engine_records`); err == nil {
+		t.Fatal("observer read the signed permits in the engine stream")
+	}
 	ds := &anchor.DestStream{Pool: h.Dest, Destination: "odoo"}
 	if err := ds.RecordCreateIntent(ctx, "op", "d"); err != nil {
 		t.Fatal(err)
@@ -101,6 +106,13 @@ func TestAnchorRoleSeparation(t *testing.T) {
 	}
 	if err := ds.RecordBlock(ctx, "op", "fenced"); err != nil || ds.RecordBlock(ctx, "op", "fenced") != nil {
 		t.Fatal("block is idempotent")
+	}
+	// R1 decision 3: a BLOCK is permanent; no create may start after it.
+	if err := ds.RecordBlock(ctx, "op-blocked", "fenced"); err != nil {
+		t.Fatal(err)
+	}
+	if err := ds.RecordCreateIntent(ctx, "op-blocked", "d"); !errors.Is(err, anchor.ErrBlocked) {
+		t.Fatalf("create intent after BLOCK: %v", err)
 	}
 	p, err := ds.Proof(ctx, "op")
 	if err != nil || !p.CreateIntent || !p.Blocked || p.CreateDone == nil || p.CreateDone.ID != "PO1" {

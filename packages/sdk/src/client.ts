@@ -4,7 +4,7 @@ import type {
   AdapterAssurance, AmendmentRequest, AmendmentResponse, Denied, ErrorCode, EvaluateRequest, EvidenceBundle,
   Identifier, InstructionCreateRequest, InstructionResponse, MandateCreateRequest, MandateResponse, OperationRequest,
   OperationResult, OperationStatus, PermitIssued, ReconcileResult, RevokeResponse, SimulationResult,
-  AnchorRepairRequest, AnchorRepairResult, DispatchResult, FindingRequest, FindingResult, GateReport, ReconcileReport,
+  AnchorRepairRequest, AnchorRepairResult, ApprovalRequest, ApprovalResult, DispatchResult, FindingRequest, FindingResult, GateReport, ReconcileReport,
   RepairRequest, RepairResult, RestoreReport, ReviewRequest, WriteState,
 } from './types.ts';
 
@@ -307,6 +307,14 @@ export class SteelmatterClient {
   /** R1. A configured confirmer, distinct from preparer and reviewer, confirms; the only way a held amount moves. */
   async confirmRepair(opRef: Identifier, repairId: Identifier, opts?: RequestOptions): Promise<ApiResponse<DispatchResult>> {
     return this.#call({ method: 'POST', path: `/v1/dispatches/${segment(opRef, 'opRef')}/repairs/${segment(repairId, 'repairId')}/confirm`, expect: [200], errors: E_WRITE_409, idempotency: 'rate-limit-only' }, opts);
+  }
+
+  /**
+   * R1 (T17-T19). An entitled approver, never the issuer or actor, approves or rejects the exact current
+   * action revision. Each call records one decision, so it is retried only after 429.
+   */
+  async recordApproval(instructionId: Identifier, body: ApprovalRequest, opts?: RequestOptions): Promise<ApiResponse<ApprovalResult>> {
+    return this.#call({ method: 'POST', path: `/v1/instructions/${segment(instructionId, 'instructionId')}/approvals`, body, expect: [201], errors: E_WRITE_409, idempotency: 'rate-limit-only' }, opts);
   }
 
   // ---- R1 recovery (instance-wide) ----

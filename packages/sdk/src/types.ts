@@ -26,7 +26,7 @@ export type Currency = typeof CURRENCY;
 export const ERROR_CODES = [
   'ACTION_CHANGED', 'ACTOR_ASSIGNMENT_INVALID', 'ACTOR_MISMATCH', 'ADAPTER_UNSUPPORTED', 'ALREADY_COMMITTED',
   'AMENDMENT_ID_CONFLICT', 'AMOUNT_MISMATCH', 'ARITHMETIC_OVERFLOW', 'AUDIENCE_MISMATCH', 'AUTHORITY_REVOKED',
-  'CLOCK_UNHEALTHY', 'DUPLICATE_KEY', 'DUPLICATE_LINE_ITEM', 'FORBIDDEN', 'INTERNAL_ERROR', 'INVALID_ENCODING',
+  'CLOCK_UNHEALTHY', 'DELIVERY_REVISION_STALE', 'DUPLICATE_KEY', 'DUPLICATE_LINE_ITEM', 'FORBIDDEN', 'INTERNAL_ERROR', 'INVALID_ENCODING',
   'INVALID_JSON', 'INVALID_TIMESTAMP', 'INVALID_TIME_RANGE', 'JWS_ALG_UNSUPPORTED', 'JWS_HEADER_UNSUPPORTED',
   'JWS_KEY_UNTRUSTED', 'JWS_MALFORMED', 'JWS_PAYLOAD_NOT_CANONICAL', 'JWS_SIGNATURE_INVALID', 'JWS_TYPE_MISMATCH',
   'LINES_NOT_CANONICAL', 'MANDATE_EXPIRED', 'NON_INTEGER_NUMBER', 'NOT_FOUND', 'NUMBER_OUT_OF_RANGE',
@@ -45,7 +45,7 @@ export type ErrorCode = (typeof ERROR_CODES)[number];
 export const ERROR_STATUS: Readonly<Record<ErrorCode, number>> = {
   ACTION_CHANGED: 409, ACTOR_ASSIGNMENT_INVALID: 422, ACTOR_MISMATCH: 403, ADAPTER_UNSUPPORTED: 422,
   ALREADY_COMMITTED: 409, AMENDMENT_ID_CONFLICT: 409, AMOUNT_MISMATCH: 400, ARITHMETIC_OVERFLOW: 400,
-  AUDIENCE_MISMATCH: 403, AUTHORITY_REVOKED: 403, CLOCK_UNHEALTHY: 503, DUPLICATE_KEY: 400, DUPLICATE_LINE_ITEM: 400,
+  AUDIENCE_MISMATCH: 403, AUTHORITY_REVOKED: 403, CLOCK_UNHEALTHY: 503, DELIVERY_REVISION_STALE: 409, DUPLICATE_KEY: 400, DUPLICATE_LINE_ITEM: 400,
   FORBIDDEN: 403, INTERNAL_ERROR: 500, INVALID_ENCODING: 400, INVALID_JSON: 400, INVALID_TIMESTAMP: 400,
   INVALID_TIME_RANGE: 400, JWS_ALG_UNSUPPORTED: 400, JWS_HEADER_UNSUPPORTED: 400, JWS_KEY_UNTRUSTED: 403,
   JWS_MALFORMED: 400, JWS_PAYLOAD_NOT_CANONICAL: 400, JWS_SIGNATURE_INVALID: 403, JWS_TYPE_MISMATCH: 400,
@@ -57,7 +57,7 @@ export const ERROR_STATUS: Readonly<Record<ErrorCode, number>> = {
 };
 
 export const DENY_REASONS = [
-  'AUTHORITY_REVOKED', 'CAPACITY_EXHAUSTED', 'DELIVERY_NOT_PERMITTED', 'MANDATE_EXPIRED', 'SUPPLIER_NOT_PERMITTED',
+  'APPROVAL_REQUIRED', 'APPROVAL_STALE', 'AUTHORITY_REVOKED', 'CAPACITY_EXHAUSTED', 'DELIVERY_NOT_PERMITTED', 'MANDATE_EXPIRED', 'SUPPLIER_NOT_PERMITTED',
 ] as const;
 export type DenyReason = (typeof DENY_REASONS)[number];
 
@@ -75,7 +75,12 @@ export interface ErrorBody {
 export interface Line {
   item_id: Identifier;
   quantity: number;
+  /** Per unit_id (the product's base unit when absent), before tax. */
   unit_price_minor: number;
+  /** D1 v1.4: the authorised unit of quantity; never converted. */
+  unit_id?: Identifier;
+  /** D1 v1.4: the authorised taxes on the line (1..10, sorted by the server). */
+  tax_ids?: Identifier[];
 }
 
 export interface MandatePayload {
@@ -112,7 +117,13 @@ export interface ActionPayload {
   delivery_id: Identifier;
   currency: Currency;
   lines: Line[];
+  /** The full total including tax: the amount held. */
   amount_minor: number;
+  /** D1 v1.4: present together when the action is taxed; amount_minor = untaxed + tax. */
+  amount_untaxed_minor?: number;
+  tax_minor?: number;
+  /** D1 v1.4: the destination's protected delivery address revision when authorised. */
+  delivery_revision?: number;
 }
 
 export interface PermitPayload {
@@ -185,6 +196,11 @@ export interface ProposedAction {
   delivery_id: Identifier;
   currency: Currency;
   lines: Line[];
+  /**
+   * D1 v1.4: required when any line has tax_ids, refused otherwise. The
+   * destination recomputes it at create and refuses any difference.
+   */
+  tax_minor?: number;
 }
 
 export interface InstructionCreateRequest {
@@ -375,7 +391,12 @@ export interface FindingResult {
   anchor_seq: number;
 }
 
-export type RepairOutcome = 'COMMIT' | 'RELEASE';
+/**
+ * COMMIT or RELEASE move a HELD or MISMATCH amount. RELEASE is refused while
+ * the recovery anchor records a create attempt (R1 decision 3). ANCHOR_REPAIR
+ * re-appends a missing anchor intent and moves no budget (R1 decision 4).
+ */
+export type RepairOutcome = 'COMMIT' | 'RELEASE' | 'ANCHOR_REPAIR';
 
 export interface RepairRequest {
   outcome: RepairOutcome;
@@ -395,12 +416,31 @@ export interface RepairResult {
   approved?: boolean;
 }
 
+/** One approver's decision on the exact current action revision (T17-T19). */
+export interface ApprovalRequest {
+  action_revision: number;
+  action_digest: string;
+  approved: boolean;
+  note?: string;
+}
+
+export interface ApprovalResult {
+  approval_id: Identifier;
+  instruction_id: Identifier;
+  action_revision: number;
+  action_digest: string;
+  decision: 'APPROVED' | 'REJECTED';
+  approver_id: Identifier;
+}
+
+/** Confirms a prepared and reviewed ANCHOR_REPAIR (three different people). */
 export interface AnchorRepairRequest {
-  evidence_ref: string;
+  repair_id: Identifier;
 }
 
 export interface AnchorRepairResult {
   op_ref: Identifier;
+  repair_id: Identifier;
   repaired: true;
 }
 

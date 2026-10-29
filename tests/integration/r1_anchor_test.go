@@ -499,14 +499,15 @@ func TestD5BothRestoredHeldRuleAndRepair(t *testing.T) {
 }
 
 // A repair that releases: an unreviewed or rejected repair never moves
-// budget; an approved one confirmed by Aakhil releases the held amount.
+// budget; an approved one confirmed by Aakhil releases the held amount, and
+// only because the anchor proves no create was attempted (decision 3).
 func TestD5RepairReleaseNeedsApprovedReview(t *testing.T) {
 	e := newEnv(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
 	ctx := context.Background()
 	mustDispatch(t, e, p)
-	e.heldVia(p.operation, a.s)
+	e.heldNeverSent(p.operation, a.s)
 	if _, err := e.eng.RecordHeldFinding(ctx, uday, p.operation, "held after restore", "ticket-1"); err != nil {
 		t.Fatal(err)
 	}
@@ -624,11 +625,40 @@ func TestD5AnchorBehindNeedsConfirmedRepair(t *testing.T) {
 	if g := a.gate(); g.Passed || gateCheck(g, "ANCHOR_NOT_BEHIND").Passed {
 		t.Fatalf("gate %+v", g)
 	}
-	if err := e.eng.ConfirmAnchorRepair(context.Background(), kaif, p.operation, "x"); err == nil {
+	// Decision 4: Uday prepares, Kaif reviews, Aakhil confirms.
+	ctx := context.Background()
+	id, err := e.eng.PrepareRepair(ctx, uday, p.operation, engine.RepairAnchor, "engine-db-export-2026-10-28", "anchor behind")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.eng.ConfirmAnchorRepair(ctx, aakhil, p.operation, id); err == nil {
+		t.Fatal("anchor repaired without a review")
+	}
+	if err := e.eng.ReviewRepair(ctx, uday, p.operation, id, true, "self"); err == nil {
+		t.Fatal("the preparer reviewed")
+	}
+	if err := e.eng.ReviewRepair(ctx, kaif, p.operation, id, true, "export matches"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.eng.ConfirmAnchorRepair(ctx, kaif, p.operation, id); err == nil {
 		t.Fatal("a non-confirmer repaired the anchor")
 	}
-	if err := e.eng.ConfirmAnchorRepair(context.Background(), aakhil, p.operation, "engine-db-export-2026-10-28"); err != nil {
+	e.eng.RepairConfirmers = []string{"aakhil", "kaif"}
+	if err := e.eng.ConfirmAnchorRepair(ctx, kaif, p.operation, id); err == nil {
+		t.Fatal("the reviewer confirmed")
+	}
+	e.eng.RepairConfirmers = []string{"aakhil"}
+	if _, err := e.eng.ConfirmRepair(ctx, aakhil, p.operation, id, a.s); err == nil {
+		t.Fatal("an anchor repair was confirmed as a budget repair")
+	}
+	if err := e.eng.ConfirmAnchorRepair(ctx, aakhil, p.operation, id); err != nil {
 		t.Fatal(err)
+	}
+	if err := e.eng.ConfirmAnchorRepair(ctx, aakhil, p.operation, id); err != nil {
+		t.Fatalf("repeat: %v", err)
+	}
+	if _, err := e.eng.PrepareRepair(ctx, uday, p.operation, engine.RepairAnchor, "again", ""); err == nil {
+		t.Fatal("prepared an anchor repair for an operation the anchor already has")
 	}
 	// The repaired intent carries the same action facts Dispatch records.
 	var sup, cur, del, rev string
@@ -828,7 +858,7 @@ func TestD5ConcurrentRepairConfirmationsMoveOnce(t *testing.T) {
 	p := e.permitted()
 	ctx := context.Background()
 	mustDispatch(t, e, p)
-	e.heldVia(p.operation, a.s)
+	e.heldNeverSent(p.operation, a.s)
 	if _, err := e.eng.RecordHeldFinding(ctx, uday, p.operation, "f", "ev"); err != nil {
 		t.Fatal(err)
 	}
@@ -912,7 +942,7 @@ func TestD5CaseCOrderOnlyOdooKnowsIsRebuilt(t *testing.T) {
 	if g := a.gate(); g.Passed || gateCheck(g, "ANCHOR_NOT_BEHIND").Passed || !gateCheck(g, "ALL_OPERATIONS_PRESENT").Passed {
 		t.Fatalf("gate before the anchor repair %+v", g)
 	}
-	if err := e.eng.ConfirmAnchorRepair(context.Background(), aakhil, p.operation, "odoo-order-and-engine-permit-match"); err != nil {
+	if err := e.anchorRepair(p.operation, "odoo-order-and-engine-permit-match"); err != nil {
 		t.Fatal(err)
 	}
 	if g := a.gate(); !g.Resumed {

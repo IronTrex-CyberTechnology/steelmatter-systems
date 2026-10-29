@@ -23,7 +23,7 @@ async function typeChecks(c: SteelmatterClient, err: SteelmatterApiError): Promi
     const jws: string = r.data.permit_jws;
     void jws;
   } else {
-    const reason: 'AUTHORITY_REVOKED' | 'CAPACITY_EXHAUSTED' | 'DELIVERY_NOT_PERMITTED' | 'MANDATE_EXPIRED' | 'SUPPLIER_NOT_PERMITTED' = r.data.reason;
+    const reason: 'APPROVAL_REQUIRED' | 'APPROVAL_STALE' | 'AUTHORITY_REVOKED' | 'CAPACITY_EXHAUSTED' | 'DELIVERY_NOT_PERMITTED' | 'MANDATE_EXPIRED' | 'SUPPLIER_NOT_PERMITTED' = r.data.reason;
     void reason;
   }
   if (isDenied(r)) void r.data.message;

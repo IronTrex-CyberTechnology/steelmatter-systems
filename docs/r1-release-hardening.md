@@ -29,8 +29,8 @@ The active aggregate CI stage is `r1-engine`. Real Odoo recovery tests and a bui
 
 Developer checks and independent SDET verification remain separate. Sindhu should receive the final fixed commit, test results, contract changes and setup instructions after development checks complete.
 
-## Release decisions still open
+## Release decisions (settled 29 Oct 2026)
 
-- The full-R1 catalogue still includes T17–T19 (exact-action human approval). This patch does not silently remove those requirements or invent an approval design.
-- The existing D5 human repair workflow permits a three-person reviewed release of HELD money. Its trust assumptions must be explicitly reconciled with the earlier FOUND/FENCED-only release rule before claiming full-R1 acceptance. Automated recovery never uses a human note as proof of no purchase.
+- T17–T19 (exact-action human approval) stay in R1 and are implemented; see [r1-decisions.md](r1-decisions.md), decision 9.
+- HELD money is released only with anchor proof that no purchase occurred and that the reference is permanently blocked; a three-person repair alone cannot release it (decision 3). Automated recovery never uses a human note as proof of no purchase.
 - This is a proposed version 2 contract addition. Both developers must include it in their shared interface review before merging; existing external verifiers must be upgraded to verify version 2 records.

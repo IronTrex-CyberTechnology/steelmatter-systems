@@ -237,6 +237,14 @@ type SupplierSource interface {
 	SupplierRevision(ctx context.Context, supplierRef string) (int64, error)
 }
 
+// DeliverySource is implemented by destinations that own the protected
+// delivery address revision (Odoo: res.partner.sm_revision on the delivery
+// partner, D1 v1.4, R1 decision 2). The engine reads it when it builds an
+// action and again before it issues a permit. Errors follow SupplierSource.
+type DeliverySource interface {
+	DeliveryRevision(ctx context.Context, deliveryRef string) (int64, error)
+}
+
 // ListPage is one page of the destination journal, in commit (seq) order.
 type ListPage struct {
 	Rows           []ListRow `json:"rows"`
