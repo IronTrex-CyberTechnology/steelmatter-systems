@@ -21,7 +21,7 @@ const TIMESTAMP_FIELDS: Record<Kind, string[]> = {
   mandate: ['issued_at', 'expires_at'],
   action: [],
   permit: ['issued_at', 'expires_at'],
-  execution: ['committed_at'],
+  execution: ['committed_at', 'admitted_at'],
   observation: ['observed_at'],
 };
 
@@ -50,7 +50,7 @@ export function byteCompare(a: string, b: string): number {
 export function validate(kind: Kind, raw: Uint8Array): { [k: string]: JsonValue } {
   const tree = parseStrict(raw);
   if (!isObject(tree)) throw new ContractError('SCHEMA_VIOLATION', '', 'payload must be a JSON object');
-  if (tree.schema_version !== SCHEMA_VERSION) {
+  if (tree.schema_version !== SCHEMA_VERSION && !(tree.schema_version === '2' && (kind === 'execution' || kind === 'observation'))) {
     throw new ContractError('UNSUPPORTED_VERSION', '/schema_version', `schema_version must be "${SCHEMA_VERSION}"`);
   }
   if (tree.crypto_profile !== CRYPTO_PROFILE) {
@@ -111,6 +111,7 @@ function checkSemantics(kind: Kind, p: { [k: string]: any }): void {
   if (kind === 'action') checkLines(p.lines, p.amount_minor);
   if (kind === 'mandate') checkRange(p.issued_at, p.expires_at, 0);
   if (kind === 'permit') checkRange(p.issued_at, p.expires_at, MAX_PERMIT_LIFETIME_SECONDS);
+  if (kind === 'execution' && p.schema_version === '2' && parseTimestamp(p.admitted_at)! > parseTimestamp(p.committed_at)!) throw new ContractError('INVALID_TIME_RANGE', '/committed_at', 'settlement precedes admission');
   if (kind === 'observation') checkObservation(p as Parameters<typeof checkObservation>[0]);
 }
 
@@ -147,11 +148,13 @@ function checkRange(issued: string, expires: string, maxSeconds: number): void {
   }
 }
 
-function checkObservation(o: { status: string; expected_action_digest: string; observed_action_digest: string | null }): void {
+function checkObservation(o: { [k: string]: any }): void {
   const obs = o.observed_action_digest;
-  const bad =
-    (o.status === 'MATCH' && (obs === null || obs !== o.expected_action_digest)) ||
-    (o.status === 'MISMATCH' && (obs === null || obs === o.expected_action_digest)) ||
+  let matches = obs !== null && obs === o.expected_action_digest;
+  if (o.schema_version === '2') matches = matches && o.observed_company_ref === o.expected_company_ref &&
+    o.observed_state === 'purchase' && o.observed_permit_digest === o.expected_permit_digest;
+  const bad = (o.status === 'MATCH' && !matches) ||
+    (o.status === 'MISMATCH' && (obs === null || matches)) ||
     (o.status === 'INSUFFICIENT_EVIDENCE' && obs !== null);
-  if (bad) throw new ContractError('OBSERVATION_INCONSISTENT', '/status', `status ${o.status} is inconsistent with observed_action_digest`);
+  if (bad) throw new ContractError('OBSERVATION_INCONSISTENT', '/status', `status ${o.status} is inconsistent with destination evidence`);
 }

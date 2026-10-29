@@ -1,11 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:steelmatter:proposed:execution:1",
-  "title": "execution proposed unsigned payload",
+  "title": "execution signed payload (v1 atomic, v2 external destination)",
   "type": "object",
   "properties": {
     "schema_version": {
-      "const": "1"
+      "enum": [
+        "1",
+        "2"
+      ]
     },
     "crypto_profile": {
       "const": "SM-JWS-ES256-1"
@@ -51,8 +54,7 @@
     "target_order_id": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 128,
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+      "maxLength": 256
     },
     "currency": {
       "const": "INR"
@@ -69,6 +71,17 @@
       "type": "string",
       "format": "date-time",
       "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "admitted_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "company_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
     }
   },
   "required": [
@@ -87,5 +100,38 @@
     "status",
     "committed_at"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "schema_version": {
+            "const": "2"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "admitted_at",
+          "company_ref"
+        ],
+        "properties": {
+          "admitted_at": {},
+          "company_ref": {}
+        }
+      },
+      "else": {
+        "properties": {
+          "target_order_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          },
+          "admitted_at": false,
+          "company_ref": false
+        }
+      }
+    }
+  ]
 }

@@ -10,7 +10,7 @@ from odoo import api, fields, models
 from .operation import append_journal
 
 # Order fields whose change makes an order differ from what was authorised.
-MATERIAL_FIELDS = {"partner_id", "company_id", "currency_id", "dest_address_id", "order_line", "sm_op_ref", "sm_permit_digest"}
+MATERIAL_FIELDS = {"partner_id", "company_id", "currency_id", "dest_address_id", "order_line", "sm_op_ref", "sm_permit_digest", "sm_supplier_revision"}
 LINE_FIELDS = {"product_id", "product_qty", "price_unit", "taxes_id", "order_id", "display_type"}
 
 
@@ -18,6 +18,7 @@ class PurchaseOrder(models.Model):
     _inherit = "purchase.order"
 
     sm_op_ref = fields.Char("Steelmatter op_ref", readonly=True, copy=False, index=True)
+    sm_supplier_revision = fields.Integer("Steelmatter supplier revision at purchase", readonly=True, copy=False)
     sm_permit_digest = fields.Char("Steelmatter permit digest", readonly=True, copy=False)
 
     def init(self):

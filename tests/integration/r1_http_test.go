@@ -197,7 +197,11 @@ func TestR1HTTPRecoveryHeldRuleAndRepair(t *testing.T) {
 	}
 	requireBuckets(t, "committed by the confirmed repair", e.buckets(p.mandate), r1Committed)
 	st, body = e.call("POST", rpath+"/confirm", "aakhil", nil)
-	requireStatus(t, "confirm twice", st, body, 409, "ALREADY_COMMITTED")
+	requireStatus(t, "confirm twice", st, body, 200, "")
+	if body["execution"] != engine.DispatchCommitted {
+		t.Fatalf("idempotent confirmation %v", body)
+	}
+	requireBuckets(t, "repeat confirmation does not move money", e.buckets(p.mandate), r1Committed)
 	if a.count(anchor.RepairConfirmed) != 1 || a.count(anchor.OperatorFinding) != 1 {
 		t.Fatal("anchor repair records")
 	}

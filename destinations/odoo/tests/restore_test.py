@@ -63,6 +63,7 @@ def engine_status(r, a):
     def matches(o):
         return bool(o) and o["state"] == "purchase" and o["company_ref"] == a["company_ref"] \
             and o["delivery_ref"] == a["delivery_ref"] and o["supplier_ref"] == a["supplier_ref"] \
+            and o.get("supplier_revision") == a["supplier_revision"] \
             and o["amount_minor"] == a["amount_minor"] and o["currency"] == a["currency"] \
             and o["permit_digest"] == a["permit_digest"] and o["lines"] == a["lines"]
     if r["create_done"] and r["destination"]:
@@ -107,6 +108,24 @@ class AnchorDown(unittest.TestCase):
         # Nothing was blocked either: the same op_ref can still be created.
         self.assertEqual(EXECUTOR.api("sm_create", a)["outcome"], "CREATED")
         self.assertEqual(orders_for(op), 1)
+
+
+class AnchorRestart(unittest.TestCase):
+    def test_restarted_anchor_leaves_no_stale_connection(self):
+        # Warm the module's anchor connection pool, restart the anchor, then
+        # write again: a stale pooled connection must be replaced, not turned
+        # into UNAVAILABLE once the anchor is back.
+        for i in range(3):
+            self.assertEqual(EXECUTOR.api("sm_create", action(ref("warm-%d" % i)))["outcome"], "CREATED")
+        stop_anchor()
+        start_anchor()
+        for i in range(3):
+            op = ref("after-restart-%d" % i)
+            r = EXECUTOR.api("sm_create", action(op))
+            self.assertEqual(r["outcome"], "CREATED", r)
+            self.assertEqual(anchor_records(op), ["CREATE_INTENT", "CREATE_DONE"])
+            f = EXECUTOR.api("sm_fence", ref("after-restart-f%d" % i), 0)
+            self.assertTrue(proves_no_order(f), f)
 
 
 class CommitFailedAfterIntent(unittest.TestCase):

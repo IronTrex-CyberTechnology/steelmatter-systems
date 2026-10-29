@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 )
 
@@ -71,8 +72,24 @@ func reduce(r Result) ReferenceScenario {
 	return rs
 }
 
-// BuildReference pins results. Every scenario must have passed.
+var cleanCommit = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+// checkCommit requires the exact, reproducible source commit of a pinned run
+// (T43): a full commit SHA, not "unknown" and not a working tree with
+// uncommitted changes ("-dirty").
+func checkCommit(commit string) error {
+	if !cleanCommit.MatchString(commit) {
+		return fmt.Errorf("recorded commit %q is not a clean full commit SHA; regenerate the reference from a clean checkout of a commit", commit)
+	}
+	return nil
+}
+
+// BuildReference pins results. Every scenario must have passed, and the run
+// must come from a clean checkout so the recorded commit identifies the code.
 func BuildReference(results []Result, root, commit string) (*Reference, error) {
+	if err := checkCommit(commit); err != nil {
+		return nil, err
+	}
 	ref := &Reference{Schema: referenceSchema, Simulation: true, Synthetic: true,
 		Note:        "Simulation with synthetic data. Pinned demo outcomes; regenerate only through review.",
 		Commit:      commit,
@@ -104,6 +121,9 @@ func LoadReference(path string) (*Reference, error) {
 	}
 	if ref.Schema != referenceSchema || !ref.Simulation || !ref.Synthetic || ref.Commit == "" {
 		return nil, fmt.Errorf("demo reference %s: wrong schema or missing simulation/synthetic/commit labels", path)
+	}
+	if err := checkCommit(ref.Commit); err != nil {
+		return nil, fmt.Errorf("demo reference %s: %w", path, err)
 	}
 	return &ref, nil
 }

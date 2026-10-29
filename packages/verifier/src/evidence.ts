@@ -198,12 +198,18 @@ export async function verifyBundle(bundle: JsonValue, trust: TrustStore, now: nu
   check('time:permit_issued_within_mandate', [mandate, permit], () => le(mandate!.issued_at, permit!.issued_at) && lt(permit!.issued_at, mandate!.expires_at),
     'permit issued outside its mandate window');
   check('time:permit_expiry_within_mandate', [mandate, permit], () => le(permit!.expires_at, mandate!.expires_at), 'permit outlives its mandate');
-  check('time:execution_within_permit', [permit, execution], () => le(permit!.issued_at, execution!.committed_at) && lt(execution!.committed_at, permit!.expires_at),
+  const admittedAt = execution?.schema_version === '2' ? execution.admitted_at : execution?.committed_at;
+  check('time:execution_within_permit', [permit, execution], () => le(permit!.issued_at, admittedAt) && lt(admittedAt, permit!.expires_at),
     'execution committed outside the permit window');
-  check('time:execution_within_mandate', [mandate, execution], () => le(mandate!.issued_at, execution!.committed_at) && lt(execution!.committed_at, mandate!.expires_at),
+  check('time:execution_within_mandate', [mandate, execution], () => le(mandate!.issued_at, admittedAt) && lt(admittedAt, mandate!.expires_at),
     'execution committed outside the mandate window');
   check('time:observation_after_execution', [execution, observation], () => le(execution!.committed_at, observation!.observed_at),
     'observation recorded before the execution it observes');
+  if (execution?.schema_version === '2') {
+    check('time:settlement_after_admission', [execution], () => le(execution!.admitted_at, execution!.committed_at));
+    check('destination_binding', [execution, observation, permit], () => observation!.schema_version === '2' &&
+      observation!.expected_company_ref === execution!.company_ref && observation!.expected_permit_digest === permitDigest);
+  }
   // The service's link claims must agree with what was recomputed.
   const claims = b.links ?? {};
   const claimMismatch = [

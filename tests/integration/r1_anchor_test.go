@@ -340,6 +340,7 @@ func TestD5EngineRestoredBeforeConfirmedPurchase(t *testing.T) {
 	e := newEnv(t)
 	a := withAnchor(t, e)
 	p := e.permitted()
+	q := e.permittedIn(tenant, "owner-a", "issuer-a", "agent-a", "po-request-002")
 	snap := e.snapshotEngine()
 	mustDispatch(t, e, p)
 	requireExecution(t, "commit", e.settle(p.operation, a.s), engine.DispatchCommitted)
@@ -355,7 +356,8 @@ func TestD5EngineRestoredBeforeConfirmedPurchase(t *testing.T) {
 	if !r.WritesDisabled || !hasSignal(r, engine.SignalEngineMissingOperation) || a.writes().Enabled {
 		t.Fatalf("restore not detected: %+v", r)
 	}
-	q := e.permittedIn(tenant, "owner-a", "issuer-a", "agent-a", "po-request-002")
+	st, body := e.evaluate("agent-a", q.instruction, 1)
+	requireStatus(t, "evaluate while writes are off", st, body, 503, "SERVICE_UNAVAILABLE")
 	if _, err := e.dispatch("agent-a", q); err == nil {
 		t.Fatal("dispatch while writes are off")
 	}
@@ -481,8 +483,8 @@ func TestD5BothRestoredHeldRuleAndRepair(t *testing.T) {
 		t.Fatalf("confirm: %+v %v", d, err)
 	}
 	requireBuckets(t, "committed by the confirmed repair", e.buckets(p.mandate), r1Committed)
-	if _, err := e.eng.ConfirmRepair(ctx, aakhil, p.operation, repairID, a.s); err == nil {
-		t.Fatal("a repair was confirmed twice")
+	if d, err := e.eng.ConfirmRepair(ctx, aakhil, p.operation, repairID, a.s); err != nil || d.Execution != engine.DispatchCommitted {
+		t.Fatalf("retry must return the same confirmed result: %+v %v", d, err)
 	}
 	if a.count(anchor.RepairConfirmed) != 1 || a.count(anchor.OperatorFinding) != 1 {
 		t.Fatal("anchor repair records")
@@ -846,8 +848,8 @@ func TestD5ConcurrentRepairConfirmationsMoveOnce(t *testing.T) {
 			}
 		}
 	}
-	if ok != 1 {
-		t.Fatalf("%d confirmations succeeded", ok)
+	if ok != 4 {
+		t.Fatalf("%d idempotent confirmation requests succeeded", ok)
 	}
 	requireBuckets(t, "released once", e.buckets(p.mandate), r1Released)
 	if a.count(anchor.RepairConfirmed) != 1 {

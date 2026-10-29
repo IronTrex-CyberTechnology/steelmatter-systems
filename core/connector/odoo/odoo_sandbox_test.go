@@ -135,6 +135,7 @@ func TestCreatedOrderCarriesTheAuthorisedFacts(t *testing.T) {
 	}
 	o := r.Destination
 	if o.State != connector.StateConfirmed || o.CompanyRef != a.CompanyRef || o.DeliveryRef != a.DeliveryRef || o.SupplierRef != a.SupplierRef ||
+		o.SupplierRevision != a.SupplierRevision ||
 		o.AmountMinor != a.AmountMinor || o.Currency != a.Currency || o.PermitDigest != a.PermitDigest || !reflect.DeepEqual(o.Lines, a.Lines) {
 		t.Fatalf("order facts differ from the action:\n%+v\n%+v", o, a)
 	}
@@ -227,6 +228,29 @@ func TestListReturnsEveryRowInCommitOrder(t *testing.T) {
 	for i := range rows {
 		if rows[i].Seq != int64(i+1) {
 			t.Fatalf("row %d has seq %d: the listing skipped or repeated a row", i, rows[i].Seq)
+		}
+	}
+}
+
+func TestCoverageOfTheSandbox(t *testing.T) {
+	c := sandbox(t)
+	cov := c.Coverage(context.Background())
+	if !cov.Verified || cov.Complete || !cov.Module.Installed || !cov.Module.Supported || !cov.Anchor.Reachable {
+		t.Fatalf("got %+v", cov)
+	}
+	posture := map[string]string{}
+	for _, r := range cov.Routes {
+		posture[r.ID] = r.Posture
+	}
+	for id, want := range map[string]string{"steelmatter_api": odoo.PostureEnforced, "administrators": odoo.PostureUnprotected,
+		"foreign_orders": odoo.PostureObserved, "order_changes": odoo.PostureObserved, "direct_database": odoo.PostureUnknown} {
+		if posture[id] != want {
+			t.Fatalf("route %s: %q, want %q (all: %v)", id, posture[id], want, posture)
+		}
+	}
+	for _, bad := range []string{"executor_bypass", "observer_writes"} {
+		if _, ok := posture[bad]; ok {
+			t.Fatalf("the sandbox identities are misconfigured: %s", bad)
 		}
 	}
 }

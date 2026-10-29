@@ -38,6 +38,13 @@ for ref, name, price in [("chair-ergo", "Ergonomic office chair", 6000.0), ("des
         Product.create({"name": name, "sm_ref": ref, "purchase_ok": True, "type": "consu",
                         "standard_price": price, "supplier_taxes_id": [(6, 0, [])], "taxes_id": [(6, 0, [])]})
 
+# Every address in the sandbox is on the reserved .invalid domain, so nothing
+# could be delivered even if mail were sent. Done before any password is set,
+# because Odoo queues a "password changed" email to the user's address.
+for p in Partner.with_context(active_test=False).search([("email", "!=", False)]):
+    if not p.email.endswith(".invalid"):
+        p.email = p.email.split("@")[0] + "@example.invalid"
+
 Users = env["res.users"].with_context(no_reset_password=True)
 for login, name, group, pw in [
     ("sm_executor", "Steelmatter executor", "steelmatter_r1.group_executor", os.environ["SM_EXECUTOR_PASSWORD"]),

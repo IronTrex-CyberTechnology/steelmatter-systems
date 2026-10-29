@@ -18,4 +18,4 @@ export STEELMATTER_ODOO_EXECUTOR_PASSWORD="$SM_EXECUTOR_PASSWORD"
 export STEELMATTER_ODOO_OBSERVER_PASSWORD="$SM_OBSERVER_PASSWORD"
 export STEELMATTER_ANCHOR_URL
 cd "$ROOT"
-go test -tags integration,failpoints,odoo -count=1 -run TestR1OdooEndToEnd "$@" ./tests/integration/
+go test -tags integration,failpoints,odoo -count=1 -run 'TestR1Odoo(EndToEnd|ThroughLossProxy)$' "$@" ./tests/integration/
