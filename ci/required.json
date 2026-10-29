@@ -2969,6 +2969,26 @@
           "phase": "integration",
           "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestADR002NewlyEntitledIssuerGainsReadAccessWithoutCreatingInstruction"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
+          "test": "TestGateFailureIsNotOverwrittenByLaterPass"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
+          "test": "TestGateFailsWhenPassIsFollowedByFail"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
+          "test": "TestGateFailsWhenSkipIsFollowedByPass"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
+          "test": "TestGateFailsWhenARequiredTestPassesTwice"
         }
       ],
       "required_cases": []
@@ -4772,6 +4792,26 @@
           "phase": "integration",
           "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestObserverWorkerDoesNotDuplicateConcurrentReconcile"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
+          "test": "TestGateFailureIsNotOverwrittenByLaterPass"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
+          "test": "TestGateFailsWhenPassIsFollowedByFail"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
+          "test": "TestGateFailsWhenSkipIsFollowedByPass"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
+          "test": "TestGateFailsWhenARequiredTestPassesTwice"
         }
       ],
       "required_cases": [
@@ -7098,6 +7138,26 @@
           "phase": "verifier",
           "package": "packages/verifier",
           "test": "r1-evidence.test.ts/R1: required admission and destination fields cannot be omitted or marked v1"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
+          "test": "TestGateFailureIsNotOverwrittenByLaterPass"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
+          "test": "TestGateFailsWhenPassIsFollowedByFail"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
+          "test": "TestGateFailsWhenSkipIsFollowedByPass"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
+          "test": "TestGateFailsWhenARequiredTestPassesTwice"
         }
       ],
       "required_cases": [
@@ -8693,6 +8753,26 @@
           "phase": "unit",
           "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestCommandForRunsExactlyTheMappedTests"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
+          "test": "TestGateFailureIsNotOverwrittenByLaterPass"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
+          "test": "TestGateFailsWhenPassIsFollowedByFail"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
+          "test": "TestGateFailsWhenSkipIsFollowedByPass"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
+          "test": "TestGateFailsWhenARequiredTestPassesTwice"
         }
       ]
     },
