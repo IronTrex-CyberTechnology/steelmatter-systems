@@ -134,7 +134,7 @@ func (e *Engine) PrepareRepair(ctx context.Context, p auth.Principal, opRef, out
 	}
 	recs, err := e.Anchor.RecordsFor(ctx, p.Tenant, opRef)
 	if err != nil {
-		return "", fmt.Errorf("recovery anchor: %w", err)
+		return "", dependency("recovery anchor", err)
 	}
 	if !slices.ContainsFunc(recs, func(r anchor.Record) bool { return r.Type == anchor.OperatorFinding }) {
 		return "", fault("REVISION_STALE", "record the HELD finding before preparing a repair")
@@ -156,7 +156,7 @@ func (e *Engine) repairState(ctx context.Context, tenant, opRef, repairID string
 	var st repairState
 	recs, err := e.Anchor.RecordsFor(ctx, tenant, opRef)
 	if err != nil {
-		return st, fmt.Errorf("recovery anchor: %w", err)
+		return st, dependency("recovery anchor", err)
 	}
 	for _, r := range recs {
 		switch r.Type {
@@ -413,7 +413,7 @@ func (e *Engine) ConfirmAnchorRepair(ctx context.Context, p auth.Principal, opRe
 	}
 	ir.Currency, ir.SupplierRef, ir.SupplierRevision, ir.DeliveryRef = act.Currency, act.SupplierID, act.SupplierRevision, act.DeliveryID
 	if _, err := e.Anchor.Append(ctx, anchor.DispatchIntent, p.Tenant, opRef, ir, 0); err != nil {
-		return fmt.Errorf("recovery anchor: %w", err)
+		return dependency("recovery anchor", err)
 	}
 	_, err = e.Anchor.Append(ctx, anchor.RepairConfirmed, p.Tenant, opRef, map[string]string{"kind": "ANCHOR_REPAIR",
 		"evidence_ref": evidenceRef, "confirmed_by": p.ID}, 0)

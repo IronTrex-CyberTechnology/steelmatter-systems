@@ -165,6 +165,9 @@ type findingResponse struct {
 }
 
 func (h *handlers) recordFinding(ctx context.Context, p auth.Principal, r *http.Request) (*response, error) {
+	if err := requireKind(p, auth.Operator); err != nil { // R1-API-06: role before configuration
+		return nil, err
+	}
 	o, err := readBody(r, false)
 	if err != nil {
 		return nil, err
@@ -199,6 +202,9 @@ type repairResponse struct {
 }
 
 func (h *handlers) prepareRepair(ctx context.Context, p auth.Principal, r *http.Request) (*response, error) {
+	if err := requireKind(p, auth.Operator); err != nil { // R1-API-06: role before configuration
+		return nil, err
+	}
 	o, err := readBody(r, false)
 	if err != nil {
 		return nil, err
@@ -240,6 +246,9 @@ func repairID(r *http.Request) (string, error) {
 }
 
 func (h *handlers) reviewRepair(ctx context.Context, p auth.Principal, r *http.Request) (*response, error) {
+	if err := requireKind(p, auth.Operator); err != nil { // R1-API-06: role before configuration
+		return nil, err
+	}
 	o, err := readBody(r, false)
 	if err != nil {
 		return nil, err
@@ -272,6 +281,9 @@ func (h *handlers) reviewRepair(ctx context.Context, p auth.Principal, r *http.R
 }
 
 func (h *handlers) confirmRepair(ctx context.Context, p auth.Principal, r *http.Request) (*response, error) {
+	if err := requireKind(p, auth.Operator); err != nil { // R1-API-06: role before configuration
+		return nil, err
+	}
 	if err := emptyBody(r); err != nil {
 		return nil, err
 	}
@@ -300,6 +312,9 @@ type anchorRepairResponse struct {
 }
 
 func (h *handlers) anchorRepair(ctx context.Context, p auth.Principal, r *http.Request) (*response, error) {
+	if err := requireKind(p, auth.Operator); err != nil { // R1-API-06: role before configuration
+		return nil, err
+	}
 	o, err := readBody(r, false)
 	if err != nil {
 		return nil, err
@@ -357,6 +372,7 @@ func (h *handlers) checkRestore(ctx context.Context, p auth.Principal, r *http.R
 	if v.Signals == nil {
 		v.Signals = []engine.RestoreSignal{}
 	}
+	v.Flagged, v.Unconfirmed = orEmpty(v.Flagged), orEmpty(v.Unconfirmed)
 	return &response{http.StatusOK, v}, nil
 }
 
@@ -371,6 +387,7 @@ func (h *handlers) reconcileRestore(ctx context.Context, p auth.Principal, r *ht
 	}
 	v.Recreated, v.FromOdoo, v.Flagged = orEmpty(v.Recreated), orEmpty(v.FromOdoo), orEmpty(v.Flagged)
 	v.Refenced, v.Settled, v.Problems = orEmpty(v.Refenced), orEmpty(v.Settled), orEmpty(v.Problems)
+	v.Unconfirmed = orEmpty(v.Unconfirmed)
 	return &response{http.StatusOK, v}, nil
 }
 

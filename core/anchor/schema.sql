@@ -156,27 +156,8 @@ BEGIN
     RETURN rec;
 END $$;
 
--- Appends a destination record (Odoo module identity). Idempotent per
--- (destination, op_ref, record_type): a repeat returns the stored sequence.
-CREATE FUNCTION anchor.append_destination(p_type text, p_destination text, p_op_ref text, p_payload jsonb)
-RETURNS bigint LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, anchor AS $$
-DECLARE
-    h anchor.stream_heads%ROWTYPE;
-    existing bigint;
-    n bigint;
-    hv bytea;
-BEGIN
-    SELECT * INTO h FROM anchor.stream_heads WHERE stream = 'destination' FOR UPDATE;
-    SELECT seq INTO existing FROM anchor.destination_records WHERE destination = p_destination AND op_ref = p_op_ref AND record_type = p_type;
-    IF FOUND THEN
-        RETURN existing;
-    END IF;
-    n := h.last_seq + 1;
-    hv := anchor.record_hash(h.last_hash, p_type, p_destination, p_op_ref, p_payload);
-    INSERT INTO anchor.destination_records VALUES (n, p_type, p_destination, p_op_ref, p_payload, h.last_hash, hv, clock_timestamp());
-    UPDATE anchor.stream_heads SET last_seq = n, last_hash = hv WHERE stream = 'destination';
-    RETURN n;
-END $$;
+-- anchor.append_destination is defined in append_destination.sql (also run by
+-- anchor-upgrade on existing anchors).
 
 REVOKE ALL ON ALL TABLES IN SCHEMA anchor FROM PUBLIC;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA anchor FROM PUBLIC;
@@ -185,4 +166,4 @@ GRANT SELECT ON anchor.engine_records, anchor.destination_records, anchor.stream
 GRANT EXECUTE ON FUNCTION anchor.append_engine(text, text, text, jsonb, bigint), anchor.set_write_state(boolean, text, bigint, bigint),
     anchor.current_write_state(), anchor.record_hash(bytea, text, text, text, jsonb) TO anchor_engine_writer;
 GRANT SELECT ON anchor.destination_records TO anchor_dest_writer, anchor_observer;
-GRANT EXECUTE ON FUNCTION anchor.append_destination(text, text, text, jsonb), anchor.record_hash(bytea, text, text, text, jsonb) TO anchor_dest_writer;
+GRANT EXECUTE ON FUNCTION anchor.record_hash(bytea, text, text, text, jsonb) TO anchor_dest_writer;

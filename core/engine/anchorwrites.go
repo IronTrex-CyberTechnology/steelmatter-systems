@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/auth"
+	"log/slog"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 
@@ -93,7 +95,7 @@ func (e *Engine) anchorOutcome(ctx context.Context, rec anchor.OutcomeRecord) er
 		return nil
 	}
 	if _, err := e.Anchor.Append(ctx, anchor.Outcome, rec.Tenant, rec.OpRef, rec, 0); err != nil {
-		return fmt.Errorf("recovery anchor: %w", err)
+		return dependency("recovery anchor", err)
 	}
 	return nil
 }
@@ -128,6 +130,7 @@ func (e *Engine) guardMandateHistory(ctx context.Context, tx pgx.Tx, tenant, man
 	type history struct {
 		intent                       *anchor.IntentRecord
 		status, repair, repairStatus string
+		dispatched, finding          bool
 	}
 	hist := map[string]*history{}
 	for _, r := range recs {
@@ -148,7 +151,12 @@ func (e *Engine) guardMandateHistory(ctx context.Context, tx pgx.Tx, tenant, man
 			if err := json.Unmarshal(r.Payload, &out); err != nil {
 				return anchorFault(err)
 			}
-			h.status = out.Status
+			h.dispatched = true
+			if !isDispatchedMarker(out) {
+				h.status = out.Status
+			}
+		case anchor.OperatorFinding:
+			h.finding = true
 		case anchor.RepairConfirmed:
 			var rc RepairConfirmRecord
 			if err := json.Unmarshal(r.Payload, &rc); err != nil {
@@ -184,8 +192,22 @@ func (e *Engine) guardMandateHistory(ctx context.Context, tx pgx.Tx, tenant, man
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	if len(hist) != 0 {
-		problem = "engine is missing anchored dispatch history"
+	// An intent with no engine row is a restore unless its engine commit
+	// never happened (R1-DEF-06): no DISPATCHED marker, outcome or finding,
+	// and nothing at the destination.
+	for op, h := range hist {
+		if h.intent == nil || h.dispatched || h.finding || h.repair != "" {
+			problem = "engine is missing anchored dispatch history"
+			break
+		}
+		p, err := e.Anchor.ProofFor(ctx, h.intent.CompanyRef, op)
+		if err != nil {
+			return anchorFault(err)
+		}
+		if p.CreateIntent || p.Blocked || p.CreateDone != nil {
+			problem = "engine is missing anchored dispatch history"
+			break
+		}
 	}
 	if problem != "" {
 		if _, err := e.Anchor.DisableWrites(ctx, "admission recovery barrier: "+problem); err != nil {
@@ -194,4 +216,61 @@ func (e *Engine) guardMandateHistory(ctx context.Context, tx pgx.Tx, tenant, man
 		return fault("SERVICE_UNAVAILABLE", "%s; reconcile recovery before new spending", problem)
 	}
 	return e.requireWrites(ctx)
+}
+
+// dispatchedOutcome is the OUTCOME the engine appends right after a dispatch
+// transaction commits (status PENDING, no destination result). With it, an
+// intent whose engine row is missing is a restore; without it (and nothing
+// at the destination) the engine commit never happened (R1-DEF-06).
+const dispatchedOutcome = "DISPATCHED"
+
+func isDispatchedMarker(o anchor.OutcomeRecord) bool {
+	return o.Outcome == dispatchedOutcome && o.Status == DispatchPending
+}
+
+// markDispatched records that the dispatch of opRef committed. Best effort:
+// if it is lost, a later restore of this one unsent dispatch is treated like
+// an uncommitted one, which is safe (nothing was sent; the permit is still
+// reserved in the restored database and can be dispatched again).
+func (e *Engine) markDispatched(ctx context.Context, tenant, opRef, company string) {
+	if e.Anchor == nil {
+		return
+	}
+	if _, err := e.Anchor.Append(ctx, anchor.Outcome, tenant, opRef, anchor.OutcomeRecord{Tenant: tenant, OpRef: opRef, Destination: company,
+		Outcome: dispatchedOutcome, Status: DispatchPending, Move: "reserved->unresolved"}, 0); err != nil {
+		slog.Warn("recovery anchor: DISPATCHED marker not recorded", "op_ref", opRef, "err", err)
+	}
+}
+
+// syncSupplier copies the destination's protected supplier revision into
+// target.suppliers when the destination owns it (R1-DEF-03). The copy only
+// moves forward (migration 0016). A supplier the destination does not know
+// is left to the engine's own record; an unreadable destination fails the
+// request, since the engine would otherwise authorise against a revision it
+// cannot confirm.
+func (e *Engine) syncSupplier(ctx context.Context, tenant, supplier string) error {
+	src, ok := e.Connector.(connector.SupplierSource)
+	if !ok || supplier == "" {
+		return nil
+	}
+	rev, err := src.SupplierRevision(ctx, supplier)
+	if err != nil {
+		if strings.Contains(err.Error(), connector.ReasonMappingMissing) {
+			return nil
+		}
+		return dependency("destination", err)
+	}
+	if _, err := e.Pool.Exec(ctx, `SELECT target.sync_supplier_revision($1, $2, $3)`, tenant, supplier, rev); err != nil {
+		return classify(err)
+	}
+	return nil
+}
+
+// syncSupplierFor syncs only for an issuer (the only principal that can
+// create or amend an instruction), so no other caller can trigger a sync.
+func (e *Engine) syncSupplierFor(ctx context.Context, p auth.Principal, supplier string) error {
+	if p.Kind != auth.Issuer {
+		return nil
+	}
+	return e.syncSupplier(ctx, p.Tenant, supplier)
 }

@@ -222,8 +222,14 @@ func TestD5DispatchAndOutcomesAreRecordedInTheAnchor(t *testing.T) {
 	if o := outs[[2]string{tenant, p.operation}]; o.Status != engine.DispatchCommitted || o.Move != "unresolved->committed" || o.DestinationOrder == "" {
 		t.Fatalf("outcome %+v", o)
 	}
-	if a.count(anchor.Outcome) != 2 {
+	// The DISPATCHED marker after the dispatch commit (R1-DEF-06), then the
+	// lost-reply UNKNOWN and the COMMITTED outcome.
+	if a.count(anchor.Outcome) != 3 {
 		t.Fatalf("outcomes %d", a.count(anchor.Outcome))
+	}
+	var marker string
+	if err := a.ah.Admin.QueryRow(context.Background(), `SELECT payload->>'outcome' FROM anchor.engine_records WHERE record_type = 'OUTCOME' ORDER BY seq LIMIT 1`).Scan(&marker); err != nil || marker != "DISPATCHED" {
+		t.Fatalf("first outcome %q (%v)", marker, err)
 	}
 	if n, _ := a.c.ExpectedMinSeq(context.Background(), e.eng.Cfg.CompanyRef); n != a.s.Head() {
 		t.Fatalf("expected min seq %d, destination head %d", n, a.s.Head())

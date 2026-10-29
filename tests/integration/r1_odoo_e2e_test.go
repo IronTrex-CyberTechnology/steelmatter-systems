@@ -463,4 +463,93 @@ func TestR1OdooEndToEnd(t *testing.T) {
 			r.outcome(t, p.operation, base, count, sixL, 0)
 		}
 	})
+
+	// SDET defect fixes, 29 Oct 2026, against real Odoo.
+
+	t.Run("R1-DEF-01: revoke after dispatch never sends; the unsent order is fenced and released", func(t *testing.T) {
+		base := r.e.buckets(r.mandate)
+		// A mandate of its own, so the revoke does not touch later subtests.
+		m := r.mandate
+		st, body := r.e.call("POST", "/v1/mandates", "owner-a", map[string]any{
+			"actor_ids": []string{"agent-a"}, "audience": audience, "supplier_ids": []string{"sup-chairs"}, "delivery_ids": []string{"wh-chennai"},
+			"currency": "INR", "limit_minor": limit, "expires_at": time.Now().UTC().Add(time.Hour).Format("2006-01-02T15:04:05Z"),
+		})
+		requireStatus(t, "create mandate", st, body, 201, "")
+		r.mandate = body["mandate"].(map[string]any)["mandate_id"].(string)
+		r.e.assign(r.mandate, "agent-a")
+		defer func() { r.mandate = m }()
+		own := r.e.buckets(r.mandate)
+		p := r.order(t)
+		mustDispatch(t, r.e, p)
+		st, body = r.e.call("POST", "/v1/mandates/"+p.mandate+"/revoke", "owner-a", nil)
+		requireStatus(t, "revoke", st, body, 200, "")
+		requireExecution(t, "after revoke", r.settle(t, p.operation), engine.DispatchFenced)
+		if n := odooOrders(t, p.operation); n != 0 {
+			t.Fatalf("revocation created %d Odoo orders", n)
+		}
+		requireBuckets(t, "released", r.e.buckets(p.mandate), own)
+		requireBuckets(t, "main mandate untouched", r.e.buckets(m), base)
+		r.evidence(t, p.operation)
+	})
+
+	t.Run("R1-DEF-14: once writes are off, Odoo refuses to start a new create", func(t *testing.T) {
+		base := r.e.buckets(r.mandate)
+		p := r.order(t)
+		mustDispatch(t, r.e, p)
+		if _, err := r.c.DisableWrites(ctx, "test: writes off while a create is in flight"); err != nil {
+			t.Fatal(err)
+		}
+		late, _ := r.conn.Execute(ctx, r.e.destActionForPermit(p))
+		if late.Outcome == connector.Created || late.Outcome == connector.Exists {
+			t.Fatalf("Odoo created an order after writes were turned off: %s", late.Outcome)
+		}
+		if n := odooOrders(t, p.operation); n != 0 {
+			t.Fatalf("%d Odoo orders after writes off", n)
+		}
+		rec := r.reconcile(t)
+		if len(rec.Problems) != 0 {
+			t.Fatalf("reconcile %+v", rec)
+		}
+		// Orders deleted in Odoo by earlier subtests are flagged; the gate
+		// wants an operator finding for each before writes resume.
+		for _, op := range rec.Flagged {
+			if _, err := r.e.eng.RecordHeldFinding(ctx, uday, op, "order deleted in Odoo by an earlier test step", "e2e"); err != nil {
+				t.Fatal(err)
+			}
+		}
+		r.resume(t)
+		r.outcome(t, p.operation, base, 0, 0, 0)
+		r.evidence(t, p.operation)
+	})
+
+	t.Run("R1-DEF-20: an order deleted in Odoo is flagged on its own; writes stay on", func(t *testing.T) {
+		base := r.e.buckets(r.mandate)
+		p := r.order(t)
+		mustDispatch(t, r.e, p)
+		requireExecution(t, "commit", r.settle(t, p.operation), engine.DispatchCommitted)
+		changeOdooOrder(t, p.operation, "cancel") // Odoo deletes only cancelled orders
+		changeOdooOrder(t, p.operation, "delete")
+		rep := r.check(t)
+		if rep.WritesDisabled || len(rep.Signals) != 0 {
+			t.Fatalf("an Odoo deletion was taken for a restore: %+v", rep)
+		}
+		found := false
+		for _, op := range rep.Flagged {
+			found = found || op == p.operation
+		}
+		if !found {
+			t.Fatalf("deleted order not flagged: %+v", rep)
+		}
+		if _, err := r.e.eng.RecordHeldFinding(ctx, uday, p.operation, "order deleted in Odoo", "e2e"); err != nil {
+			t.Fatal(err)
+		}
+		if retry, _ := r.conn.Execute(ctx, r.e.destActionForPermit(p)); retry.Outcome == connector.Created {
+			t.Fatal("a second order was created for a deleted op_ref")
+		}
+		r.outcome(t, p.operation, base, 0, sixL, 0)
+		next := r.order(t)
+		mustDispatch(t, r.e, next)
+		requireExecution(t, "unrelated purchase", r.settle(t, next.operation), engine.DispatchCommitted)
+		r.evidence(t, p.operation)
+	})
 }

@@ -29,13 +29,17 @@ const (
 	SignalUnknownDestinationOp   = "UNKNOWN_DESTINATION_OPERATION" // destination has an op_ref neither anchor nor engine knows (case C)
 	SignalCommittedOrderMissing  = "COMMITTED_ORDER_MISSING"       // committed operation whose destination order is gone (case E)
 	FlagOrderMissingAfterRestore = "ORDER_MISSING_AFTER_RESTORE"
-	systemTenant                 = "_system"
-	writesDisabledEvent          = "system.writes_disabled"
-	writesEnabledEvent           = "system.writes_enabled"
-	recoveredEvent               = "operation.recovered"
-	reasonRestoreDetected        = "RESTORE_DETECTED"
-	reasonResumeGatePassed       = "RESUME_GATE_PASSED"
-	destinationListPage          = 500
+	// FlagOrderDeletedAtDestination marks a committed operation whose order
+	// was deleted at the destination; the journal records the deletion, so
+	// it is not a restore and writes stay on (R1-DEF-20).
+	FlagOrderDeletedAtDestination = "ORDER_DELETED_AT_DESTINATION"
+	systemTenant                  = "_system"
+	writesDisabledEvent           = "system.writes_disabled"
+	writesEnabledEvent            = "system.writes_enabled"
+	recoveredEvent                = "operation.recovered"
+	reasonRestoreDetected         = "RESTORE_DETECTED"
+	reasonResumeGatePassed        = "RESUME_GATE_PASSED"
+	destinationListPage           = 500
 )
 
 // RestoreSignal is one sign that a store was restored.
@@ -51,6 +55,13 @@ type RestoreReport struct {
 	Signals        []RestoreSignal   `json:"signals"`
 	WritesDisabled bool              `json:"writes_disabled"` // this check turned writes off
 	WriteState     anchor.WriteState `json:"write_state"`
+	// Flagged lists committed operations this check flagged because their
+	// order was deleted at the destination (R1-DEF-20). They stay committed;
+	// writes stay on for everything else.
+	Flagged []string `json:"flagged"`
+	// Unconfirmed lists dispatch intents whose engine commit never happened
+	// (R1-DEF-06): not a restore; the client may retry the same dispatch.
+	Unconfirmed []string `json:"unconfirmed"`
 }
 
 var finalStatus = map[string]bool{DispatchCommitted: true, DispatchFenced: true, DispatchMismatch: true, DispatchHeld: true}
@@ -70,11 +81,16 @@ type recoveryView struct {
 	young    map[dispKey]bool // anchor records newer than RestoreGrace
 	youngOps map[dispKey]bool // engine operations changed within RestoreGrace
 	findings map[dispKey]bool
-	proofs   map[string]connector.Proof
-	ops      map[dispKey]engineOp
-	dest     map[string]connector.ListRow // latest journal row per op_ref
-	head     int64
-	minSeq   int64
+	// dispatched: the engine committed this dispatch (the DISPATCHED marker
+	// written after commit, or any later outcome). An intent without it, with
+	// no engine row and nothing at the destination, is a dispatch whose
+	// engine commit never happened (R1-DEF-06), not a restore.
+	dispatched map[dispKey]bool
+	proofs     map[string]connector.Proof
+	ops        map[dispKey]engineOp
+	dest       map[string]connector.ListRow // latest journal row per op_ref
+	head       int64
+	minSeq     int64
 }
 
 func (e *Engine) recoveryReady(c connector.Connector) error {
@@ -107,12 +123,12 @@ type recoveryQuerier interface {
 // exhaust the pool and prevent the lock holder from making progress.
 func (e *Engine) readViewWithDB(ctx context.Context, c connector.Connector, db recoveryQuerier) (*recoveryView, error) {
 	v := &recoveryView{intents: map[dispKey]anchor.IntentRecord{}, outcomes: map[dispKey]anchor.OutcomeRecord{}, young: map[dispKey]bool{},
-		youngOps: map[dispKey]bool{}, findings: map[dispKey]bool{}, ops: map[dispKey]engineOp{}, dest: map[string]connector.ListRow{}}
+		youngOps: map[dispKey]bool{}, findings: map[dispKey]bool{}, dispatched: map[dispKey]bool{}, ops: map[dispKey]engineOp{}, dest: map[string]connector.ListRow{}}
 	var cp int64
 	for {
 		page, err := c.List(ctx, cp, destinationListPage)
 		if err != nil {
-			return nil, fmt.Errorf("destination list: %w", err)
+			return nil, dependency("destination", err)
 		}
 		v.head = page.HeadSeq
 		for _, r := range page.Rows {
@@ -149,13 +165,13 @@ func (e *Engine) readViewWithDB(ctx context.Context, c connector.Connector, db r
 
 	now, err := e.Anchor.Now(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("recovery anchor: %w", err)
+		return nil, dependency("recovery anchor", err)
 	}
 	cutoff := now.Add(-e.Cfg.RestoreGrace)
 	for _, typ := range []string{anchor.DispatchIntent, anchor.Outcome, anchor.OperatorFinding} {
 		recs, err := e.Anchor.Records(ctx, typ)
 		if err != nil {
-			return nil, fmt.Errorf("recovery anchor: %w", err)
+			return nil, dependency("recovery anchor", err)
 		}
 		for _, r := range recs {
 			k := dispKey{r.Tenant, r.OpRef}
@@ -174,6 +190,10 @@ func (e *Engine) readViewWithDB(ctx context.Context, c connector.Connector, db r
 				if err := json.Unmarshal(r.Payload, &o); err != nil {
 					return nil, fmt.Errorf("anchor record %d: %w", r.Seq, err)
 				}
+				v.dispatched[k] = true
+				if isDispatchedMarker(o) {
+					continue // not a destination outcome
+				}
 				v.outcomes[k] = o
 			case anchor.OperatorFinding:
 				v.findings[k] = true
@@ -181,10 +201,10 @@ func (e *Engine) readViewWithDB(ctx context.Context, c connector.Connector, db r
 		}
 	}
 	if v.proofs, err = e.Anchor.Proofs(ctx, e.Cfg.CompanyRef); err != nil {
-		return nil, fmt.Errorf("recovery anchor: %w", err)
+		return nil, dependency("recovery anchor", err)
 	}
 	if v.minSeq, err = e.Anchor.ExpectedMinSeqBefore(ctx, e.Cfg.CompanyRef, cutoff); err != nil {
-		return nil, fmt.Errorf("recovery anchor: %w", err)
+		return nil, dependency("recovery anchor", err)
 	}
 	return v, nil
 }
@@ -203,6 +223,70 @@ func (v *recoveryView) knownOp(op string) bool {
 	return false
 }
 
+// unconfirmed reports whether k is a dispatch intent whose engine commit
+// never happened (R1-DEF-06): no engine row, no DISPATCHED marker or
+// outcome, no finding, and nothing at the destination (no CREATE_INTENT,
+// BLOCK or CREATE_DONE, no journal row). Nothing was consumed in the engine
+// and nothing was sent, so it is not a restore: the client can retry the
+// same dispatch, and the permit expires normally if it does not. A restore
+// that rolled back a committed dispatch is still detected through the
+// DISPATCHED marker the engine writes after every commit.
+func (v *recoveryView) unconfirmed(k dispKey) bool {
+	if _, ok := v.intents[k]; !ok {
+		return false
+	}
+	if _, ok := v.ops[k]; ok {
+		return false
+	}
+	p := v.proofs[k[1]]
+	_, inDest := v.dest[k[1]]
+	return !v.dispatched[k] && !v.findings[k] && !p.CreateIntent && !p.Blocked && p.CreateDone == nil && !inDest
+}
+
+func (v *recoveryView) unconfirmedOps() []string {
+	out := []string{}
+	for k := range v.intents {
+		if v.unconfirmed(k) {
+			out = append(out, k[1])
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// flagDeletedOrders flags every committed operation whose order the
+// destination journal shows deleted (R1-DEF-20). The operation stays
+// committed (no refund, no bucket move) and the op_ref can never be created
+// again (the destination keeps its operation row). Only this operation is
+// affected; a HELD finding can be recorded against it.
+func (e *Engine) flagDeletedOrders(ctx context.Context, v *recoveryView) ([]string, error) {
+	out := []string{}
+	keys := make([]dispKey, 0)
+	for k, o := range v.ops {
+		if o.status == DispatchCommitted && o.flag == "" && v.deletedAtDestination(k[1]) {
+			keys = append(keys, k)
+		}
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i][1] < keys[j][1] })
+	for _, k := range keys {
+		r := connector.Result{OpRef: k[1], Outcome: connector.Outcome("ORDER_DELETED"), Seq: v.dest[k[1]].Seq}
+		flagged, err := e.flagCommittedAs(ctx, v.ops[k], r, FlagOrderDeletedAtDestination)
+		if err != nil {
+			return out, err
+		}
+		if flagged {
+			out = append(out, k[1])
+		}
+	}
+	return out, nil
+}
+
+// deletedAtDestination reports whether the destination journal's latest
+// row for op records that its order was deleted there (not a restore).
+func (v *recoveryView) deletedAtDestination(op string) bool {
+	return v.dest[op].Event == "po_deleted"
+}
+
 // orderPresent reports whether the destination journal holds a created
 // order for op.
 func (v *recoveryView) orderPresent(op string) bool {
@@ -213,7 +297,7 @@ func (v *recoveryView) orderPresent(op string) bool {
 func (v *recoveryView) signals() []RestoreSignal {
 	var out []RestoreSignal
 	for k, ir := range v.intents {
-		if _, ok := v.ops[k]; !ok && !v.young[k] {
+		if _, ok := v.ops[k]; !ok && !v.young[k] && !v.unconfirmed(k) {
 			out = append(out, RestoreSignal{SignalEngineMissingOperation, k[0], k[1],
 				fmt.Sprintf("anchor holds a dispatch intent for %d minor units that the engine database lacks", ir.AmountMinor)})
 		}
@@ -226,7 +310,7 @@ func (v *recoveryView) signals() []RestoreSignal {
 			out = append(out, RestoreSignal{SignalEngineStatusBehind, k[0], k[1],
 				fmt.Sprintf("anchor recorded %s, engine database has %s", a.Status, o.status)})
 		}
-		if o.status == DispatchCommitted && o.flag == "" && !v.orderPresent(k[1]) && !v.youngOps[k] {
+		if o.status == DispatchCommitted && o.flag == "" && !v.orderPresent(k[1]) && !v.youngOps[k] && !v.deletedAtDestination(k[1]) {
 			out = append(out, RestoreSignal{SignalCommittedOrderMissing, k[0], k[1], "committed operation has no order at the destination"})
 		}
 	}
@@ -262,9 +346,12 @@ func (e *Engine) CheckRestore(ctx context.Context, c connector.Connector) (*Rest
 		_, disableErr := e.Anchor.DisableWrites(ctx, "restore comparison unavailable")
 		return nil, errors.Join(err, disableErr)
 	}
-	rep := &RestoreReport{Signals: v.signals()}
+	rep := &RestoreReport{Signals: v.signals(), Flagged: []string{}, Unconfirmed: v.unconfirmedOps()}
+	if rep.Flagged, err = e.flagDeletedOrders(ctx, v); err != nil {
+		return nil, err
+	}
 	if rep.WriteState, err = e.Anchor.WriteState(ctx); err != nil {
-		return nil, fmt.Errorf("recovery anchor: %w", err)
+		return nil, dependency("recovery anchor", err)
 	}
 	if len(rep.Signals) == 0 || !rep.WriteState.Enabled {
 		return rep, nil
@@ -280,7 +367,7 @@ func (e *Engine) CheckRestore(ctx context.Context, c connector.Connector) (*Rest
 	sort.Strings(parts)
 	reason := reasonRestoreDetected + ": " + strings.Join(parts, ", ")
 	if rep.WriteState, err = e.Anchor.DisableWrites(ctx, reason); err != nil {
-		return nil, fmt.Errorf("recovery anchor: %w", err)
+		return nil, dependency("recovery anchor", err)
 	}
 	rep.WritesDisabled = true
 	if err := e.systemEvent(ctx, writesDisabledEvent, rep.WriteState.Generation, map[string]any{"reason": reason, "signals": rep.Signals,
@@ -304,8 +391,15 @@ type ReconcileReport struct {
 	FromOdoo  []string `json:"from_odoo"` // op_refs only Odoo knew, rebuilt from the engine's own permit (case C)
 	Flagged   []string `json:"flagged"`   // committed operations with the order gone; BLOCK written, still committed (case E)
 	Refenced  []string `json:"refenced"`  // fenced operations re-fenced after a destination restore
-	Settled   []string `json:"settled"`   // operations that reached a final state in this pass
+	Settled   []string `json:"settled"`   // "op_ref=STATUS" for operations this pass brought to a final state
 	Problems  []string `json:"problems"`  // anything that needs an operator; the gate will not pass
+	// Unconfirmed lists dispatch intents whose engine commit never happened
+	// (R1-DEF-06); they are left for the client to retry, never rebuilt.
+	Unconfirmed []string `json:"unconfirmed"`
+	// Complete is false when the pass stopped at its time budget before
+	// finishing (R1-DEF-30); everything it did is consistent, and running
+	// reconciliation again continues from there.
+	Complete bool `json:"complete"`
 }
 
 // ReconcileRestore accounts for every operation a restore may have erased (cases
@@ -320,9 +414,14 @@ func (e *Engine) ReconcileRestore(ctx context.Context, c connector.Connector) (*
 	if err := e.recoveryReady(c); err != nil {
 		return nil, err
 	}
+	unlock, err := e.recoveryLock(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	ws, err := e.Anchor.WriteState(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("recovery anchor: %w", err)
+		return nil, dependency("recovery anchor", err)
 	}
 	if ws.Enabled {
 		return nil, fault("FORBIDDEN", "reconciliation runs only while writes are off")
@@ -331,21 +430,28 @@ func (e *Engine) ReconcileRestore(ctx context.Context, c connector.Connector) (*
 	if err != nil {
 		return nil, err
 	}
-	rep := &ReconcileReport{}
+	rep := &ReconcileReport{Unconfirmed: v.unconfirmedOps()}
+	budget := newBudget(ctx)
 	keys := make([]dispKey, 0, len(v.intents))
 	for k := range v.intents {
 		keys = append(keys, k)
 	}
 	sort.Slice(keys, func(i, j int) bool { return keys[i][1] < keys[j][1] })
 	for _, k := range keys {
-		if _, ok := v.ops[k]; ok {
+		if _, ok := v.ops[k]; ok || v.unconfirmed(k) {
 			continue
 		}
-		if err := e.recreateDispatch(ctx, v.intents[k]); err != nil {
-			rep.Problems = append(rep.Problems, fmt.Sprintf("%s: cannot rebuild from the anchor: %v", k[1], err))
+		if budget.spent() {
+			return rep, nil
+		}
+		created, err := e.recreateDispatch(ctx, v.intents[k])
+		if err != nil {
+			rep.Problems = append(rep.Problems, fmt.Sprintf("%s: cannot rebuild from the anchor: %s", k[1], problemText(err)))
 			continue
 		}
-		rep.Recreated = append(rep.Recreated, k[1])
+		if created {
+			rep.Recreated = append(rep.Recreated, k[1])
+		}
 	}
 	// Case C: an order Odoo has that neither the anchor nor the engine knows.
 	ops := make([]string, 0, len(v.dest))
@@ -356,11 +462,17 @@ func (e *Engine) ReconcileRestore(ctx context.Context, c connector.Connector) (*
 	}
 	sort.Strings(ops)
 	for _, op := range ops {
-		if err := e.recreateFromDestination(ctx, v.dest[op]); err != nil {
-			rep.Problems = append(rep.Problems, fmt.Sprintf("%s: order known only to Odoo; cannot rebuild: %v", op, err))
+		if budget.spent() {
+			return rep, nil
+		}
+		created, err := e.recreateFromDestination(ctx, v.dest[op])
+		if err != nil {
+			rep.Problems = append(rep.Problems, fmt.Sprintf("%s: order known only to Odoo; cannot rebuild: %s", op, problemText(err)))
 			continue
 		}
-		rep.FromOdoo = append(rep.FromOdoo, op)
+		if created {
+			rep.FromOdoo = append(rep.FromOdoo, op)
+		}
 	}
 	// Settle everything unsettled; writes are off, so nothing is executed.
 	for round := 0; round < 3; round++ {
@@ -382,15 +494,20 @@ func (e *Engine) ReconcileRestore(ctx context.Context, c connector.Connector) (*
 			break
 		}
 		for _, k := range todo {
-			r, err := e.Settle(ctx, k[0], k[1], c)
+			if budget.spent() {
+				return rep, nil
+			}
+			r, changed, err := e.settle(ctx, k[0], k[1], c)
 			if err != nil {
 				if round == 2 {
-					rep.Problems = append(rep.Problems, fmt.Sprintf("%s: %v", k[1], err))
+					rep.Problems = append(rep.Problems, fmt.Sprintf("%s: %s", k[1], problemText(err)))
 				}
 				continue
 			}
 			if finalStatus[r.Execution] {
-				rep.Settled = append(rep.Settled, k[1]+"="+r.Execution)
+				if changed {
+					rep.Settled = append(rep.Settled, k[1]+"="+r.Execution)
+				}
 			} else if round == 2 {
 				rep.Problems = append(rep.Problems, fmt.Sprintf("%s: still %s after %s", k[1], r.Execution, r.LastOutcome))
 			}
@@ -408,8 +525,15 @@ func (e *Engine) ReconcileRestore(ctx context.Context, c connector.Connector) (*
 	if v, err = e.readView(ctx, c); err != nil {
 		return rep, err
 	}
+	deleted, err := e.flagDeletedOrders(ctx, v)
+	if err != nil {
+		return rep, err
+	}
+	rep.Flagged = append(rep.Flagged, deleted...)
 	for k, o := range v.ops {
 		switch {
+		case o.status == DispatchCommitted && o.flag == "" && v.deletedAtDestination(k[1]):
+			// Flagged just above; deletion at the destination is not a restore.
 		case o.status == DispatchCommitted && o.flag == "" && !v.orderPresent(k[1]):
 			r, err := c.Fence(ctx, k[1], 0)
 			if err != nil || r.BlockCommitted == nil || !*r.BlockCommitted {
@@ -433,6 +557,7 @@ func (e *Engine) ReconcileRestore(ctx context.Context, c connector.Connector) (*
 			rep.Refenced = append(rep.Refenced, k[1])
 		}
 	}
+	rep.Complete = true
 	return rep, nil
 }
 
@@ -440,8 +565,10 @@ func (e *Engine) ReconcileRestore(ctx context.Context, c connector.Connector) (*
 // anchor DISPATCH_INTENT, as UNRESOLVED with its amount held: from the
 // reservation if the permit is still reserved, otherwise from available.
 // It refuses rather than over-commit the mandate.
-func (e *Engine) recreateDispatch(ctx context.Context, ir anchor.IntentRecord) error {
-	return e.inTx(ctx, ir.OpRef, func(tx pgx.Tx) error {
+func (e *Engine) recreateDispatch(ctx context.Context, ir anchor.IntentRecord) (bool, error) {
+	created := false
+	err := e.inTx(ctx, ir.OpRef, func(tx pgx.Tx) error {
+		created = false
 		if _, err := lockMandate(ctx, tx, ir.Tenant, ir.MandateID, "FOR UPDATE"); err != nil {
 			return err
 		}
@@ -455,13 +582,16 @@ func (e *Engine) recreateDispatch(ctx context.Context, ir anchor.IntentRecord) e
 		err := tx.QueryRow(ctx, `SELECT status, amount_minor FROM steelmatter.issuances WHERE tenant_id = $1 AND permit_id = $2 FOR UPDATE`,
 			ir.Tenant, ir.PermitID).Scan(&status, &amount)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return errors.New("its permit is missing from the engine database")
+			// R1-OBS-01: name the cause instead of an internal error.
+			return fault("NOT_FOUND", "PERMIT_MISSING: permit %s is not in the engine database (it was restored to before the permit was issued); "+
+				"its %d minor units cannot be held again from the engine's records; an operator must reconcile mandate %s before writes resume",
+				ir.PermitID, ir.AmountMinor, ir.MandateID)
 		}
 		if err != nil {
 			return err
 		}
 		if amount != ir.AmountMinor {
-			return fmt.Errorf("permit amount %d differs from the anchor's %d", amount, ir.AmountMinor)
+			return fault("REVISION_STALE", "PERMIT_AMOUNT_DIFFERS: permit %s holds %d minor units, the anchor's intent %d", ir.PermitID, amount, ir.AmountMinor)
 		}
 		from := "reserved_minor"
 		switch status {
@@ -479,14 +609,14 @@ func (e *Engine) recreateDispatch(ctx context.Context, ir anchor.IntentRecord) e
 		case "RELEASED":
 			from = "available_minor"
 		default:
-			return fmt.Errorf("its permit is %s by another operation", status)
+			return fault("REVISION_STALE", "PERMIT_USED_ELSEWHERE: permit %s is %s by another operation", ir.PermitID, status)
 		}
 		var avail int64
 		if err := tx.QueryRow(ctx, `SELECT `+from+` FROM steelmatter.mandates WHERE tenant_id = $1 AND mandate_id = $2`, ir.Tenant, ir.MandateID).Scan(&avail); err != nil {
 			return err
 		}
 		if avail < ir.AmountMinor {
-			return fmt.Errorf("the mandate has only %d minor units in %s to hold %d again", avail, from, ir.AmountMinor)
+			return fault("REVISION_STALE", "INSUFFICIENT_BUDGET: mandate %s has only %d minor units in %s to hold %d again", ir.MandateID, avail, from, ir.AmountMinor)
 		}
 		var now time.Time
 		if err := tx.QueryRow(ctx, `SELECT date_trunc('second', clock_timestamp())`).Scan(&now); err != nil {
@@ -513,8 +643,10 @@ func (e *Engine) recreateDispatch(ctx context.Context, ir anchor.IntentRecord) e
 				return err
 			}
 		}
+		created = true
 		return nil
 	})
+	return created && err == nil, err
 }
 
 // recreateFromDestination rebuilds an operation that only Odoo knows (case
@@ -527,14 +659,14 @@ func (e *Engine) recreateDispatch(ctx context.Context, ir anchor.IntentRecord) e
 // order (COMMITTED if it matches, MISMATCH if not). Its missing anchor
 // intent keeps the resume gate closed until Aakhil confirms the anchor
 // repair (ConfirmAnchorRepair).
-func (e *Engine) recreateFromDestination(ctx context.Context, row connector.ListRow) error {
+func (e *Engine) recreateFromDestination(ctx context.Context, row connector.ListRow) (bool, error) {
 	rows, err := e.Pool.Query(ctx, `SELECT i.tenant_id, i.permit_id, i.mandate_id, i.instruction_id, i.action_revision, i.control_epoch,
 		i.amount_minor, i.permit_digest, COALESCE(i.permit_jws, ''), a.action_canonical, a.action_digest
 		FROM steelmatter.issuances i
 		JOIN steelmatter.action_revisions a ON a.tenant_id = i.tenant_id AND a.instruction_id = i.instruction_id AND a.action_revision = i.action_revision
 		WHERE i.operation_id = $1`, row.OpRef)
 	if err != nil {
-		return unavailable(err)
+		return false, unavailable(err)
 	}
 	var found []anchor.IntentRecord
 	for rows.Next() {
@@ -543,30 +675,30 @@ func (e *Engine) recreateFromDestination(ctx context.Context, row connector.List
 		if err := rows.Scan(&ir.Tenant, &ir.PermitID, &ir.MandateID, &ir.InstructionID, &ir.ActionRevision, &ir.ControlEpoch,
 			&ir.AmountMinor, &ir.PermitDigest, &ir.PermitJWS, &canonical, &ir.ActionDigest); err != nil {
 			rows.Close()
-			return err
+			return false, err
 		}
 		ir.OpRef, ir.CompanyRef, ir.ActionCanonical = row.OpRef, e.Cfg.CompanyRef, string(canonical)
 		found = append(found, ir)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return classify(err)
+		return false, classify(err)
 	}
 	switch {
 	case len(found) == 0:
-		return errors.New("the engine database has no permit for this operation")
+		return false, errors.New("the engine database has no permit for this operation")
 	case len(found) > 1:
-		return errors.New("more than one permit claims this operation")
+		return false, errors.New("more than one permit claims this operation")
 	}
 	ir := found[0]
 	if row.PermitDigest != ir.PermitDigest {
-		return errors.New("the order's permit digest does not match the engine's permit")
+		return false, errors.New("the order's permit digest does not match the engine's permit")
 	}
 	if row.AmountMinor != ir.AmountMinor {
-		return fmt.Errorf("the order's amount %d does not match the permit's %d", row.AmountMinor, ir.AmountMinor)
+		return false, fmt.Errorf("the order's amount %d does not match the permit's %d", row.AmountMinor, ir.AmountMinor)
 	}
 	if ir.PermitJWS == "" {
-		return errors.New("the engine's permit was never signed, so no order can be attributed to it")
+		return false, errors.New("the engine's permit was never signed, so no order can be attributed to it")
 	}
 	return e.recreateDispatch(ctx, ir)
 }
@@ -574,18 +706,29 @@ func (e *Engine) recreateFromDestination(ctx context.Context, row connector.List
 // flagCommitted marks a committed operation whose order is gone (case E).
 // It stays committed: no refund, no bucket move.
 func (e *Engine) flagCommitted(ctx context.Context, o engineOp, r connector.Result) error {
-	return e.inTx(ctx, o.opRef, func(tx pgx.Tx) error {
+	_, err := e.flagCommittedAs(ctx, o, r, FlagOrderMissingAfterRestore)
+	return err
+}
+
+// flagCommittedAs sets flag on a committed operation once and records it in
+// the anchor. It reports whether this call set it.
+func (e *Engine) flagCommittedAs(ctx context.Context, o engineOp, r connector.Result, flag string) (bool, error) {
+	set := false
+	err := e.inTx(ctx, o.opRef, func(tx pgx.Tx) error {
+		set = false
 		if _, err := lockMandate(ctx, tx, o.tenant, o.mandate, "FOR UPDATE"); err != nil {
 			return err
 		}
 		tag, err := tx.Exec(ctx, `UPDATE steelmatter.dispatches SET flag = $3, updated_at = clock_timestamp()
-			WHERE tenant_id = $1 AND op_ref = $2 AND status = 'COMMITTED' AND flag IS NULL`, o.tenant, o.opRef, FlagOrderMissingAfterRestore)
+			WHERE tenant_id = $1 AND op_ref = $2 AND status = 'COMMITTED' AND flag IS NULL`, o.tenant, o.opRef, flag)
 		if err != nil || tag.RowsAffected() == 0 {
 			return err
 		}
+		set = true
 		return e.anchorOutcome(ctx, anchor.OutcomeRecord{Tenant: o.tenant, OpRef: o.opRef, Destination: e.Cfg.CompanyRef, Outcome: string(r.Outcome),
 			Status: DispatchCommitted, Move: "none", DestinationSeq: r.Seq, BlockCommitted: r.BlockCommitted, PriorCreate: r.PriorCreate, CreateDone: r.CreateDone})
 	})
+	return set && err == nil, err
 }
 
 // GateCheck is one resume-gate condition.
@@ -612,9 +755,14 @@ func (e *Engine) TryResume(ctx context.Context, c connector.Connector) (*GateRep
 	if err := e.recoveryReady(c); err != nil {
 		return nil, err
 	}
+	unlock, err := e.recoveryLock(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	ws, err := e.Anchor.WriteState(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("recovery anchor: %w", err)
+		return nil, dependency("recovery anchor", err)
 	}
 	rep := &GateReport{WriteState: ws}
 	if ws.Enabled {
@@ -639,7 +787,7 @@ func (e *Engine) TryResume(ctx context.Context, c connector.Connector) (*GateRep
 
 	var missing, unsettled, held, anchorBehind []string
 	for k := range v.intents {
-		if _, ok := v.ops[k]; !ok {
+		if _, ok := v.ops[k]; !ok && !v.unconfirmed(k) {
 			missing = append(missing, k[1]+" (anchor)")
 		}
 	}
@@ -667,6 +815,12 @@ func (e *Engine) TryResume(ctx context.Context, c connector.Connector) (*GateRep
 			}
 			if !v.findings[k] {
 				held = append(held, k[1]+": MISMATCH without a recorded finding")
+			}
+		case o.flag == FlagOrderDeletedAtDestination:
+			// Deleted at the destination, not a restore: the destination keeps
+			// its operation row, so the op_ref can never be created again.
+			if !v.findings[k] {
+				held = append(held, k[1]+": order deleted at the destination without a recorded finding")
 			}
 		case o.flag != "":
 			if !v.proofs[k[1]].Blocked {
@@ -710,7 +864,7 @@ func (e *Engine) TryResume(ctx context.Context, c connector.Connector) (*GateRep
 		return rep, nil
 	}
 	if rep.WriteState, err = e.Anchor.EnableWrites(ctx, ws.Generation, reasonResumeGatePassed, v.head); err != nil {
-		return rep, fmt.Errorf("recovery anchor: %w", err)
+		return rep, dependency("recovery anchor", err)
 	}
 	e.anchorGen.Store(rep.WriteState.Generation)
 	rep.Resumed = true
@@ -754,3 +908,55 @@ func (e *Engine) bucketProblems(ctx context.Context) ([]string, error) {
 	}
 	return out, classify(rows.Err())
 }
+
+// problemText is the operator-facing text of a reconciliation problem: the
+// fault's own message when there is one (R1-OBS-01), never a bare
+// INTERNAL_ERROR for a cause the engine knows.
+func problemText(err error) string {
+	if f, ok := AsFault(err); ok {
+		return f.Message
+	}
+	if d, ok := AsDependency(err); ok {
+		return d.What + " unavailable: " + d.Err.Error()
+	}
+	return err.Error()
+}
+
+// recoveryLockKey serialises reconciliation and the resume gate across
+// every engine process sharing the engine database (R1-P4-DEF-01).
+const recoveryLockKey int64 = 0x5354_4d52_3152_4543 // "STMR1REC"
+
+// recoveryLock takes the engine-wide recovery lock, waiting for a
+// concurrent reconciliation or resume to finish; the second caller then
+// sees the first one's results and reports only its own work.
+func (e *Engine) recoveryLock(ctx context.Context) (func(), error) {
+	conn, err := e.Pool.Acquire(ctx)
+	if err != nil {
+		return nil, unavailable(err)
+	}
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, recoveryLockKey); err != nil {
+		conn.Release()
+		return nil, unavailable(err)
+	}
+	return func() {
+		_, _ = conn.Exec(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock($1)`, recoveryLockKey)
+		conn.Release()
+	}, nil
+}
+
+// reconcileReserve is the time a reconciliation keeps back before its
+// request deadline, so it stops between operations with every completed step
+// recorded instead of being cut off inside one (R1-DEF-30).
+const reconcileReserve = 10 * time.Second
+
+type budget struct {
+	deadline time.Time
+	has      bool
+}
+
+func newBudget(ctx context.Context) budget {
+	d, ok := ctx.Deadline()
+	return budget{deadline: d.Add(-reconcileReserve), has: ok}
+}
+
+func (b budget) spent() bool { return b.has && time.Now().After(b.deadline) }

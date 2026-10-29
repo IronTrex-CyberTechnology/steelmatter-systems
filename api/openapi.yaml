@@ -349,9 +349,11 @@ paths:
         records the operation (op_ref = the permit's operation ID) and moves
         the amount reserved -> unresolved. The order is created by the settle
         worker; poll getDispatch or getOperation for the outcome. Refused with
-        403 while writes are off after a restore signal, and with 503 when no
-        destination company or connector is configured. 200 returns the
-        stored state for an identical repeat.
+        503 SERVICE_UNAVAILABLE (retryable, nothing consumed or moved) while
+        writes are off after a restore signal, when the recovery anchor or the
+        destination is unreachable, and when no destination company or
+        connector is configured. 200 returns the stored state for an
+        identical repeat.
       x-steelmatter-principals: [actor]
       requestBody:
         required: true
@@ -596,7 +598,13 @@ paths:
       tags: [recovery]
       operationId: checkRestore
       summary: R1. Operator runs the restore check now; any signal turns writes off (instance-wide).
-      description: The worker runs the same check on a schedule. Body empty or {}.
+      description: |
+        The worker runs the same check on a schedule. Body empty or {}. An
+        order deleted at the destination (its journal records the deletion)
+        is not a restore: its operation is flagged ORDER_DELETED_AT_DESTINATION,
+        stays committed, and writes stay on. A dispatch intent whose engine
+        commit never happened is listed as unconfirmed, not as a restore.
+        503 when the anchor or the destination is unreachable.
       x-steelmatter-principals: [operator]
       requestBody:
         required: false
@@ -625,6 +633,9 @@ paths:
         engine's own permit), writes BLOCK for committed operations whose
         order is gone, re-fences fenced ones and settles the rest by lookup
         and fence. Never creates an order and never releases without proof.
+        Concurrent calls run one at a time; each reports only its own work.
+        complete is false when the pass stopped at its time budget (10
+        seconds before the request deadline); run it again to continue.
         Body empty or {}.
       x-steelmatter-principals: [operator]
       requestBody:
@@ -641,7 +652,6 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
-        '409': { $ref: '#/components/responses/Conflict' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/Internal' }
         '503': { $ref: '#/components/responses/Unavailable' }
@@ -666,7 +676,6 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
-        '409': { $ref: '#/components/responses/Conflict' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/Internal' }
         '503': { $ref: '#/components/responses/Unavailable' }
@@ -1260,27 +1269,43 @@ components:
     RestoreReport:
       type: object
       additionalProperties: false
-      required: [signals, writes_disabled, write_state]
+      required: [signals, writes_disabled, write_state, flagged, unconfirmed]
       properties:
         signals:
           type: array
           items: { $ref: '#/components/schemas/RestoreSignal' }
         writes_disabled: { type: boolean, description: true when this check turned writes off. }
         write_state: { $ref: '#/components/schemas/WriteState' }
+        flagged:
+          description: Committed operations this check flagged because their order was deleted at the destination.
+          type: array
+          items: { $ref: '#/components/schemas/Identifier' }
+        unconfirmed:
+          description: Dispatch intents whose engine commit never happened; not a restore; the client may retry.
+          type: array
+          items: { $ref: '#/components/schemas/Identifier' }
     OpRefList:
       type: array
-      items: { type: string, maxLength: 1024 }
+      items: { $ref: '#/components/schemas/Identifier' }
     ReconcileReport:
       type: object
       additionalProperties: false
-      required: [recreated, from_odoo, flagged, refenced, settled, problems]
+      required: [recreated, from_odoo, flagged, refenced, settled, problems, unconfirmed, complete]
       properties:
         recreated: { $ref: '#/components/schemas/OpRefList' }
         from_odoo: { $ref: '#/components/schemas/OpRefList' }
         flagged: { $ref: '#/components/schemas/OpRefList' }
         refenced: { $ref: '#/components/schemas/OpRefList' }
-        settled: { $ref: '#/components/schemas/OpRefList' }
-        problems: { $ref: '#/components/schemas/OpRefList' }
+        settled:
+          description: One "op_ref=STATUS" entry for each operation this pass brought to a final state.
+          type: array
+          items: { type: string, maxLength: 160, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]*=(COMMITTED|FENCED|MISMATCH|HELD)$' }
+        problems:
+          description: Operator-facing text, one entry per problem; the gate does not pass while any remain.
+          type: array
+          items: { type: string, maxLength: 1024 }
+        unconfirmed: { $ref: '#/components/schemas/OpRefList' }
+        complete: { type: boolean, description: false when the pass stopped at its time budget; run reconciliation again. }
     GateCheck:
       type: object
       additionalProperties: false

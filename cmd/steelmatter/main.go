@@ -11,6 +11,7 @@
 //	steelmatter db-drop -name NAME   drop a db-init database and its roles (STEELMATTER_ADMIN_URL)
 //	steelmatter anchor-init          create a local recovery anchor database and its three roles (STEELMATTER_ADMIN_URL)
 //	steelmatter anchor-drop -name NAME   drop a local anchor-init database and its roles (STEELMATTER_ADMIN_URL)
+//	steelmatter anchor-upgrade       update an existing anchor's functions in place (STEELMATTER_ANCHOR_ADMIN_URL)
 //
 // serve also reads STEELMATTER_CONNECTOR (none or odoo, with the
 // STEELMATTER_ODOO_* settings in connector.go), STEELMATTER_ANCHOR_URL (the
@@ -88,6 +89,11 @@ func main() {
 		err = anchorInit(ctx, os.Args[2:])
 	case "anchor-drop":
 		err = anchorDrop(ctx, os.Args[2:])
+	case "anchor-upgrade":
+		var u string
+		if u, err = requireEnv("STEELMATTER_ANCHOR_ADMIN_URL"); err == nil {
+			err = anchor.Upgrade(ctx, u)
+		}
 	case "version":
 		fmt.Println(version)
 	default:
@@ -101,7 +107,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: steelmatter serve | migrate | db-init [-name NAME] [-env-out PATH] | anchor-init [-name NAME] [-env-out PATH] | principal-add -tenant T -id ID -kind KIND | version")
+	fmt.Fprintln(os.Stderr, "usage: steelmatter serve | migrate | db-init [-name NAME] [-env-out PATH] | anchor-init [-name NAME] [-env-out PATH] | anchor-upgrade | principal-add -tenant T -id ID -kind KIND | version")
 }
 
 func requireEnv(name string) (string, error) {

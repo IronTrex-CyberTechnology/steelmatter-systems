@@ -4853,7 +4853,7 @@
       ]
     },
     "r1-engine": {
-      "description": "Active R1 engine gate: all full-R0 requirements plus dispatch, recovery-anchor admission fencing, crash-safe repair, signed R1 evidence and independent readback. Integration uses real PostgreSQL with the stub destination. The required GitHub job also runs TestR1OdooEndToEnd against real Odoo and checks the exact public-source export. Passing this stage does not certify the outstanding full-R1 human-approval scope.",
+      "description": "Active R1 engine gate: all full-R0 requirements plus dispatch, recovery-anchor admission fencing, crash-safe repair, signed R1 evidence and independent readback. Integration uses real PostgreSQL with the stub destination. The required GitHub job also runs TestR1OdooEndToEnd against real Odoo and checks the exact public-source export. Passing this stage does not certify the outstanding full-R1 human-approval scope. T33–T35 are mapped to the engine tests against the stub and real PostgreSQL; the real-Odoo T33–T35 suite runs as a separate required CI step. A PASS here is developer evidence; SDET acceptance is recorded separately.",
       "phases": [
         "unit",
         "integration",
@@ -6612,7 +6612,7 @@
         {
           "phase": "integration",
           "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
-          "test": "TestR1RevokeAfterDispatchKeepsHoldUntilSettled"
+          "test": "TestR1RevokeAfterDispatchFencesUnsentOperation"
         },
         {
           "phase": "integration",
@@ -7158,6 +7158,91 @@
           "phase": "unit",
           "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tools/ciagg",
           "test": "TestGateFailsWhenARequiredTestPassesTwice"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1DEF09ForgedFenceOverExistingOrderIsHeld"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1DEF09ClaimedFenceWithoutAnchorBlockKeepsHold"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1DEF14NoCreateAfterWritesOff"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1DEF12DispatchWithoutConnectorChangesNothing"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1DEF15DependencyOutagesAre503"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1API06RoleIsCheckedBeforeConfiguration"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1DEF06FailedDispatchCommitIsNotARestore"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1DEF06ReconcileLeavesUnconfirmedDispatchAlone"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1DEF20DeletedOrderIsFlaggedWithoutOutage"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1DEF30ReconcileStopsAtItsBudgetAndResumes"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1OBS01MissingPermitIsNamed"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1P4DEF01ConcurrentRecoveryReportsOwnWork"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1DEF03SupplierRevisionComesFromTheDestination"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1RevokeAfterOrderReachedDestinationCommits"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1WorkerNeverSendsAfterRevoke"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
+          "test": "TestR1ResponseSchemasMatchEngineTypes"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/api",
+          "test": "TestR1RecoveryOperationsDocumentOnlyProducedErrors"
         }
       ],
       "required_cases": [
@@ -7195,7 +7280,10 @@
         "T41",
         "T42",
         "T43",
-        "T44"
+        "T44",
+        "T33",
+        "T34",
+        "T35"
       ]
     }
   },
@@ -8878,6 +8966,106 @@
           "phase": "demo",
           "package": "demo",
           "test": "render.test.ts/T43: every recorded step has a note, every note a recorded step"
+        }
+      ]
+    },
+    "T33": {
+      "complete": true,
+      "tests": [
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1LostReplyHeldThenFound"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1DelayedCreateDuringLookupCommits"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1UnavailableKeepsHold"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1NeverReachedIsFencedThenLateCreateRefused"
+        }
+      ]
+    },
+    "T34": {
+      "complete": true,
+      "tests": [
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1ErasedEarlierCreateStaysHeld"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1IntentWrittenCommitFailedIsHeld"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1RefusalAfterEarlierCreateIsHeld"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5OdooRestoredCommittedOrderMissing"
+        }
+      ]
+    },
+    "T35": {
+      "complete": true,
+      "tests": [
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5EngineRestoredBeforeConfirmedPurchase"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5EngineRestoredBeforeUnsentDispatch"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5OdooRestoredAfterFenceDelayedRequestRefused"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5StaleGenerationIsRefused"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestD5BothRestoredHeldRuleAndRepair"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1RestoredBudgetRefusedBeforeWorkerRuns"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1StartupRefusesRestoredHistory"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1DEF14NoCreateAfterWritesOff"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1DEF06FailedDispatchCommitIsNotARestore"
         }
       ]
     }

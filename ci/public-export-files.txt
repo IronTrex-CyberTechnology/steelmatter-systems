@@ -29,6 +29,7 @@ adapters/mcp/tsconfig.build.json
 adapters/mcp/tsconfig.json
 api/openapi.yaml
 api/openapi_test.go
+api/r1_contract_test.go
 api/r1_status_test.go
 ci/acceptance-cases.json
 ci/public-export-files.txt
@@ -46,6 +47,7 @@ cmd/steelmatter/connector_test.go
 cmd/steelmatter/main.go
 core/anchor/anchor.go
 core/anchor/anchor_integration_test.go
+core/anchor/append_destination.sql
 core/anchor/provision.go
 core/anchor/schema.sql
 core/api/api.go
@@ -89,6 +91,8 @@ core/db/migrations/0011_r1_workers_outbox.sql
 core/db/migrations/0012_r1_recovery.sql
 core/db/migrations/0013_repair_replay.sql
 core/db/migrations/0014_r1_evidence.sql
+core/db/migrations/0015_r1_deleted_order_flag.sql
+core/db/migrations/0016_r1_supplier_sync.sql
 core/db/provision.go
 core/db/roles.go
 core/dbtest/anchor.go
@@ -182,6 +186,7 @@ docs/engine.md
 docs/evidence.md
 docs/quickstart.md
 docs/r1-release-hardening.md
+docs/r1-sdet-defect-fixes.md
 examples/procurement/accounting.go
 examples/procurement/client.go
 examples/procurement/reference.go
@@ -291,6 +296,7 @@ tests/integration/flow_test.go
 tests/integration/mcp_test.go
 tests/integration/quota_test.go
 tests/integration/r1_anchor_test.go
+tests/integration/r1_defect_fixes_test.go
 tests/integration/r1_dispatch_test.go
 tests/integration/r1_evidence_test.go
 tests/integration/r1_hardening_test.go

@@ -293,6 +293,33 @@ func destRecords(ctx context.Context, p *pgxpool.Pool, destination string) ([]De
 	return out, classify(rows.Err())
 }
 
+// ProofFor folds the destination records of one op_ref, read with the
+// engine's own anchor identity (not through the destination connector).
+func (c *Client) ProofFor(ctx context.Context, destination, opRef string) (connector.Proof, error) {
+	rows, err := c.Pool.Query(ctx, `SELECT seq, record_type, destination, op_ref, payload FROM anchor.destination_records
+		WHERE destination = $1 AND op_ref = $2 ORDER BY seq`, destination, opRef)
+	if err != nil {
+		return connector.Proof{}, classify(err)
+	}
+	defer rows.Close()
+	var recs []DestRecord
+	for rows.Next() {
+		var r DestRecord
+		if err := rows.Scan(&r.Seq, &r.Type, &r.Destination, &r.OpRef, &r.Payload); err != nil {
+			return connector.Proof{}, err
+		}
+		recs = append(recs, r)
+	}
+	if err := rows.Err(); err != nil {
+		return connector.Proof{}, classify(err)
+	}
+	m, err := foldProofs(recs)
+	if err != nil {
+		return connector.Proof{}, err
+	}
+	return m[opRef], nil
+}
+
 // Proofs folds the destination records into one Proof per op_ref.
 func (c *Client) Proofs(ctx context.Context, destination string) (map[string]connector.Proof, error) {
 	recs, err := c.DestinationRecords(ctx, destination)

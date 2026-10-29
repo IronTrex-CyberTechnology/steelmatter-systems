@@ -38,18 +38,28 @@ import (
 // (D5 rule 7). Settle is safe to call concurrently; the first transaction to
 // record a transition wins and the others return the stored state.
 func (e *Engine) Settle(ctx context.Context, tenant, opRef string, c connector.Connector) (*DispatchResult, error) {
+	r, _, err := e.settle(ctx, tenant, opRef, c)
+	return r, err
+}
+
+// settle is Settle that also reports whether this call recorded the
+// transition (false when the operation was already final or another settler
+// recorded it first), so concurrent reconciliations report only their own
+// work (R1-P4-DEF-01).
+func (e *Engine) settle(ctx context.Context, tenant, opRef string, c connector.Connector) (*DispatchResult, bool, error) {
 	if e.Cfg.RequireRecoveryAnchor && e.Anchor == nil {
-		return nil, fault("SERVICE_UNAVAILABLE", "recovery anchor is required")
+		return nil, false, fault("SERVICE_UNAVAILABLE", "recovery anchor is required")
 	}
 	d, err := e.loadDispatchForSettle(ctx, tenant, opRef)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if d == nil {
-		return nil, fault("NOT_FOUND", "operation not found")
+		return nil, false, fault("NOT_FOUND", "operation not found")
 	}
 	if d.status != DispatchPending && d.status != DispatchUnresolved { // COMMITTED, FENCED, MISMATCH, HELD
-		return e.GetDispatch(ctx, tenant, opRef)
+		r, err := e.GetDispatch(ctx, tenant, opRef)
+		return r, false, err
 	}
 	// With the anchor: while writes are off (restore detected, or this
 	// engine's generation is old, or the anchor cannot be read) nothing new
@@ -62,12 +72,15 @@ func (e *Engine) Settle(ctx context.Context, tenant, opRef string, c connector.C
 		writes = werr == nil && on
 		if writes {
 			if d.minSeq, err = e.Anchor.ExpectedMinSeq(ctx, d.companyRef); err != nil {
-				return nil, fmt.Errorf("recovery anchor: %w", err)
+				return nil, false, dependency("recovery anchor", err)
 			}
 		}
 	}
+	// D4 (R1-DEF-01): once the mandate is revoked, or its control epoch has
+	// moved since dispatch, a PENDING operation is treated as sent: lookup
+	// and fence only. Nothing new is ever created after a revoke.
 	var res connector.Result
-	if d.status == DispatchPending && writes {
+	if d.status == DispatchPending && writes && d.mandateLive {
 		res, err = c.Execute(ctx, d.connectorAction())
 	} else {
 		res, err = c.Lookup(ctx, opRef)
@@ -76,32 +89,74 @@ func (e *Engine) Settle(ctx context.Context, tenant, opRef string, c connector.C
 		}
 	}
 	if err != nil {
-		return nil, fmt.Errorf("connector %s: %w", opRef, err)
+		return nil, false, dependency("destination", err)
 	}
 	if res.OpRef != "" && res.OpRef != opRef {
-		return nil, fmt.Errorf("connector answered for %s, asked for %s", res.OpRef, opRef)
+		return nil, false, fmt.Errorf("connector answered for %s, asked for %s", res.OpRef, opRef)
 	}
 	if err := failpoint.Inject(ctx, failpoint.SettleBeforeRecord); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	if err := e.recordOutcome(ctx, d, res); err != nil {
-		return nil, err
+	if res, err = e.checkProofOfNoOrder(ctx, d, res); err != nil {
+		return nil, false, err
 	}
-	return e.GetDispatch(ctx, tenant, opRef)
+	changed, err := e.recordOutcome(ctx, d, res)
+	if err != nil {
+		return nil, false, err
+	}
+	r, err := e.GetDispatch(ctx, tenant, opRef)
+	return r, changed, err
 }
 
 type dispatchRow struct {
 	tenant, opRef, mandateID, companyRef, permitDigest, status string
 	amount, destSeq, minSeq                                    int64
 	action                                                     contract.Action
+	mandateLive                                                bool // mandate ACTIVE at the dispatch's control epoch
+}
+
+// checkProofOfNoOrder (R1-DEF-09): the destination's reply alone never
+// releases money. When a reply claims FENCED or a refusal with the block
+// committed and no earlier create, the engine reads the anchor's destination
+// stream itself (written by the module's own identity, outside the
+// connector's reply path) before releasing:
+//
+//   - a CREATE_INTENT or CREATE_DONE for this op_ref means a create was
+//     attempted: the operation is HELD, never released;
+//   - no BLOCK record means the claimed block is not proven: the operation
+//     stays UNRESOLVED and the fence is retried;
+//   - an unreadable anchor is not proof either: UNRESOLVED.
+//
+// Without an anchor (R0-style deployments and stub tests) the reply flags
+// are used as before; R1 with a real connector always has an anchor.
+func (e *Engine) checkProofOfNoOrder(ctx context.Context, d *dispatchRow, r connector.Result) (connector.Result, error) {
+	if e.Anchor == nil || !r.ProvesNoOrder() {
+		return r, nil
+	}
+	p, err := e.Anchor.ProofFor(ctx, d.companyRef, d.opRef)
+	switch {
+	case err != nil:
+		r.BlockCommitted = nil
+		r.Reason = "anchor proof unreadable: " + err.Error()
+	case p.CreateIntent || p.CreateDone != nil:
+		yes := true
+		r.PriorCreate = &yes
+		r.Reason = "anchor records a create attempt; the reply claimed none"
+	case !p.Blocked:
+		r.BlockCommitted = nil
+		r.Reason = "anchor has no BLOCK record for the claimed fence"
+	}
+	return r, nil
 }
 
 func (e *Engine) loadDispatchForSettle(ctx context.Context, tenant, opRef string) (*dispatchRow, error) {
 	d := dispatchRow{tenant: tenant, opRef: opRef}
 	var canonical []byte
-	err := e.Pool.QueryRow(ctx, `SELECT mandate_id, company_ref, permit_digest, status, amount_minor, COALESCE(destination_seq, 0), action_canonical
-		FROM steelmatter.dispatches WHERE tenant_id = $1 AND op_ref = $2`, tenant, opRef).
-		Scan(&d.mandateID, &d.companyRef, &d.permitDigest, &d.status, &d.amount, &d.destSeq, &canonical)
+	err := e.Pool.QueryRow(ctx, `SELECT d.mandate_id, d.company_ref, d.permit_digest, d.status, d.amount_minor, COALESCE(d.destination_seq, 0), d.action_canonical,
+		m.status = 'ACTIVE' AND m.control_epoch = d.control_epoch
+		FROM steelmatter.dispatches d JOIN steelmatter.mandates m ON m.tenant_id = d.tenant_id AND m.mandate_id = d.mandate_id
+		WHERE d.tenant_id = $1 AND d.op_ref = $2`, tenant, opRef).
+		Scan(&d.mandateID, &d.companyRef, &d.permitDigest, &d.status, &d.amount, &d.destSeq, &canonical, &d.mandateLive)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -180,14 +235,16 @@ func (d *dispatchRow) next(r connector.Result) (status, event string) {
 	}
 }
 
-func (e *Engine) recordOutcome(ctx context.Context, d *dispatchRow, r connector.Result) error {
+func (e *Engine) recordOutcome(ctx context.Context, d *dispatchRow, r connector.Result) (bool, error) {
 	status, event := d.next(r)
 	eventID := newID("evt")
 	order := ""
 	if r.Destination != nil {
 		order = r.Destination.ID
 	}
-	return e.inTx(ctx, d.opRef, func(tx pgx.Tx) error {
+	changed := false
+	err := e.inTx(ctx, d.opRef, func(tx pgx.Tx) error {
+		changed = false
 		// Lock order: mandate, then the dispatch row.
 		if _, err := lockMandate(ctx, tx, d.tenant, d.mandateID, "FOR UPDATE"); err != nil {
 			return err
@@ -233,7 +290,9 @@ func (e *Engine) recordOutcome(ctx context.Context, d *dispatchRow, r connector.
 				VALUES ($1, $2, $3, $4, $5, clock_timestamp())`, eventID, d.tenant, event, d.opRef, payload); err != nil {
 				return err
 			}
+			changed = true
 		}
 		return nil
 	})
+	return changed && err == nil, err
 }

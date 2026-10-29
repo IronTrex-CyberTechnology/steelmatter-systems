@@ -42,6 +42,11 @@ func requireBuckets(t *testing.T, what string, got, want buckets) {
 
 func (e *env) dispatch(who string, p permitted) (*engine.DispatchResult, error) {
 	e.t.Helper()
+	// Dispatch refuses without a configured connector (R1-DEF-12). Tests that
+	// settle through their own stub get a ready stand-in here.
+	if e.eng.Connector == nil {
+		e.eng.Connector = stub.New()
+	}
 	action, err := json.Marshal(p.action)
 	if err != nil {
 		e.t.Fatal(err)
@@ -233,17 +238,76 @@ func TestR1RevokeBeforeDispatchStopsIt(t *testing.T) {
 	}
 }
 
-// D4: once dispatch intent commits, revocation cannot release the amount; the
-// operation still settles through the destination.
-func TestR1RevokeAfterDispatchKeepsHoldUntilSettled(t *testing.T) {
+// D4 (R1-DEF-01): once dispatch intent commits, revocation cannot release the
+// amount on its own, and nothing new is ever sent: a PENDING operation is
+// treated as sent and settled by lookup and fence only. Unsent, it is fenced
+// and released; a late create is refused by the block.
+func TestR1RevokeAfterDispatchFencesUnsentOperation(t *testing.T) {
 	e := newEnv(t)
+	s := stub.New()
+	e.eng.Connector = s
 	p := e.permitted()
 	mustDispatch(t, e, p)
 	st, body := e.call("POST", "/v1/mandates/"+p.mandate+"/revoke", "owner-a", nil)
 	requireStatus(t, "revoke", st, body, 200, "")
-	requireBuckets(t, "after revoke", e.buckets(p.mandate), r1Unresolved)
-	requireExecution(t, "settle", e.settle(p.operation, stub.New()), engine.DispatchCommitted)
+	if inflight, _ := body["in_flight"].([]any); len(inflight) != 1 || inflight[0] != p.operation {
+		t.Fatalf("in_flight %v", body["in_flight"])
+	}
+	if s.Creates() != 0 {
+		t.Fatalf("revocation sent a create (%d orders)", s.Creates())
+	}
+	requireExecution(t, "after revoke", e.settle(p.operation, s), engine.DispatchFenced)
+	requireBuckets(t, "released by the fence", e.buckets(p.mandate), r1Released)
+	if r := s.Deliver(stubActionFor(t, e, p)); r.Outcome != connector.RefusedFenced || s.Creates() != 0 {
+		t.Fatalf("late create after revoke: %s, %d orders", r.Outcome, s.Creates())
+	}
+}
+
+// D4: an order that already reached the destination before the revoke is
+// found by lookup and committed once; revocation never undoes it.
+func TestR1RevokeAfterOrderReachedDestinationCommits(t *testing.T) {
+	e := newEnv(t)
+	s := stub.New()
+	e.eng.Connector = s
+	p := e.permitted()
+	mustDispatch(t, e, p)
+	s.DropNextReplies(p.operation, 1) // the create applied, its reply lost
+	requireExecution(t, "lost reply", e.settle(p.operation, s), engine.DispatchUnresolved)
+	st, body := e.call("POST", "/v1/mandates/"+p.mandate+"/revoke", "owner-a", nil)
+	requireStatus(t, "revoke", st, body, 200, "")
+	requireExecution(t, "after revoke", e.settle(p.operation, s), engine.DispatchCommitted)
 	requireBuckets(t, "committed", e.buckets(p.mandate), r1Committed)
+	if s.Creates() != 1 {
+		t.Fatalf("orders %d", s.Creates())
+	}
+}
+
+// D4 (R1-DEF-01): the settle worker also never sends a PENDING operation of a
+// revoked mandate, even when the revoke itself could not reach the destination.
+func TestR1WorkerNeverSendsAfterRevoke(t *testing.T) {
+	e := newEnv(t)
+	s := stub.New()
+	e.eng.Connector = s
+	p := e.permitted()
+	mustDispatch(t, e, p)
+	e.eng.Connector = nil // the revoke's own settle step cannot run; the worker picks the operation up later
+	st, body := e.call("POST", "/v1/mandates/"+p.mandate+"/revoke", "owner-a", nil)
+	requireStatus(t, "revoke", st, body, 200, "")
+	if st := e.dispatchStatus(p.operation); st != engine.DispatchPending {
+		t.Fatalf("status before the worker: %s", st)
+	}
+	e.eng.Connector = s
+	e.retryNow()
+	if _, err := e.eng.SettleDue(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if s.Creates() != 0 {
+		t.Fatalf("worker sent a create after revoke (%d orders)", s.Creates())
+	}
+	if st := e.dispatchStatus(p.operation); st != engine.DispatchFenced {
+		t.Fatalf("status %s", st)
+	}
+	requireBuckets(t, "released by the fence", e.buckets(p.mandate), r1Released)
 }
 
 // stubActionFor rebuilds the connector action the engine sends, from the

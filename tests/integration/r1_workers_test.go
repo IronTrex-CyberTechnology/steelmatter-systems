@@ -52,6 +52,7 @@ func TestR1SettleWorkerSettlesAndBacksOff(t *testing.T) {
 	mustDispatch(t, e, a)
 	mustDispatch(t, e, b)
 	s := stub.New()
+	e.eng.Connector = nil
 	runWorker(t, "no connector", e.eng.SettleDue, 0, true)
 	e.eng.Connector = s
 	s.FailNextCalls(b.operation, 2) // execute, then lookup, never reach the destination

@@ -33,10 +33,11 @@ const (
 )
 
 type record struct {
-	state  State
-	digest string
-	order  *connector.Order
-	seq    int64
+	state   State
+	digest  string
+	order   *connector.Order
+	seq     int64
+	deleted bool // the order was deleted at the destination (po_deleted)
 }
 
 // memProof is the default in-memory restore-proof record. It survives
@@ -200,6 +201,19 @@ func (s *Stub) FailNextCalls(opRef string, n int) {
 	s.unreachable[opRef] = n
 	s.mu.Unlock()
 }
+
+// SupplierRevision implements connector.SupplierSource: the revision set
+// with SetSupplierRevision, or MAPPING_MISSING.
+func (s *Stub) SupplierRevision(_ context.Context, supplierRef string) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if rev, ok := s.supplierRev[supplierRef]; ok {
+		return rev, nil
+	}
+	return 0, fmt.Errorf("stub: supplier %q: %s", supplierRef, connector.ReasonMappingMissing)
+}
+
+var _ connector.SupplierSource = (*Stub)(nil)
 
 // SetSupplierRevision sets the destination's protected supplier revision.
 func (s *Stub) SetSupplierRevision(supplierRef string, rev int64) {
@@ -411,6 +425,10 @@ func (s *Stub) Lookup(ctx context.Context, opRef string) (connector.Result, erro
 	switch {
 	case rec.state == Fenced || rec.state == Refused:
 		return s.result(ctx, opRef, "lookup", connector.Fenced), nil
+	case rec.deleted:
+		r := s.result(ctx, opRef, "lookup", connector.Mismatch)
+		r.Reason = "ORDER_DELETED"
+		return r, nil
 	case rec.order.State != connector.StateConfirmed:
 		return s.result(ctx, opRef, "lookup", connector.Mismatch), nil
 	default:
@@ -459,13 +477,32 @@ func (s *Stub) Fence(ctx context.Context, opRef string, expectedMinSeq int64) (c
 		s.ops[opRef] = &record{state: Fenced, seq: s.seq}
 		return s.result(ctx, opRef, "fence", connector.Fenced), nil
 	case rec.state == Created:
-		return s.result(ctx, opRef, "fence", connector.Exists), nil
+		r := s.result(ctx, opRef, "fence", connector.Exists)
+		if rec.deleted {
+			r.Reason = "ORDER_DELETED"
+		}
+		return r, nil
 	default:
 		if err := s.proof.RecordBlock(ctx, opRef, "fenced"); err != nil {
 			return unavailable(opRef, "fence", "ANCHOR_UNAVAILABLE", s.seq), nil
 		}
 		return s.result(ctx, opRef, "fence", connector.Fenced), nil
 	}
+}
+
+// DeleteOrder deletes the order created for opRef at the destination, as an
+// Odoo administrator can: the operation row stays (so the op_ref can never
+// be created again) and the journal records po_deleted.
+func (s *Stub) DeleteOrder(opRef string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec := s.ops[opRef]
+	if rec == nil || rec.state != Created || rec.order == nil {
+		return false
+	}
+	s.seq++
+	rec.order, rec.deleted, rec.seq = nil, true, s.seq
+	return true
 }
 
 // SetOutOfScope makes the module refuse opRef as out of its configured scope
@@ -555,6 +592,9 @@ func (s *Stub) List(_ context.Context, checkpointSeq int64, limit int) (connecto
 			continue
 		}
 		row := connector.ListRow{Seq: rec.seq, OpRef: op, State: string(rec.state), PermitDigest: rec.digest, Tombstoned: rec.state == Fenced || rec.state == Refused}
+		if rec.deleted {
+			row.Event = "po_deleted"
+		}
 		if rec.order != nil {
 			row.OrderID, row.AmountMinor, row.Currency = rec.order.ID, rec.order.AmountMinor, rec.order.Currency
 		}

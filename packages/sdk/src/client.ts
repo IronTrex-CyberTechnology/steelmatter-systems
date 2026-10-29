@@ -93,7 +93,7 @@ const E_WRITE_409_422 = [400, 401, 403, 404, 409, 422, 429, 500, 503] as const; 
 const E_READ = [401, 403, 404, 429, 500, 503] as const; // getOperation, getEvidence, getAdapterAssurance, getDispatch
 const E_READ_STATE = [401, 403, 429, 500, 503] as const; // getWriteState
 const E_RECOVERY_CHECK = [400, 401, 403, 429, 500, 503] as const; // checkRestore
-const E_RECOVERY = [400, 401, 403, 409, 429, 500, 503] as const; // reconcileRestore, resumeWrites
+const E_RECOVERY = [400, 401, 403, 429, 500, 503] as const; // reconcileRestore, resumeWrites
 
 const DEFAULT_RETRY: RetryOptions = { maxAttempts: 3, baseDelayMs: 100, maxDelayMs: 2000, maxRetryAfterMs: 30_000 };
 const DEFAULT_TIMEOUT_MS = 65_000;

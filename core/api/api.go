@@ -96,6 +96,11 @@ func (h *handlers) wrap(fn handlerFunc) http.HandlerFunc {
 				writeFault(w, r, f)
 				return
 			}
+			if d, ok := engine.AsDependency(err); ok {
+				slog.Warn("dependency unavailable", "path", r.URL.Path, "request_id", httpapi.RequestID(r.Context()), "what", d.What, "err", d.Err)
+				writeFault(w, r, &engine.Fault{Code: "SERVICE_UNAVAILABLE", Message: d.What + " is unavailable; retry later"})
+				return
+			}
 			slog.Error("internal error", "path", r.URL.Path, "request_id", httpapi.RequestID(r.Context()), "err", err)
 			writeFault(w, r, &engine.Fault{Code: "INTERNAL_ERROR", Message: "unexpected internal error"})
 			return

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -62,6 +61,14 @@ func (e *Engine) Dispatch(ctx context.Context, p auth.Principal, actionJSON []by
 		return nil, err
 	}
 	permit, action := a.permit, a.action
+	// R1-DEF-12: a dispatch that no connector can ever settle would strand
+	// the amount as unresolved. Refuse before anything is consumed or moved.
+	if e.Connector == nil {
+		if d, gerr := e.GetDispatch(ctx, p.Tenant, permit.OperationID); gerr == nil && d != nil && d.ActionDigest == a.actionDigest {
+			return d, nil
+		}
+		return nil, fault("SERVICE_UNAVAILABLE", "no destination connector is configured; nothing was dispatched")
+	}
 	if err := e.requireWrites(ctx); err != nil {
 		if d, gerr := e.GetDispatch(ctx, p.Tenant, permit.OperationID); gerr == nil && d != nil && d.ActionDigest == a.actionDigest {
 			return d, nil // an identical repeat of a recorded dispatch still returns its state
@@ -111,6 +118,23 @@ func (e *Engine) Dispatch(ctx context.Context, p auth.Principal, actionJSON []by
 		if err := tx.QueryRow(ctx, `SELECT date_trunc('second', clock_timestamp())`).Scan(&now); err != nil {
 			return err
 		}
+		// R1-DEF-06: a retry after a dispatch whose engine commit failed
+		// finds that attempt's intent in the anchor. It is the same
+		// authorised request, so the same intent (and admission time) is
+		// reused and the append is an idempotent repeat.
+		admitted := now
+		if e.Anchor != nil {
+			prior, err := e.priorIntent(ctx, p.Tenant, permit.OperationID)
+			if err != nil {
+				return anchorFault(err)
+			}
+			if prior != nil && prior.AdmittedAt != "" && prior.PermitDigest == a.verified.Digest && prior.ActionDigest == a.actionDigest &&
+				prior.AmountMinor == is.Amount {
+				if t, err := time.Parse(time.RFC3339, prior.AdmittedAt); err == nil {
+					admitted = t
+				}
+			}
+		}
 		payload, _ := json.Marshal(map[string]any{
 			"op_ref": permit.OperationID, "instruction_id": action.InstructionID, "action_digest": a.actionDigest, "amount_minor": is.Amount,
 		})
@@ -120,9 +144,9 @@ func (e *Engine) Dispatch(ctx context.Context, p auth.Principal, actionJSON []by
 		}{
 			{`INSERT INTO steelmatter.dispatches (tenant_id, op_ref, instruction_id, action_revision, mandate_id, company_ref, permit_id, control_epoch,
 			  action_canonical, action_digest, permit_digest, amount_minor, status, created_at, updated_at, admitted_at)
-			  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'PENDING', $13, $13, $13)`,
+			  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'PENDING', $13, $13, $14)`,
 				[]any{p.Tenant, permit.OperationID, action.InstructionID, action.ActionRevision, permit.MandateID, e.Cfg.CompanyRef, permit.PermitID,
-					permit.ControlEpoch, a.canonical, a.actionDigest, a.verified.Digest, is.Amount, now}},
+					permit.ControlEpoch, a.canonical, a.actionDigest, a.verified.Digest, is.Amount, now, admitted}},
 			// Freeze the revision: no amendment once the order may exist.
 			{`UPDATE steelmatter.action_revisions SET status = 'COMMITTED' WHERE tenant_id = $1 AND instruction_id = $2 AND action_revision = $3`,
 				[]any{p.Tenant, action.InstructionID, action.ActionRevision}},
@@ -139,7 +163,7 @@ func (e *Engine) Dispatch(ctx context.Context, p auth.Principal, actionJSON []by
 		// (D5 mechanism step 1). No anchor record, no dispatch; and none can be
 		// appended once writes are off or this engine's generation is old.
 		if e.Anchor != nil {
-			ir := anchor.IntentRecord{AdmittedAt: ts(now), Tenant: p.Tenant, OpRef: permit.OperationID, InstructionID: action.InstructionID,
+			ir := anchor.IntentRecord{AdmittedAt: ts(admitted), Tenant: p.Tenant, OpRef: permit.OperationID, InstructionID: action.InstructionID,
 				ActionRevision: action.ActionRevision, MandateID: permit.MandateID, ControlEpoch: permit.ControlEpoch, CompanyRef: e.Cfg.CompanyRef,
 				PermitID: permit.PermitID, PermitJWS: permitJWS, PermitDigest: a.verified.Digest, ActionCanonical: string(a.canonical),
 				ActionDigest: a.actionDigest, AmountMinor: is.Amount, Currency: action.Currency, SupplierRef: action.SupplierID,
@@ -158,7 +182,28 @@ func (e *Engine) Dispatch(ctx context.Context, p auth.Principal, actionJSON []by
 	if err != nil {
 		return nil, err
 	}
+	if res != nil && res.Created {
+		e.markDispatched(ctx, p.Tenant, res.OpRef, e.Cfg.CompanyRef)
+	}
 	return res, nil
+}
+
+// priorIntent returns the anchor's DISPATCH_INTENT for (tenant, opRef), if any.
+func (e *Engine) priorIntent(ctx context.Context, tenant, opRef string) (*anchor.IntentRecord, error) {
+	recs, err := e.Anchor.RecordsFor(ctx, tenant, opRef)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range recs {
+		if r.Type == anchor.DispatchIntent {
+			var ir anchor.IntentRecord
+			if err := json.Unmarshal(r.Payload, &ir); err != nil {
+				return nil, err
+			}
+			return &ir, nil
+		}
+	}
+	return nil, nil
 }
 
 const dispatchCols = `op_ref, instruction_id, action_revision, action_digest, status, COALESCE(last_outcome, ''), COALESCE(destination_order, '')`
@@ -206,7 +251,7 @@ func (e *Engine) checkReadiness(ctx context.Context, p auth.Principal, a *admiss
 	}
 	r, err := e.Connector.Readiness(ctx, toConnectorAction(a.permit.OperationID, e.Cfg.CompanyRef, a.verified.Digest, a.action, 0))
 	if err != nil {
-		return fmt.Errorf("connector readiness: %w", err)
+		return dependency("destination", err)
 	}
 	switch {
 	case r.Outcome == connector.Ready:

@@ -328,3 +328,30 @@ func (e *Engine) signer(typ string) (contract.Signer, error) {
 	}
 	return s, nil
 }
+
+// DependencyError is a failure of an external dependency the engine relies
+// on (the recovery anchor or the destination), as opposed to a fault in the
+// engine itself. The API reports it as 503 SERVICE_UNAVAILABLE, retryable
+// (R1-DEF-15): the request changed nothing that a retry cannot repeat, and
+// held amounts stay held. A Fault already inside it wins.
+type DependencyError struct {
+	What string
+	Err  error
+}
+
+func (d *DependencyError) Error() string { return d.What + ": " + d.Err.Error() }
+func (d *DependencyError) Unwrap() error { return d.Err }
+
+func dependency(what string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return &DependencyError{What: what, Err: err}
+}
+
+// AsDependency returns the DependencyError in err, if any.
+func AsDependency(err error) (*DependencyError, bool) {
+	var d *DependencyError
+	ok := errors.As(err, &d)
+	return d, ok
+}

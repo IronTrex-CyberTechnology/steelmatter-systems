@@ -25,6 +25,9 @@ import (
 //go:embed schema.sql
 var schemaSQL string
 
+//go:embed append_destination.sql
+var appendDestinationSQL string
+
 // Group roles (NOLOGIN, cluster-wide). Login roles per anchor database
 // inherit from one of them.
 const (
@@ -111,7 +114,27 @@ func Provision(ctx context.Context, adminURL, name string) (*Database, error) {
 		cleanup()
 		return nil, fmt.Errorf("anchor schema: %w", err)
 	}
+	if _, err := target.Exec(ctx, appendDestinationSQL); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("anchor schema: %w", err)
+	}
 	return d, nil
+}
+
+// Upgrade brings an existing anchor's functions up to date without touching
+// any record: it replaces anchor.append_destination (R1-DEF-14: no new
+// CREATE_INTENT while engine writes are off). anchorAdminURL is a postgres://
+// URL for the anchor database's owner. Safe to run more than once.
+func Upgrade(ctx context.Context, anchorAdminURL string) error {
+	conn, err := pgx.Connect(ctx, anchorAdminURL)
+	if err != nil {
+		return fmt.Errorf("connect anchor database: %w", err)
+	}
+	defer conn.Close(ctx)
+	if _, err := conn.Exec(ctx, appendDestinationSQL); err != nil {
+		return fmt.Errorf("anchor upgrade: %w", err)
+	}
+	return nil
 }
 
 // Drop removes the anchor database and its login roles. Missing objects are

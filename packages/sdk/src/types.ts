@@ -427,15 +427,24 @@ export interface RestoreReport {
   /** True when this check turned writes off. */
   writes_disabled: boolean;
   write_state: WriteState;
+  /** Committed operations flagged because their order was deleted at the destination; they stay committed. */
+  flagged: Identifier[];
+  /** Dispatch intents whose engine commit never happened (not a restore); the client may retry. */
+  unconfirmed: Identifier[];
 }
 
 export interface ReconcileReport {
-  recreated: string[];
-  from_odoo: string[];
-  flagged: string[];
-  refenced: string[];
+  recreated: Identifier[];
+  from_odoo: Identifier[];
+  flagged: Identifier[];
+  refenced: Identifier[];
+  /** "op_ref=STATUS" for each operation this pass brought to a final state. */
   settled: string[];
   problems: string[];
+  /** Dispatch intents whose engine commit never happened; left for the client to retry. */
+  unconfirmed: Identifier[];
+  /** False when the pass stopped at its time budget; run reconciliation again. */
+  complete: boolean;
 }
 
 export type GateCheckName = 'WRITES_ALREADY_ON' | 'ALL_READABLE' | 'ALL_OPERATIONS_PRESENT' | 'NONE_PENDING_OR_UNRESOLVED' | 'HELD_RULE'

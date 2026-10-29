@@ -277,6 +277,9 @@ func (e *Engine) CreateInstruction(ctx context.Context, p auth.Principal, r Inst
 	}
 	digest := requestDigest(map[string]any{"source_system": r.SourceSystem, "source_record_id": r.SourceRecordID, "mandate_id": r.MandateID, "proposed_action": norm})
 	instructionID := newID("inst")
+	if err := e.syncSupplierFor(ctx, p, r.Proposed.SupplierID); err != nil {
+		return nil, false, err
+	}
 
 	var view *InstructionView
 	var created bool
@@ -364,6 +367,9 @@ func (e *Engine) AmendInstruction(ctx context.Context, p auth.Principal, instruc
 		return nil, false, err
 	}
 	digest := requestDigest(map[string]any{"amendment_id": r.AmendmentID, "expected_action_revision": r.ExpectedRevision, "proposed_action": norm})
+	if err := e.syncSupplierFor(ctx, p, r.Proposed.SupplierID); err != nil {
+		return nil, false, err
+	}
 	if p.Kind != auth.Issuer {
 		return nil, false, fault("FORBIDDEN", "only a trusted issuer can amend an instruction")
 	}

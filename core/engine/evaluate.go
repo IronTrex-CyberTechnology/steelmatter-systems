@@ -84,6 +84,17 @@ func (e *Engine) Evaluate(ctx context.Context, p auth.Principal, instructionID s
 	if _, err := e.signer("SM-PERMIT+JWS"); err != nil {
 		return nil, err
 	}
+	// R1-DEF-03: authorise against the destination's current supplier revision.
+	if e.Connector != nil {
+		var supplier string
+		if err := e.Pool.QueryRow(ctx, `SELECT supplier_id FROM steelmatter.action_revisions WHERE tenant_id = $1 AND instruction_id = $2 AND action_revision = $3`,
+			p.Tenant, instructionID, revision).Scan(&supplier); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, unavailable(err)
+		}
+		if err := e.syncSupplier(ctx, p.Tenant, supplier); err != nil {
+			return nil, err
+		}
+	}
 
 	// IDs are fixed before the transaction so retries reuse them.
 	newPermit := struct{ permit, reservation, operation string }{newID("permit"), newID("res"), newID("op")}

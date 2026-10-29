@@ -180,6 +180,20 @@ type ListRow struct {
 	PermitDigest string `json:"permit_digest,omitempty"`
 	Tombstoned   bool   `json:"tombstoned"`
 	Foreign      bool   `json:"foreign,omitempty"`
+	// Event is the journal event behind the row (created, fenced, refused,
+	// foreign_created, po_edited, po_cancelled, po_deleted). po_deleted means
+	// the order was deleted at the destination, which a restore cannot
+	// produce: the engine flags it instead of suspecting a restore.
+	Event string `json:"event,omitempty"`
+}
+
+// SupplierSource is implemented by destinations that own the protected
+// supplier revision (Odoo: res.partner.sm_revision). The engine reads it
+// before creating an instruction and before evaluation (R1-DEF-03). An
+// error containing ReasonMappingMissing means the destination has no such
+// supplier; any other error means the destination could not be read.
+type SupplierSource interface {
+	SupplierRevision(ctx context.Context, supplierRef string) (int64, error)
 }
 
 // ListPage is one page of the destination journal, in commit (seq) order.

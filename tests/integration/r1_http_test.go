@@ -3,6 +3,7 @@
 package integration
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/anchor"
@@ -132,10 +133,20 @@ func TestR1HTTPRecoveryHeldRuleAndRepair(t *testing.T) {
 	if len(body["recreated"].([]any)) != 1 || e.dispatchStatus(p.operation) != engine.DispatchHeld {
 		t.Fatalf("reconcile %v, status %s", body, e.dispatchStatus(p.operation))
 	}
-	for _, k := range []string{"from_odoo", "flagged", "refenced", "settled", "problems"} {
+	for _, k := range []string{"from_odoo", "flagged", "refenced", "settled", "problems", "unconfirmed"} {
 		if _, ok := body[k].([]any); !ok {
 			t.Fatalf("reconcile %s is not an array: %v", k, body)
 		}
+	}
+	// R1-API-10: settled entries are "op_ref=STATUS", as the schema says.
+	settledFmt := regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]*=(COMMITTED|FENCED|MISMATCH|HELD)$`)
+	for _, s := range body["settled"].([]any) {
+		if !settledFmt.MatchString(s.(string)) {
+			t.Fatalf("settled entry %q", s)
+		}
+	}
+	if body["complete"] != true {
+		t.Fatalf("reconcile complete: %v", body)
 	}
 	requireBuckets(t, "held", e.buckets(p.mandate), r1Unresolved)
 
