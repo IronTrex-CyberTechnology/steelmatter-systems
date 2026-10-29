@@ -239,6 +239,20 @@ class DeliveryAddress(unittest.TestCase):
         fresh = EXECUTOR.api("sm_create", action(ref("dlv-fresh"), delivery_revision=rev + 1))
         self.assertEqual((fresh["outcome"], fresh["destination"]["delivery_revision"]), ("CREATED", rev + 1))
 
+    def test_def11_missing_delivery_revision_is_refused(self):
+        # R1 decision 2: the check is mandatory in Odoo too, not only in the
+        # engine. No revision means never authorised against the address.
+        op = ref("dlv-missing")
+        a = action(op)
+        del a["delivery_revision"]
+        ready = EXECUTOR.api("sm_readiness", a)
+        self.assertEqual((ready["outcome"], ready["reason"]), ("NOT_READY", "DELIVERY_CHANGED"))
+        r = EXECUTOR.api("sm_create", a)
+        self.assertEqual((r["outcome"], r["reason"]), ("REFUSED_SUPPLIER_STALE", "DELIVERY_CHANGED"))
+        self.assertEqual(int(odoo_sql("SELECT count(*) FROM purchase_order WHERE sm_op_ref = '%s'" % op)[0]), 0)
+        # The refusal is permanent for this op_ref, even with the revision added.
+        self.assertEqual(EXECUTOR.api("sm_create", action(op))["outcome"], "REFUSED_FENCED")
+
     def test_def11_delivery_revision_cannot_be_set(self):
         with self.assertRaises(RPCError):
             ADMIN.call("res.partner", "write", [self.delivery()], {"sm_revision": 1})
