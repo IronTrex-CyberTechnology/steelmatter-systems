@@ -99,15 +99,16 @@ type Action struct {
 
 // Order is what the destination holds for an op_ref.
 type Order struct {
-	ID           string `json:"id"`
-	State        string `json:"state"` // "purchase" = confirmed; anything else is not FOUND
-	CompanyRef   string `json:"company_ref"`
-	DeliveryRef  string `json:"delivery_ref"`
-	SupplierRef  string `json:"supplier_ref"`
-	Lines        []Line `json:"lines"`
-	AmountMinor  int64  `json:"amount_minor"`
-	Currency     string `json:"currency"`
-	PermitDigest string `json:"permit_digest"`
+	SupplierRevision int64  `json:"supplier_revision"`
+	ID               string `json:"id"`
+	State            string `json:"state"` // "purchase" = confirmed; anything else is not FOUND
+	CompanyRef       string `json:"company_ref"`
+	DeliveryRef      string `json:"delivery_ref"`
+	SupplierRef      string `json:"supplier_ref"`
+	Lines            []Line `json:"lines"`
+	AmountMinor      int64  `json:"amount_minor"`
+	Currency         string `json:"currency"`
+	PermitDigest     string `json:"permit_digest"`
 }
 
 // StateConfirmed is the destination order state that counts as success.

@@ -28,9 +28,10 @@ const (
 var Kinds = []Kind{KindMandate, KindAction, KindPermit, KindExecution, KindObservation}
 
 const (
-	SchemaVersion = "1"
-	CryptoProfile = "SM-JWS-ES256-1"
-	Currency      = "INR"
+	SchemaVersion           = "1"
+	ExternalEvidenceVersion = "2"
+	CryptoProfile           = "SM-JWS-ES256-1"
+	Currency                = "INR"
 	// MaxPermitLifetime is the 5-minute permit limit (document 02).
 	MaxPermitLifetime = 5 * time.Minute
 	timestampLayout   = "2006-01-02T15:04:05Z"
@@ -121,6 +122,8 @@ type Execution struct {
 	AmountMinor   int64  `json:"amount_minor"`
 	Status        string `json:"status"`
 	CommittedAt   string `json:"committed_at"`
+	AdmittedAt    string `json:"admitted_at,omitempty"`
+	CompanyRef    string `json:"company_ref,omitempty"`
 }
 
 // Observation is the observer's readback comparison.
@@ -138,13 +141,18 @@ type Observation struct {
 	TargetOrderID        string  `json:"target_order_id"`
 	Status               string  `json:"status"`
 	ObservedAt           string  `json:"observed_at"`
+	ExpectedCompanyRef   string  `json:"expected_company_ref,omitempty"`
+	ObservedCompanyRef   *string `json:"observed_company_ref,omitempty"`
+	ObservedState        *string `json:"observed_state,omitempty"`
+	ExpectedPermitDigest string  `json:"expected_permit_digest,omitempty"`
+	ObservedPermitDigest *string `json:"observed_permit_digest,omitempty"`
 }
 
 // Timestamp fields per kind, checked before schema validation.
 var timestampFields = map[Kind][]string{
 	KindMandate:     {"issued_at", "expires_at"},
 	KindPermit:      {"issued_at", "expires_at"},
-	KindExecution:   {"committed_at"},
+	KindExecution:   {"committed_at", "admitted_at"},
 	KindObservation: {"observed_at"},
 }
 
@@ -208,6 +216,14 @@ func init() {
 			knownFields[k][f] = true
 		}
 	}
+	// Optional v2 fields are omitted by zero-value marshaling above.
+	for _, f := range []string{"admitted_at", "company_ref"} {
+		knownFields[KindExecution][f] = true
+	}
+	for _, f := range []string{"expected_company_ref", "observed_company_ref", "observed_state", "expected_permit_digest", "observed_permit_digest"} {
+		knownFields[KindObservation][f] = true
+	}
+
 }
 
 // Validate parses raw strictly and validates it as kind, returning the typed
@@ -225,7 +241,7 @@ func Validate(kind Kind, raw []byte) (any, *Error) {
 	if !ok {
 		return nil, errf(CodeSchemaViolation, "", "payload must be a JSON object")
 	}
-	if v, ok := obj["schema_version"].(string); !ok || v != SchemaVersion {
+	if v, ok := obj["schema_version"].(string); !ok || (v != SchemaVersion && !(v == ExternalEvidenceVersion && (kind == KindExecution || kind == KindObservation))) {
 		return nil, errf(CodeUnsupportedVersion, "/schema_version", "schema_version must be %q", SchemaVersion)
 	}
 	if v, ok := obj["crypto_profile"].(string); !ok || v != CryptoProfile {
@@ -321,6 +337,14 @@ func checkSemantics(p any) *Error {
 		return checkRange(v.IssuedAt, v.ExpiresAt, 0)
 	case *Permit:
 		return checkRange(v.IssuedAt, v.ExpiresAt, MaxPermitLifetime)
+	case *Execution:
+		if v.SchemaVersion == ExternalEvidenceVersion {
+			a, _ := ParseTimestamp(v.AdmittedAt)
+			c, _ := ParseTimestamp(v.CommittedAt)
+			if a.After(c) {
+				return errf(CodeInvalidTimeRange, "/committed_at", "settlement precedes admission")
+			}
+		}
 	case *Observation:
 		return checkObservation(v)
 	}
@@ -406,13 +430,18 @@ func checkRange(issued, expires string, maxLifetime time.Duration) *Error {
 // digest equal to the expected one; MISMATCH a different observed digest;
 // INSUFFICIENT_EVIDENCE no observed digest.
 func checkObservation(o *Observation) *Error {
+	matches := o.ObservedActionDigest != nil && *o.ObservedActionDigest == o.ExpectedActionDigest
+	if o.SchemaVersion == ExternalEvidenceVersion {
+		matches = matches && o.ObservedCompanyRef != nil && *o.ObservedCompanyRef == o.ExpectedCompanyRef &&
+			o.ObservedState != nil && *o.ObservedState == "purchase" && o.ObservedPermitDigest != nil && *o.ObservedPermitDigest == o.ExpectedPermitDigest
+	}
 	switch o.Status {
 	case "MATCH":
-		if o.ObservedActionDigest == nil || *o.ObservedActionDigest != o.ExpectedActionDigest {
+		if !matches {
 			return errf(CodeObservationInconsistent, "/status", "MATCH requires observed_action_digest equal to expected_action_digest")
 		}
 	case "MISMATCH":
-		if o.ObservedActionDigest == nil || *o.ObservedActionDigest == o.ExpectedActionDigest {
+		if o.ObservedActionDigest == nil || matches {
 			return errf(CodeObservationInconsistent, "/status", "MISMATCH requires a different observed_action_digest")
 		}
 	case "INSUFFICIENT_EVIDENCE":

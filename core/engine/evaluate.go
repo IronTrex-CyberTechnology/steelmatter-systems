@@ -102,6 +102,9 @@ func (e *Engine) Evaluate(ctx context.Context, p auth.Principal, instructionID s
 		if err != nil {
 			return err
 		}
+		if err := e.guardMandateHistory(ctx, tx, p.Tenant, mandateID); err != nil {
+			return err
+		}
 		var current int64
 		if err := tx.QueryRow(ctx, `SELECT current_revision FROM steelmatter.instructions WHERE tenant_id = $1 AND instruction_id = $2 FOR UPDATE`,
 			p.Tenant, instructionID).Scan(&current); err != nil {

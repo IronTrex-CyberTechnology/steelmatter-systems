@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Build only the reviewed public files, without the private checkout nearby.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+python3 - "$work" <<'PYTHON'
+import pathlib, shutil, subprocess, sys
+root = pathlib.Path.cwd()
+dest = pathlib.Path(sys.argv[1])
+paths = [p for p in (root / 'ci/public-export-files.txt').read_text().splitlines() if p and not p.startswith('#')]
+if len(paths) != len(set(paths)):
+    raise SystemExit('Duplicate export paths')
+for raw in paths:
+    p = pathlib.PurePosixPath(raw)
+    if p.is_absolute() or '..' in p.parts or any(part in ('internal','AGENTS.md','CLAUDE.md') for part in p.parts):
+        raise SystemExit('Invalid export path: ' + raw)
+    source = root / raw
+    if not source.is_file() or source.is_symlink():
+        raise SystemExit('Missing or non-regular export path: ' + raw)
+    target = dest / raw
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, target)
+PYTHON
+cd "$work"
+go build -buildvcs=false ./...
+go test -buildvcs=false ./...

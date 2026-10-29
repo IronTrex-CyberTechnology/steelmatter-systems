@@ -8,6 +8,9 @@ import "context"
 
 // Named points. Each is placed at the exact step its name describes.
 const (
+	RepairAfterDecision         = "repair.after_decision"
+	RepairAfterOutcome          = "repair.after_outcome"
+	RepairBeforeCommit          = "repair.before_commit"
 	EvaluateBeforeReserveCommit = "evaluate.before_reserve_commit" // reservation written, transaction not committed
 	EvaluateAfterReserve        = "evaluate.after_reserve"         // reservation committed, permit not yet signed
 	EvaluateBeforePersist       = "evaluate.before_persist"        // signed outside the transaction, not yet persisted

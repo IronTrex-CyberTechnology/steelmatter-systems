@@ -1,6 +1,6 @@
 {
   "schema": "steelmatter-required-results/1",
-  "active_stage": "full-R0",
+  "active_stage": "r1-engine",
   "stages": {
     "I01": {
       "description": "Foundation: real-PostgreSQL harness, role separation, synthetic keys, service skeleton and the aggregate gate. No product acceptance case is required yet; all 44 remain NOT_RUN.",
@@ -4813,7 +4813,7 @@
       ]
     },
     "r1-engine": {
-      "description": "R1 engine work on uday-r1 dispatch intent, lookup-first settle, the settle worker, R1 status values, revocation of in-flight operations (D4), per-aggregate outbox (D6), readiness, and the D2 budget, crash and race tests, all against the stub connector. Requires every full-R0 test and case as well. Not the active stage: switching to it is a team decision. Includes the D5 recovery anchor (separate local PostgreSQL), restore detection, reconciliation, the resume gate with the HELD rule, HELD findings and repairs, and real PostgreSQL recovery and concurrency tests. Includes the R1 HTTP endpoints (dispatch, settle, findings, repairs, restore check, reconcile, resume gate, write state). The engine-plus-real-Odoo suite (TestR1OdooEndToEnd, build tag odoo) needs the Odoo sandbox and runs through destinations/odoo/sandbox/test-engine, not this gate.",
+      "description": "Active R1 engine gate: all full-R0 requirements plus dispatch, recovery-anchor admission fencing, crash-safe repair, signed R1 evidence and independent readback. Integration uses real PostgreSQL with the stub destination. The required GitHub job also runs TestR1OdooEndToEnd against real Odoo and checks the exact public-source export. Passing this stage does not certify the outstanding full-R1 human-approval scope.",
       "phases": [
         "unit",
         "integration",
@@ -7028,6 +7028,76 @@
           "phase": "sdk",
           "package": "packages/sdk",
           "test": "contract.test.ts/the OpenAPI document declares the 12 R1 dispatch, repair and recovery operations"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1RestoredBudgetRefusedBeforeWorkerRuns"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1StartupRefusesRestoredHistory"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1RequiredAnchorCannotBeOmitted"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1ConfirmedRepairSurvivesEveryCrashBoundary"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
+          "test": "TestR1EvidenceUsesAdmissionTime"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract",
+          "test": "TestR1EvidenceVersionAndDestinationBinding"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1EvidenceAfterPermitExpiryAndRestore"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1ObserverDetectsDestinationChangesWithoutMovingMoney"
+        },
+        {
+          "phase": "verifier",
+          "package": "packages/verifier",
+          "test": "r1-evidence.test.ts/R1: late confirmation preserves valid admission and verifies a complete signed chain"
+        },
+        {
+          "phase": "verifier",
+          "package": "packages/verifier",
+          "test": "r1-evidence.test.ts/R1: admission at expiry breaks chronology even with a valid signature"
+        },
+        {
+          "phase": "verifier",
+          "package": "packages/verifier",
+          "test": "r1-evidence.test.ts/R1: a signed observation for another company cannot attest this execution"
+        },
+        {
+          "phase": "verifier",
+          "package": "packages/verifier",
+          "test": "r1-evidence.test.ts/R1: a v1 observation cannot silently downgrade destination verification"
+        },
+        {
+          "phase": "verifier",
+          "package": "packages/verifier",
+          "test": "r1-evidence.test.ts/R1: destination mismatch remains authentic evidence, never MATCH"
+        },
+        {
+          "phase": "verifier",
+          "package": "packages/verifier",
+          "test": "r1-evidence.test.ts/R1: required admission and destination fields cannot be omitted or marked v1"
         }
       ],
       "required_cases": [

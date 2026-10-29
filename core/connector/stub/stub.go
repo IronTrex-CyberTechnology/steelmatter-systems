@@ -367,7 +367,7 @@ func (s *Stub) create(ctx context.Context, a connector.Action) connector.Result 
 	s.creates++
 	order := &connector.Order{
 		ID: fmt.Sprintf("PO%05d", s.nextOrder), State: connector.StateConfirmed, CompanyRef: a.CompanyRef, DeliveryRef: a.DeliveryRef,
-		SupplierRef: a.SupplierRef, Lines: append([]connector.Line(nil), a.Lines...), AmountMinor: a.AmountMinor, Currency: a.Currency,
+		SupplierRef: a.SupplierRef, SupplierRevision: a.SupplierRevision, Lines: append([]connector.Line(nil), a.Lines...), AmountMinor: a.AmountMinor, Currency: a.Currency,
 		PermitDigest: a.PermitDigest,
 	}
 	s.ops[a.OpRef] = &record{state: Created, digest: a.PermitDigest, seq: s.seq, order: order}

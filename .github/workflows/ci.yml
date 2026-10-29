@@ -18,7 +18,7 @@ concurrency:
 jobs:
   steelmatter-ci:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 35
     services:
       postgres:
         # Keep in sync with versions.env POSTGRES_IMAGE.
@@ -61,6 +61,25 @@ jobs:
           STEELMATTER_TEST_ADMIN_URL: postgres://postgres:ci-disposable@localhost:5432/postgres?sslmode=disable
           GOTOOLCHAIN: local
         run: scripts/ci
+
+      - name: Start isolated real Odoo and recovery anchor
+        env:
+          GOTOOLCHAIN: local
+        run: destinations/odoo/sandbox/up
+
+      - name: Run real Odoo recovery scenarios
+        env:
+          STEELMATTER_TEST_ADMIN_URL: postgres://postgres:ci-disposable@localhost:5432/postgres?sslmode=disable
+          GOTOOLCHAIN: local
+        run: |
+          set -o pipefail
+          destinations/odoo/sandbox/test-engine -json > .out/odoo.json
+          python3 tools/check-odoo-results.py .out/odoo.json
+
+      - name: Verify exported source builds independently
+        env:
+          GOTOOLCHAIN: local
+        run: scripts/check-export
 
       - name: Upload sanitised results
         if: always()

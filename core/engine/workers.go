@@ -239,6 +239,9 @@ func (e *Engine) RunWorkers(ctx context.Context, interval time.Duration, sink Si
 		if _, err := e.ObserveUnobserved(ctx); err != nil {
 			onErr("observer", err)
 		}
+		if _, err := e.ObserveR1Due(ctx); err != nil {
+			onErr("observer-refresh", err)
+		}
 		if err := e.checkBacklog(ctx); err != nil {
 			onErr("backlog", err)
 		}
@@ -279,8 +282,8 @@ func (e *Engine) GetOperation(ctx context.Context, p auth.Principal, operationID
 		o.execution_jws, b.status, b.observation_jws
 		FROM steelmatter.issuances i
 		JOIN steelmatter.mandates m ON m.tenant_id = i.tenant_id AND m.mandate_id = i.mandate_id
-		LEFT JOIN steelmatter.operations o ON o.tenant_id = i.tenant_id AND o.operation_id = i.operation_id
-		LEFT JOIN LATERAL (SELECT status, observation_jws FROM steelmatter.observations x
+		LEFT JOIN steelmatter.evidence_operations o ON o.tenant_id = i.tenant_id AND o.operation_id = i.operation_id
+		LEFT JOIN LATERAL (SELECT status, observation_jws FROM steelmatter.evidence_observations x
 			WHERE x.tenant_id = i.tenant_id AND x.operation_id = i.operation_id ORDER BY recorded_at DESC LIMIT 1) b ON true
 		WHERE i.tenant_id = $1 AND i.operation_id = $2`, p.Tenant, operationID).
 		Scan(&iStatus, &reason, &expired, &orderID, &mandateJWS, &permitJWS, &execJWS, &obs, &obsJWS)

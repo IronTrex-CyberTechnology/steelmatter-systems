@@ -1,6 +1,6 @@
-// Package schemas embeds the five payload JSON Schemas (schema_version "1").
-// The files are the 0.6 packet schemas, unchanged; packages/verifier keeps a
-// byte-identical copy (checked by the conformance suite).
+// Package schemas embeds the payload schemas. Execution and observation
+// accept v2 external-destination evidence as well as v1. packages/verifier
+// keeps byte-identical copies, checked by the conformance suite.
 package schemas
 
 import "embed"

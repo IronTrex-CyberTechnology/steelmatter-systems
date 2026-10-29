@@ -75,6 +75,7 @@ type DestRecord struct {
 // the authorised request (verifiable against the signed permit) and the
 // budget move reserved -> unresolved.
 type IntentRecord struct {
+	AdmittedAt       string `json:"admitted_at,omitempty"`
 	Tenant           string `json:"tenant_id"`
 	OpRef            string `json:"op_ref"`
 	InstructionID    string `json:"instruction_id"`
@@ -173,6 +174,17 @@ func (c *Client) Records(ctx context.Context, typ string) ([]Record, error) {
 func (c *Client) RecordsFor(ctx context.Context, tenant, opRef string) ([]Record, error) {
 	return c.query(ctx, `SELECT seq, record_type, tenant_id, op_ref, payload, recorded_at FROM anchor.engine_records
 		WHERE tenant_id = $1 AND op_ref = $2 ORDER BY seq`, tenant, opRef)
+}
+
+// RecordsForMandate reads the recovery history of one budget. The caller
+// holds that mandate's engine row lock, also used by dispatch and settlement,
+// so an anchor append cannot be mistaken for an uncommitted engine write.
+func (c *Client) RecordsForMandate(ctx context.Context, tenant, mandate string) ([]Record, error) {
+	return c.query(ctx, `SELECT r.seq, r.record_type, r.tenant_id, r.op_ref, r.payload, r.recorded_at
+		FROM anchor.engine_records r WHERE r.tenant_id = $1 AND r.op_ref IN
+		(SELECT op_ref FROM anchor.engine_records WHERE tenant_id = $1
+		 AND record_type = 'DISPATCH_INTENT' AND payload->>'mandate_id' = $2)
+		ORDER BY r.seq`, tenant, mandate)
 }
 
 func (c *Client) query(ctx context.Context, sql string, args ...any) ([]Record, error) {

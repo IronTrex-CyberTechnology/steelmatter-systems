@@ -119,8 +119,8 @@ func (e *Engine) Dispatch(ctx context.Context, p auth.Principal, actionJSON []by
 			args []any
 		}{
 			{`INSERT INTO steelmatter.dispatches (tenant_id, op_ref, instruction_id, action_revision, mandate_id, company_ref, permit_id, control_epoch,
-			  action_canonical, action_digest, permit_digest, amount_minor, status, created_at, updated_at)
-			  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'PENDING', $13, $13)`,
+			  action_canonical, action_digest, permit_digest, amount_minor, status, created_at, updated_at, admitted_at)
+			  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'PENDING', $13, $13, $13)`,
 				[]any{p.Tenant, permit.OperationID, action.InstructionID, action.ActionRevision, permit.MandateID, e.Cfg.CompanyRef, permit.PermitID,
 					permit.ControlEpoch, a.canonical, a.actionDigest, a.verified.Digest, is.Amount, now}},
 			// Freeze the revision: no amendment once the order may exist.
@@ -139,7 +139,7 @@ func (e *Engine) Dispatch(ctx context.Context, p auth.Principal, actionJSON []by
 		// (D5 mechanism step 1). No anchor record, no dispatch; and none can be
 		// appended once writes are off or this engine's generation is old.
 		if e.Anchor != nil {
-			ir := anchor.IntentRecord{Tenant: p.Tenant, OpRef: permit.OperationID, InstructionID: action.InstructionID,
+			ir := anchor.IntentRecord{AdmittedAt: ts(now), Tenant: p.Tenant, OpRef: permit.OperationID, InstructionID: action.InstructionID,
 				ActionRevision: action.ActionRevision, MandateID: permit.MandateID, ControlEpoch: permit.ControlEpoch, CompanyRef: e.Cfg.CompanyRef,
 				PermitID: permit.PermitID, PermitJWS: permitJWS, PermitDigest: a.verified.Digest, ActionCanonical: string(a.canonical),
 				ActionDigest: a.actionDigest, AmountMinor: is.Amount, Currency: action.Currency, SupplierRef: action.SupplierID,

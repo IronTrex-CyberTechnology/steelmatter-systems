@@ -67,6 +67,10 @@ type Config struct {
 	// company per deployment, D7). It is the engine's mapping key, not an
 	// Odoo ID; the connector maps it. Dispatch refuses when it is empty.
 	CompanyRef string
+	// RequireRecoveryAnchor refuses R1 writes when the independent anchor is
+	// missing. Real connector deployments enable this; unanchored stubs are
+	// permitted only for isolated mechanism tests.
+	RequireRecoveryAnchor bool
 }
 
 // DefaultConfig returns the R0 defaults.
@@ -300,7 +304,13 @@ func (e *Engine) checkClock(ctx context.Context, q interface {
 // Ready reports whether the engine can admit work: the database answers and
 // the clocks agree (used by GET /v1/ready).
 func (e *Engine) Ready(ctx context.Context) error {
-	return e.checkClock(ctx, e.Pool)
+	if err := e.checkClock(ctx, e.Pool); err != nil {
+		return err
+	}
+	if e.Cfg.RequireRecoveryAnchor {
+		return e.requireWrites(ctx)
+	}
+	return nil
 }
 
 func ts(t time.Time) string { return t.UTC().Format("2006-01-02T15:04:05Z") }

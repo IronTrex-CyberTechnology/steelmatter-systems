@@ -1,5 +1,5 @@
-# Reviewed source-export paths. Exact regular files only; new paths require review.
-# Excludes private records and internal development instructions; Git history is not exported.
+# Excludes private records and internal instructions; Git history is not exported.
+# Reviewed R0 + R1 source-export paths. Exact regular files only.
 .gitattributes
 .github/ISSUE_TEMPLATE/bug.md
 .github/ISSUE_TEMPLATE/issue.md
@@ -29,6 +29,7 @@ adapters/mcp/tsconfig.build.json
 adapters/mcp/tsconfig.json
 api/openapi.yaml
 api/openapi_test.go
+api/r1_status_test.go
 ci/acceptance-cases.json
 ci/public-export-files.txt
 ci/required.json
@@ -39,11 +40,24 @@ cmd/smkeys/main.go
 cmd/smkeys/main_test.go
 cmd/smvectors/main.go
 cmd/smvectors/temporal.go
+cmd/steelmatter/connector.go
+cmd/steelmatter/connector_test.go
 cmd/steelmatter/main.go
+core/anchor/anchor.go
+core/anchor/anchor_integration_test.go
+core/anchor/provision.go
+core/anchor/schema.sql
 core/api/api.go
+core/api/r1.go
 core/api/ratelimit.go
 core/api/ratelimit_test.go
 core/auth/auth.go
+core/connector/connector.go
+core/connector/odoo/odoo.go
+core/connector/odoo/odoo_sandbox_test.go
+core/connector/odoo/odoo_test.go
+core/connector/stub/stub.go
+core/connector/stub/stub_test.go
 core/contract/canonical.go
 core/contract/contract_test.go
 core/contract/depth_test.go
@@ -51,6 +65,7 @@ core/contract/errors.go
 core/contract/jws.go
 core/contract/keyring.go
 core/contract/payloads.go
+core/contract/r1_evidence_test.go
 core/contract/strictjson.go
 core/contract/temporal.go
 core/contract/temporal_test.go
@@ -66,16 +81,30 @@ core/db/migrations/0006_observer_read_set.sql
 core/db/migrations/0007_accounting_fixtures.sql
 core/db/migrations/0008_worker_backoff.sql
 core/db/migrations/0009_release_reason_key_retired.sql
+core/db/migrations/0010_r1_dispatches.sql
+core/db/migrations/0011_r1_workers_outbox.sql
+core/db/migrations/0012_r1_recovery.sql
+core/db/migrations/0013_repair_replay.sql
+core/db/migrations/0014_r1_evidence.sql
 core/db/provision.go
 core/db/roles.go
+core/dbtest/anchor.go
 core/dbtest/harness.go
 core/engine/admit.go
+core/engine/admitcheck.go
+core/engine/anchorwrites.go
 core/engine/backoff.go
+core/engine/dispatch.go
 core/engine/engine.go
 core/engine/evaluate.go
 core/engine/evidence.go
 core/engine/instructions.go
 core/engine/mandates.go
+core/engine/r1_evidence.go
+core/engine/recovery.go
+core/engine/repair.go
+core/engine/settle.go
+core/engine/settleworker.go
 core/engine/simulate.go
 core/engine/workers.go
 core/failpoint/disabled.go
@@ -86,6 +115,7 @@ core/httpapi/codes.go
 core/httpapi/httpapi.go
 core/keys/keys.go
 core/keys/keys_test.go
+core/observer/destination.go
 core/observer/observer.go
 core/server/server.go
 core/server/server_test.go
@@ -112,6 +142,27 @@ demo/test/helpers.ts
 demo/test/render.test.ts
 demo/test/verifier.test.ts
 demo/tsconfig.json
+destinations/odoo/addons/steelmatter_r1/__init__.py
+destinations/odoo/addons/steelmatter_r1/__manifest__.py
+destinations/odoo/addons/steelmatter_r1/models/__init__.py
+destinations/odoo/addons/steelmatter_r1/models/anchor.py
+destinations/odoo/addons/steelmatter_r1/models/api.py
+destinations/odoo/addons/steelmatter_r1/models/operation.py
+destinations/odoo/addons/steelmatter_r1/models/partner.py
+destinations/odoo/addons/steelmatter_r1/models/purchase.py
+destinations/odoo/addons/steelmatter_r1/models/refs.py
+destinations/odoo/addons/steelmatter_r1/security/groups.xml
+destinations/odoo/addons/steelmatter_r1/security/ir.model.access.csv
+destinations/odoo/sandbox/compose.yaml
+destinations/odoo/sandbox/lib.sh
+destinations/odoo/sandbox/reset
+destinations/odoo/sandbox/seed.py
+destinations/odoo/sandbox/test-connector
+destinations/odoo/sandbox/test-engine
+destinations/odoo/sandbox/up
+destinations/odoo/tests/race_test.py
+destinations/odoo/tests/restore_test.py
+destinations/odoo/tests/sandbox_client.py
 docs/adr/ADR-001-go-service.md
 docs/adr/ADR-002-authorised-readers.md
 docs/adr/ADR-003-evidence-temporal-linkage.md
@@ -120,6 +171,7 @@ docs/contracts/I02-contract.md
 docs/engine.md
 docs/evidence.md
 docs/quickstart.md
+docs/r1-release-hardening.md
 examples/procurement/accounting.go
 examples/procurement/client.go
 examples/procurement/reference.go
@@ -185,6 +237,7 @@ packages/verifier/test/depth.test.ts
 packages/verifier/test/evidence.test.ts
 packages/verifier/test/gojson-reporter.mjs
 packages/verifier/test/package.test.ts
+packages/verifier/test/r1-evidence.test.ts
 packages/verifier/test/temporal.test.ts
 packages/verifier/test/truststore.test.ts
 packages/verifier/test/vectors.test.ts
@@ -199,6 +252,7 @@ schemas/observation.schema.json
 schemas/permit.schema.json
 schemas/schemas.go
 scripts/bootstrap
+scripts/check-export
 scripts/ci
 scripts/demo
 scripts/dev-postgres
@@ -226,6 +280,13 @@ tests/integration/evidence_test.go
 tests/integration/flow_test.go
 tests/integration/mcp_test.go
 tests/integration/quota_test.go
+tests/integration/r1_anchor_test.go
+tests/integration/r1_dispatch_test.go
+tests/integration/r1_evidence_test.go
+tests/integration/r1_hardening_test.go
+tests/integration/r1_http_test.go
+tests/integration/r1_odoo_e2e_test.go
+tests/integration/r1_workers_test.go
 tests/integration/races_test.go
 tests/integration/readers_test.go
 tests/integration/reference_test.go
@@ -236,6 +297,7 @@ tests/integration/simulate_parity_test.go
 tests/integration/simulate_test.go
 tests/integration/temporal_test.go
 tests/integration/workers_test.go
+tools/check-odoo-results.py
 tools/ciagg/ciagg.go
 tools/ciagg/ciagg_test.go
 tools/ciagg/report.go
