@@ -119,6 +119,7 @@ def action(op_ref, **over):
     a = {
         "op_ref": op_ref, "action_revision": 1, "company_ref": DESTINATION, "delivery_ref": "wh-chennai",
         "supplier_ref": "sup-chairs", "supplier_revision": supplier_revision(),
+        "delivery_revision": supplier_revision("wh-chennai"),
         "lines": [{"item_ref": "chair-ergo", "quantity": 10, "unit_price_minor": 600000}],
         "amount_minor": 6000000, "currency": "INR", "permit_digest": "sha256:" + op_ref, "expected_min_seq": 0,
     }

@@ -121,7 +121,9 @@ def _check_action(action):
         taxes = ln.get("tax_refs", [])
         if not isinstance(taxes, list) or not all(isinstance(t, str) and t for t in taxes) or taxes != sorted(set(taxes)):
             raise ValueError("action.lines tax_refs must be a sorted list of distinct tax refs")
-    # D1 v1.4, optional until every engine sends them (None = not sent).
+    # D1 v1.4. The amounts are optional (absent = untaxed action). The
+    # delivery revision is mandatory (R1 decision 2); an action without one is
+    # refused as stale by sm_create and readiness, never created unchecked.
     for k in ("amount_untaxed_minor", "tax_minor", "delivery_revision"):
         v = action.get(k)
         if v is not None and (not isinstance(v, int) or isinstance(v, bool)):
@@ -198,7 +200,7 @@ def _same_order(facts, action):
     if action.get("amount_untaxed_minor") is not None and (
             facts["amount_untaxed_minor"] != action["amount_untaxed_minor"] or facts["tax_minor"] != action["tax_minor"]):
         return False
-    if action.get("delivery_revision") is not None and facts["delivery_revision"] != action["delivery_revision"]:
+    if facts["delivery_revision"] != action.get("delivery_revision"):
         return False
     return (facts["company_ref"] == action["company_ref"] and facts["delivery_ref"] == action["delivery_ref"]
             and facts["supplier_ref"] == action["supplier_ref"] and facts["supplier_revision"] == action["supplier_revision"]
@@ -365,13 +367,16 @@ class SteelmatterApi(models.AbstractModel):
             return "REFUSED_SUPPLIER_STALE", "", None
         # The delivery address is protected the same way (R1 decision 2,
         # R1-DEF-11): a change after authorisation needs a fresh one. Same
-        # refusal as a stale supplier, with its own reason.
+        # refusal as a stale supplier, with its own reason. An action with no
+        # delivery revision was never authorised against the address, so it
+        # is refused the same way: the check is mandatory.
         cr.execute("SELECT sm_revision FROM res_partner WHERE id = %s FOR SHARE", [scope["delivery"].id])
         delivery_rev = cr.fetchone()[0]
         scope["delivery"].invalidate_recordset(["sm_revision"])
-        if a.get("delivery_revision") is not None and delivery_rev != a["delivery_revision"]:
-            anchor.append(anchor.BLOCK, op_ref, {"op_ref": op_ref, "reason": "delivery address stale"})
-            self._decide(env, op, "refused", "delivery address stale", a["permit_digest"])
+        if delivery_rev != a.get("delivery_revision"):
+            why = "delivery address stale" if a.get("delivery_revision") is not None else "delivery revision missing"
+            anchor.append(anchor.BLOCK, op_ref, {"op_ref": op_ref, "reason": why})
+            self._decide(env, op, "refused", why, a["permit_digest"])
             return "REFUSED_SUPPLIER_STALE", "DELIVERY_CHANGED", None
         try:
             self._check_totals(env, a, scope)
@@ -643,7 +648,7 @@ class SteelmatterApi(models.AbstractModel):
             scope = self._resolve(env, a)
             if scope["supplier"].commercial_partner_id.sm_revision != a["supplier_revision"]:
                 res.update(outcome="NOT_READY", reason="SUPPLIER_CHANGED")
-            elif a.get("delivery_revision") is not None and scope["delivery"].sm_revision != a["delivery_revision"]:
+            elif scope["delivery"].sm_revision != a.get("delivery_revision"):
                 res.update(outcome="NOT_READY", reason="DELIVERY_CHANGED")
             else:
                 anchor.proof(a["op_ref"])

@@ -42,8 +42,15 @@ func sandbox(t *testing.T) *odoo.Connector {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if deliveryRev, err = c.DeliveryRevision(context.Background(), "wh-chennai"); err != nil {
+		t.Fatal(err)
+	}
 	return c
 }
+
+// deliveryRev is the sandbox delivery address revision, read by sandbox().
+// Every action carries it: Odoo refuses an action without one.
+var deliveryRev int64
 
 var runID = func() string {
 	b := make([]byte, 4)
@@ -56,7 +63,7 @@ func opRef(name string) string { return "go-" + runID + "-" + name }
 func action(op string, rev int64) connector.Action {
 	return connector.Action{OpRef: op, ActionRevision: 1, CompanyRef: "acme-in", DeliveryRef: "wh-chennai", SupplierRef: supplier,
 		SupplierRevision: rev, Lines: []connector.Line{{ItemRef: "chair-ergo", Quantity: 10, UnitPriceMinor: 600000}},
-		AmountMinor: 6000000, Currency: "INR", PermitDigest: "sha256:" + op}
+		AmountMinor: 6000000, Currency: "INR", PermitDigest: "sha256:" + op, DeliveryRevision: &[]int64{deliveryRev}[0]}
 }
 
 // summary is what must agree between the stub and the real destination.
@@ -113,6 +120,7 @@ func TestSameOutcomesAsTheStub(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			s := stub.New()
 			s.SetSupplierRevision(supplier, rev)
+			s.SetDeliveryRevision("wh-chennai", deliveryRev)
 			op := opRef("parity-" + hex.EncodeToString([]byte(name))[:12])
 			for i, st := range steps {
 				want, got := st(ctx, s, op, rev), st(ctx, real, op, rev)
@@ -285,5 +293,14 @@ func TestV14UnitTaxTotalAndDeliveryRevision(t *testing.T) {
 	b.DeliveryRevision = &stale
 	if s, _ := c.Execute(ctx, b); s.Outcome != connector.RefusedSupplierStale || s.Reason != connector.ReasonDeliveryChanged || !s.ProvesNoOrder() {
 		t.Fatalf("stale delivery address: %+v", s)
+	}
+	// R1 decision 2: the delivery check is mandatory in Odoo as well.
+	m := action(opRef("v14-no-delivery-rev"), rev)
+	m.DeliveryRevision = nil
+	if r, _ := c.Readiness(ctx, m); r.Outcome != connector.NotReady || r.Reason != connector.ReasonDeliveryChanged {
+		t.Fatalf("readiness without a delivery revision: %+v", r)
+	}
+	if s, _ := c.Execute(ctx, m); s.Outcome != connector.RefusedSupplierStale || s.Reason != connector.ReasonDeliveryChanged || !s.ProvesNoOrder() {
+		t.Fatalf("no delivery revision: %+v", s)
 	}
 }
