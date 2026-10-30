@@ -16,17 +16,28 @@ import (
 //	  STEELMATTER_ODOO_URL                 base URL (plain http only for a loopback host)
 //	  STEELMATTER_ODOO_DB                  Odoo database name
 //	  STEELMATTER_ODOO_EXECUTOR_LOGIN      default sm_executor
-//	  STEELMATTER_ODOO_EXECUTOR_PASSWORD   required
+//	  STEELMATTER_ODOO_EXECUTOR_PASSWORD   required; refused when observeOnly
 //	  STEELMATTER_ODOO_OBSERVER_LOGIN      default sm_observer
 //	  STEELMATTER_ODOO_OBSERVER_PASSWORD   required; a different login from the executor
 //	  STEELMATTER_ODOO_TIMEOUT_SECONDS     per call, default 30
 //
+// With observeOnly (STEELMATTER_OBSERVE_ONLY=true, C-07) the connector is
+// read-only: it holds only the observer login, and serve refuses to start
+// if any executor setting is present, so no Odoo write credential is loaded.
+//
 // The stub connector is for tests only and is never offered here.
-func connectorFromEnv(getenv func(string) string) (connector.Connector, string, error) {
+func connectorFromEnv(getenv func(string) string, observeOnly bool) (connector.Connector, string, error) {
 	switch kind := getenv("STEELMATTER_CONNECTOR"); kind {
 	case "", "none":
 		return nil, "none", nil
 	case "odoo":
+		if observeOnly {
+			for _, name := range []string{"STEELMATTER_ODOO_EXECUTOR_LOGIN", "STEELMATTER_ODOO_EXECUTOR_PASSWORD"} {
+				if getenv(name) != "" {
+					return nil, "", fmt.Errorf("%s must not be set with STEELMATTER_OBSERVE_ONLY=true: observe-only never writes to Odoo", name)
+				}
+			}
+		}
 		cfg := odoo.Config{
 			URL:      getenv("STEELMATTER_ODOO_URL"),
 			Database: getenv("STEELMATTER_ODOO_DB"),
@@ -36,14 +47,20 @@ func connectorFromEnv(getenv func(string) string) (connector.Connector, string, 
 				Password: getenv("STEELMATTER_ODOO_OBSERVER_PASSWORD")},
 			Timeout:  30 * time.Second,
 			Instance: "odoo",
+			ReadOnly: observeOnly,
 		}
-		for name, v := range map[string]string{"STEELMATTER_ODOO_URL": cfg.URL, "STEELMATTER_ODOO_DB": cfg.Database,
-			"STEELMATTER_ODOO_EXECUTOR_PASSWORD": cfg.Executor.Password, "STEELMATTER_ODOO_OBSERVER_PASSWORD": cfg.Observer.Password} {
+		required := map[string]string{"STEELMATTER_ODOO_URL": cfg.URL, "STEELMATTER_ODOO_DB": cfg.Database,
+			"STEELMATTER_ODOO_EXECUTOR_PASSWORD": cfg.Executor.Password, "STEELMATTER_ODOO_OBSERVER_PASSWORD": cfg.Observer.Password}
+		if observeOnly {
+			cfg.Executor = odoo.Credentials{}
+			delete(required, "STEELMATTER_ODOO_EXECUTOR_PASSWORD")
+		}
+		for name, v := range required {
 			if v == "" {
 				return nil, "", fmt.Errorf("%s is required with STEELMATTER_CONNECTOR=odoo", name)
 			}
 		}
-		if cfg.Executor.Login == cfg.Observer.Login {
+		if !observeOnly && cfg.Executor.Login == cfg.Observer.Login {
 			return nil, "", fmt.Errorf("the Odoo executor and observer must be different logins")
 		}
 		if v := getenv("STEELMATTER_ODOO_TIMEOUT_SECONDS"); v != "" {

@@ -51,6 +51,10 @@ type Config struct {
 	Database string
 	Executor Credentials
 	Observer Credentials
+	// ReadOnly builds an observe-only connector (C-07, Aakhil 30 Oct 2026):
+	// it holds no executor credentials, and Execute, Fence and Readiness are
+	// refused before anything is sent to Odoo. Executor must be empty.
+	ReadOnly bool
 	// Timeout bounds each call. A call that times out after it was sent is
 	// UNKNOWN, never "not sent". Default 30s.
 	Timeout time.Duration
@@ -65,7 +69,12 @@ const (
 	ReasonMalformedReply   = "MALFORMED_REPLY"
 	ReasonDestinationError = "DESTINATION_ERROR"
 	ReasonMissingFacts     = "MISSING_DESTINATION_FACTS"
+	ReasonReadOnly         = "OBSERVE_ONLY"
 )
+
+// ErrReadOnly is returned by Execute and Fence on a read-only connector.
+// Nothing was sent to Odoo.
+var ErrReadOnly = errors.New("odoo: read-only connector: no write is sent to Odoo")
 
 // SupportedSeries is the Odoo release series this connector is built and
 // tested against (D7: Odoo 18 self-hosted, proposed).
@@ -94,6 +103,8 @@ type Connector struct {
 	client   *http.Client
 	nextID   atomic.Int64
 
+	readOnly bool
+
 	mu    sync.Mutex
 	creds [2]Credentials
 	uids  [2]int64 // 0 = not logged in yet
@@ -113,13 +124,11 @@ func New(cfg Config) (*Connector, error) {
 	if cfg.Database == "" {
 		return nil, errors.New("odoo: Database is required")
 	}
-	if cfg.Executor.Login == "" || cfg.Observer.Login == "" || cfg.Executor.Password == "" || cfg.Observer.Password == "" {
-		return nil, errors.New("odoo: executor and observer credentials are required")
-	}
-	if cfg.Executor.Login == cfg.Observer.Login {
-		return nil, errors.New("odoo: the executor and observer must be separate identities")
+	if err := checkCredentials(cfg.ReadOnly, cfg.Executor, cfg.Observer); err != nil {
+		return nil, err
 	}
 	c := &Connector{
+		readOnly: cfg.ReadOnly,
 		endpoint: strings.TrimRight(u.String(), "/") + "/jsonrpc",
 		db:       cfg.Database,
 		timeout:  cfg.Timeout,
@@ -154,11 +163,33 @@ func loopback(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-// SetCredentials rotates both identities. Calls already sent keep the old
+// checkCredentials requires separate executor and observer logins, or, for
+// a read-only connector, an observer and no executor at all.
+func checkCredentials(readOnly bool, exec, obs Credentials) error {
+	if obs.Login == "" || obs.Password == "" {
+		return errors.New("odoo: observer credentials are required")
+	}
+	if readOnly {
+		if exec != (Credentials{}) {
+			return errors.New("odoo: a read-only connector takes no executor credentials")
+		}
+		return nil
+	}
+	if exec.Login == "" || exec.Password == "" {
+		return errors.New("odoo: executor and observer credentials are required")
+	}
+	if exec.Login == obs.Login {
+		return errors.New("odoo: the executor and observer must be separate identities")
+	}
+	return nil
+}
+
+// SetCredentials rotates both identities (on a read-only connector, the
+// observer only; exec must be empty). Calls already sent keep the old
 // credentials; later calls log in again with the new ones.
 func (c *Connector) SetCredentials(exec, obs Credentials) error {
-	if exec.Login == "" || obs.Login == "" || exec.Password == "" || obs.Password == "" || exec.Login == obs.Login {
-		return errors.New("odoo: separate executor and observer credentials are required")
+	if err := checkCredentials(c.readOnly, exec, obs); err != nil {
+		return err
 	}
 	c.mu.Lock()
 	c.creds, c.uids = [2]Credentials{exec, obs}, [2]int64{}
@@ -271,6 +302,9 @@ func transportClass(err error) string {
 
 // login returns the identity's uid, logging in once per credential set.
 func (c *Connector) login(ctx context.Context, who identity) (int64, Credentials, error) {
+	if c.readOnly && who == executor {
+		return 0, Credentials{}, &callError{ReasonReadOnly, "executor calls are disabled"}
+	}
 	c.mu.Lock()
 	uid, cr := c.uids[who], c.creds[who]
 	c.mu.Unlock()
@@ -357,6 +391,9 @@ func (c *Connector) Execute(ctx context.Context, a connector.Action) (connector.
 	if a.OpRef == "" {
 		return connector.Result{}, errors.New("odoo: Execute needs an op_ref")
 	}
+	if c.readOnly {
+		return connector.Result{}, ErrReadOnly
+	}
 	r, err := c.api(ctx, executor, "sm_create", a)
 	return c.finish(r, err, a.OpRef, "execute", executor, connector.Unknown), nil
 }
@@ -375,13 +412,17 @@ func (c *Connector) Fence(ctx context.Context, opRef string, expectedMinSeq int6
 	if opRef == "" {
 		return connector.Result{}, errors.New("odoo: Fence needs an op_ref")
 	}
+	if c.readOnly {
+		return connector.Result{}, ErrReadOnly
+	}
 	r, err := c.api(ctx, executor, "sm_fence", opRef, expectedMinSeq)
 	return c.finish(r, err, opRef, "fence", executor, connector.Unknown), nil
 }
 
 // Readiness implements connector.Connector. Advisory only: it checks the
 // Odoo version, the mappings, the supplier revision and the anchor, but
-// READY never proves anything about the later write.
+// READY never proves anything about the later write. A read-only connector
+// answers NOT_READY OBSERVE_ONLY without contacting Odoo.
 func (c *Connector) Readiness(ctx context.Context, a connector.Action) (connector.Result, error) {
 	now := time.Now().UTC()
 	notReady := func(reason string) (connector.Result, error) {
