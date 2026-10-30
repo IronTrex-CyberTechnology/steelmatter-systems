@@ -7242,6 +7242,11 @@
         {
           "phase": "integration",
           "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestRT0EESEC01DispatchedConflictStopsForReview"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestR1SingleBackendPerDeployment"
         },
         {

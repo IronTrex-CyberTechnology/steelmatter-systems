@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/engine"
@@ -114,6 +115,16 @@ func TestRT0EESEC01RecreatedInstructionIsSuperseded(t *testing.T) {
 	if n := e.count(`SELECT count(*) FROM steelmatter.outbox WHERE event_type = 'instruction.superseded_by_recovery'`); n != 1 {
 		t.Fatalf("superseded events %d", n)
 	}
+	// Recovery grants nothing new: neither instruction can be evaluated
+	// again, and no further order is created.
+	for _, id := range []string{again["instruction_id"].(string), p.instruction} {
+		if st, body := e.evaluate("agent-a", id, 1); st == 201 {
+			t.Fatalf("permit issued after recovery for %s: %v", id, body)
+		}
+	}
+	if a.s.Creates() != 1 {
+		t.Fatalf("creates %d", a.s.Creates())
+	}
 }
 
 // SEC-01 residual: the issuer amended the restored instruction before the
@@ -172,5 +183,76 @@ func TestRT0EESEC02BackupBeforeAmendmentIsReconciled(t *testing.T) {
 	requireBuckets(t, "recovered", e.buckets(m), buckets{Available: limit - fiveLakh, Committed: fiveLakh})
 	if n := e.count(`SELECT count(*) FROM steelmatter.issuances WHERE instruction_id = '` + id + `' AND action_revision = 1 AND status = 'RELEASED' AND release_reason = 'RECOVERED_UNUSED'`); n != 1 {
 		t.Fatal("revision 1 reservation not released")
+	}
+}
+
+// Operator review (Aakhil, 30 Oct 2026): an issuer change that was
+// dispatched, spent or has an uncertain outcome is never superseded.
+// Recovery stops with CONFLICT_SPENT, keeps the gate closed, leaves the
+// conflicting operation and its amount as they are and sends nothing.
+func TestRT0EESEC01DispatchedConflictStopsForReview(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		settle bool
+	}{{"committed", true}, {"outcome uncertain", false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newR1Env(t)
+			a := withAnchor(t, e)
+			m := e.mandate(mandateOpts{})
+			e.assign(m, "agent-a")
+			snap := e.snapshotEngine()
+			p := e.permittedFor(m, "po-request-001")
+			mustDispatch(t, e, p)
+			requireExecution(t, "settle", e.settle(p.operation, a.s), engine.DispatchCommitted)
+			e.restoreEngine(snap)
+			// Before the restore is detected, the issuer re-creates the
+			// source record on another budget and it is dispatched.
+			m2 := e.mandate(mandateOpts{})
+			e.assign(m2, "agent-a")
+			q := e.permittedFor(m2, "po-request-001")
+			mustDispatch(t, e, q)
+			if tc.settle {
+				requireExecution(t, "conflict settle", e.settle(q.operation, a.s), engine.DispatchCommitted)
+			}
+			creates := a.s.Creates()
+			if r := a.check(); !r.WritesDisabled {
+				t.Fatal("restore not detected")
+			}
+			rec := a.reconcile()
+			found := false
+			for _, pr := range rec.Problems {
+				found = found || strings.Contains(pr, "CONFLICT_SPENT")
+			}
+			if !found || len(rec.Recreated) != 0 {
+				t.Fatalf("reconcile %+v", rec)
+			}
+			if g := a.gate(); g.Passed {
+				t.Fatalf("gate passed: %+v", g)
+			}
+			if tc.settle {
+				requireBuckets(t, "conflict budget", e.buckets(m2), r1Committed)
+			} else {
+				// Never sent: either still held as unresolved, or proven
+				// never created by lookup and fence (BLOCK) and released.
+				d, err := e.eng.GetDispatch(context.Background(), tenant, q.operation)
+				if err != nil {
+					t.Fatal(err)
+				}
+				b := e.buckets(m2)
+				held := d.Execution == engine.DispatchUnresolved || d.Execution == engine.DispatchPending
+				if !(held && b == r1Unresolved) && !(d.Execution == engine.DispatchFenced && b == r1Released) {
+					t.Fatalf("conflict %s, budget %+v", d.Execution, b)
+				}
+			}
+			if a.s.Creates() != creates {
+				t.Fatalf("recovery sent a create: %d -> %d", creates, a.s.Creates())
+			}
+			if n := e.count(`SELECT count(*) FROM steelmatter.instructions WHERE superseded_by IS NOT NULL`); n != 0 {
+				t.Fatal("a dispatched instruction was superseded")
+			}
+			if n := e.count(`SELECT count(*) FROM steelmatter.dispatches WHERE op_ref = '` + p.operation + `'`); n != 0 {
+				t.Fatal("the anchored operation was rebuilt over the conflict")
+			}
+		})
 	}
 }

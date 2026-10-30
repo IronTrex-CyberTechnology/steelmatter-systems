@@ -186,6 +186,22 @@ func (c *Client) RecordsFor(ctx context.Context, tenant, opRef string) ([]Record
 		WHERE tenant_id = $1 AND op_ref = $2 ORDER BY seq`, tenant, opRef)
 }
 
+// IntentOpsForInstruction returns the op_refs of every DISPATCH_INTENT for
+// one instruction (recovery uses it to prove an instruction was never
+// dispatched before superseding it).
+func (c *Client) IntentOpsForInstruction(ctx context.Context, tenant, instructionID string) ([]string, error) {
+	recs, err := c.query(ctx, `SELECT seq, record_type, tenant_id, op_ref, payload, recorded_at FROM anchor.engine_records
+		WHERE tenant_id = $1 AND record_type = 'DISPATCH_INTENT' AND payload->>'instruction_id' = $2 ORDER BY seq`, tenant, instructionID)
+	if err != nil {
+		return nil, err
+	}
+	ops := make([]string, 0, len(recs))
+	for _, r := range recs {
+		ops = append(ops, r.OpRef)
+	}
+	return ops, nil
+}
+
 // RecordsForMandate reads the recovery history of one budget. The caller
 // holds that mandate's engine row lock, also used by dispatch and settlement,
 // so an anchor append cannot be mistaken for an uncommitted engine write.

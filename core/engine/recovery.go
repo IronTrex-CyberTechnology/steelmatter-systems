@@ -1205,12 +1205,16 @@ func (s instructionSource) apply(ir *anchor.IntentRecord) {
 }
 
 // releaseUnspent prepares instruction instID for recovery to replace its
-// live state with the anchored action: every open (UNSIGNED or ACTIVE)
+// live state with the anchored action (Aakhil, 30 Oct 2026: automatic only
+// when the change is proven never dispatched or executed): every open (UNSIGNED or ACTIVE)
 // permit other than the anchored one is released with RECOVERED_UNUSED and
 // its amount returned to available, and every CURRENT revision other than
 // keepRevision (0: all) is superseded. It refuses, writing nothing, if the
-// instruction ever spent outside the anchored permit: a dispatch, a
-// consumed permit, a committed revision or a synthetic operation.
+// instruction ever spent or may have spent outside the anchored permit: a
+// dispatch (any status, including unresolved or held), a consumed permit, a
+// committed revision, a synthetic operation, or another dispatch intent in
+// the recovery anchor. A refusal leaves every held or committed amount as it
+// is and keeps the resume gate closed for operator review.
 func (e *Engine) releaseUnspent(ctx context.Context, tx pgx.Tx, ir anchor.IntentRecord, instID string, keepRevision int64) error {
 	var spent string
 	err := tx.QueryRow(ctx, `SELECT CASE
@@ -1222,8 +1226,24 @@ func (e *Engine) releaseUnspent(ctx context.Context, tx pgx.Tx, ir anchor.Intent
 	if err != nil {
 		return err
 	}
+	if spent == "" {
+		// The anchor is the proof of "never dispatched": any other dispatch
+		// intent for this instruction means an order may exist (Aakhil,
+		// 30 Oct 2026: dispatched, spent or uncertain stops for review).
+		ops, aerr := e.Anchor.IntentOpsForInstruction(ctx, ir.Tenant, instID)
+		if aerr != nil {
+			return dependency("recovery anchor", aerr)
+		}
+		for _, op := range ops {
+			if op != ir.OpRef {
+				spent = "a dispatch intent in the recovery anchor (" + op + ")"
+				break
+			}
+		}
+	}
 	if spent != "" {
-		return fault("REVISION_STALE", "REBUILD_REFUSED CONFLICT_SPENT: operation %s: instruction %s, made or changed after the restore, already has %s; an operator must review it",
+		return fault("REVISION_STALE", "REBUILD_REFUSED CONFLICT_SPENT: operation %s: instruction %s, made or changed after the restore, already has %s; "+
+			"nothing was superseded, released or sent; an operator must review it",
 			ir.OpRef, instID, spent)
 	}
 	rows, err := tx.Query(ctx, `SELECT permit_id, mandate_id, amount_minor FROM steelmatter.issuances
