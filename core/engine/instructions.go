@@ -47,7 +47,12 @@ type InstructionView struct {
 	ActionRevision int64           `json:"action_revision"`
 	Action         json.RawMessage `json:"action"`
 	ActionDigest   string          `json:"action_digest"`
-	Status         string          `json:"status"`
+	// Status is OPEN, COMMITTED, or SUPERSEDED: recovery replaced this
+	// instruction with SupersededBy, the one the recovery anchor shows was
+	// dispatched (NEW-RTFC79 API finding). A superseded instruction keeps its
+	// history but can no longer be amended, evaluated or dispatched.
+	Status       string `json:"status"`
+	SupersededBy string `json:"superseded_by,omitempty"`
 }
 
 // AmendmentRequest is the issuer's revision request.
@@ -67,6 +72,12 @@ type AmendmentView struct {
 	ActionDigest         string          `json:"action_digest"`
 	InvalidatedPermitIDs []string        `json:"invalidated_permit_ids"`
 	ReleasedMinor        int64           `json:"released_minor"`
+	// Status is CURRENT while ActionRevision is the instruction's live
+	// revision, SUPERSEDED once a later amendment replaced it. Effective is
+	// Status == CURRENT. CurrentRevision is the live revision now.
+	Status          string `json:"status"`
+	Effective       bool   `json:"effective"`
+	CurrentRevision int64  `json:"current_action_revision"`
 }
 
 type mandateRow struct {
@@ -284,25 +295,88 @@ func loadInstruction(ctx context.Context, q pgx.Tx, tenant, id string) (*Instruc
 	var v InstructionView
 	var committed bool
 	err := q.QueryRow(ctx, `SELECT i.instruction_id, i.source_system, i.source_record_id, i.mandate_id, i.actor_id, i.current_revision,
-		a.action_canonical, a.action_digest, a.status = 'COMMITTED'
+		a.action_canonical, a.action_digest, a.status = 'COMMITTED', COALESCE(i.superseded_by, '')
 		FROM steelmatter.instructions i JOIN steelmatter.action_revisions a
 		  ON a.tenant_id = i.tenant_id AND a.instruction_id = i.instruction_id AND a.action_revision = i.current_revision
 		WHERE i.tenant_id = $1 AND i.instruction_id = $2`, tenant, id).
-		Scan(&v.InstructionID, &v.SourceSystem, &v.SourceRecordID, &v.MandateID, &v.ActorID, &v.ActionRevision, &v.Action, &v.ActionDigest, &committed)
+		Scan(&v.InstructionID, &v.SourceSystem, &v.SourceRecordID, &v.MandateID, &v.ActorID, &v.ActionRevision, &v.Action, &v.ActionDigest, &committed, &v.SupersededBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fault("NOT_FOUND", "instruction not found")
 	}
 	v.Status = "OPEN"
-	if committed {
+	switch {
+	case v.SupersededBy != "":
+		v.Status = "SUPERSEDED"
+	case committed:
 		v.Status = "COMMITTED"
 	}
 	return &v, err
+}
+
+// GetInstruction returns an instruction with its live status (OPEN,
+// COMMITTED or SUPERSEDED). The trusted issuer of its source system and the
+// assigned actor may read it; anyone else gets the same answer as for an
+// absent instruction (no existence oracle).
+func (e *Engine) GetInstruction(ctx context.Context, p auth.Principal, id string) (*InstructionView, error) {
+	if err := e.ServesTenant(p.Tenant); err != nil {
+		return nil, err
+	}
+	if p.Kind != auth.Issuer && p.Kind != auth.Actor {
+		return nil, fault("FORBIDDEN", "only the trusted issuer or the assigned actor reads an instruction")
+	}
+	var source, actor string
+	err := e.Pool.QueryRow(ctx, `SELECT source_system, actor_id FROM steelmatter.instructions WHERE tenant_id = $1 AND instruction_id = $2`,
+		p.Tenant, id).Scan(&source, &actor)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, fault("NOT_FOUND", "instruction not found")
+	}
+	if err != nil {
+		return nil, unavailable(err)
+	}
+	allowed := p.Kind == auth.Actor && p.ID == actor
+	if !allowed && p.Kind == auth.Issuer {
+		if err := e.Pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM steelmatter.issuer_entitlements
+			WHERE tenant_id = $1 AND issuer_principal = $2 AND source_system = $3)`, p.Tenant, p.ID, source).Scan(&allowed); err != nil {
+			return nil, unavailable(err)
+		}
+	}
+	if !allowed {
+		return nil, fault("NOT_FOUND", "instruction not found")
+	}
+	tx, err := e.Pool.Begin(ctx)
+	if err != nil {
+		return nil, unavailable(err)
+	}
+	defer tx.Rollback(ctx)
+	return loadInstruction(ctx, tx, p.Tenant, id)
+}
+
+// requireIssuer is the first check of every issuer operation: the caller must
+// be an issuer entitled to the source system. It runs before the recovery
+// check and before any call to the destination, so a caller who is not a
+// trusted issuer always gets 403, whatever the recovery state is (NEW-RTFC79).
+func (e *Engine) requireIssuer(ctx context.Context, p auth.Principal, sourceSystem, what string) error {
+	if p.Kind != auth.Issuer {
+		return fault("FORBIDDEN", "%s", what)
+	}
+	var ok bool
+	if err := e.Pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM steelmatter.issuer_entitlements
+		WHERE tenant_id = $1 AND issuer_principal = $2 AND source_system = $3)`, p.Tenant, p.ID, sourceSystem).Scan(&ok); err != nil {
+		return unavailable(err)
+	}
+	if !ok {
+		return fault("FORBIDDEN", "%s", what)
+	}
+	return nil
 }
 
 // CreateInstruction creates a trusted instruction (201), returns the existing
 // one for an identical request (200, at its current revision), or conflicts
 // on a changed request for the same source record (409 SOURCE_CONFLICT).
 func (e *Engine) CreateInstruction(ctx context.Context, p auth.Principal, r InstructionRequest) (*InstructionView, bool, error) {
+	if err := e.requireIssuer(ctx, p, r.SourceSystem, "principal is not a trusted issuer for this source system"); err != nil {
+		return nil, false, err
+	}
 	norm, err := normalisedProposal(r.Proposed)
 	if err != nil {
 		return nil, false, err
@@ -347,6 +421,12 @@ func (e *Engine) CreateInstruction(ctx context.Context, p auth.Principal, r Inst
 				return err
 			}
 			if !errors.Is(err, pgx.ErrNoRows) {
+				return err
+			}
+			// NEW-RTFC79-01: a source record the anchor shows was dispatched
+			// cannot get a new instruction (under any mandate) while the engine
+			// database lacks it.
+			if err := e.guardSourceHistory(ctx, tx, p.Tenant, r.SourceSystem, r.SourceRecordID, "", ""); err != nil {
 				return err
 			}
 			if err := m.usable(); err != nil {
@@ -400,29 +480,47 @@ var errSourceRace = &Fault{Code: "SOURCE_RACE", Message: "concurrent creation of
 // AmendInstruction appends an uncommitted revision under the global locks
 // (201); an exact amendment_id retry returns the recorded result (200).
 func (e *Engine) AmendInstruction(ctx context.Context, p auth.Principal, instructionID string, r AmendmentRequest) (*AmendmentView, bool, error) {
+	// Role first, regardless of recovery or the destination (NEW-RTFC79).
+	if p.Kind != auth.Issuer {
+		return nil, false, fault("FORBIDDEN", "only a trusted issuer can amend an instruction")
+	}
+	var preSource string
+	switch err := e.Pool.QueryRow(ctx, `SELECT source_system FROM steelmatter.instructions WHERE tenant_id = $1 AND instruction_id = $2`,
+		p.Tenant, instructionID).Scan(&preSource); {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, false, fault("NOT_FOUND", "instruction not found")
+	case err != nil:
+		return nil, false, unavailable(err)
+	}
+	var entitled bool
+	if err := e.Pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM steelmatter.issuer_entitlements
+		WHERE tenant_id = $1 AND issuer_principal = $2 AND source_system = $3)`, p.Tenant, p.ID, preSource).Scan(&entitled); err != nil {
+		return nil, false, unavailable(err)
+	}
+	if !entitled {
+		// Same response as an absent instruction: no existence oracle (F-23).
+		return nil, false, fault("NOT_FOUND", "instruction not found")
+	}
 	norm, err := normalisedProposal(r.Proposed)
 	if err != nil {
 		return nil, false, err
 	}
 	digest := requestDigest(map[string]any{"amendment_id": r.AmendmentID, "expected_action_revision": r.ExpectedRevision, "proposed_action": norm})
+	if err := e.requireNoRecovery(ctx); err != nil {
+		return nil, false, err
+	}
 	if err := e.syncSupplierFor(ctx, p, r.Proposed.SupplierID); err != nil {
 		return nil, false, err
 	}
 	if norm.DeliveryRevision, err = e.deliveryRevisionFor(ctx, p, r.Proposed.DeliveryID); err != nil {
 		return nil, false, err
 	}
-	if p.Kind != auth.Issuer {
-		return nil, false, fault("FORBIDDEN", "only a trusted issuer can amend an instruction")
-	}
-	if err := e.requireNoRecovery(ctx); err != nil {
-		return nil, false, err
-	}
 	var view *AmendmentView
 	var created bool
 	err = e.inTx(ctx, "", func(tx pgx.Tx) error {
-		var mandateID, sourceSystem, actor string
-		err := tx.QueryRow(ctx, `SELECT mandate_id, source_system, actor_id FROM steelmatter.instructions WHERE tenant_id = $1 AND instruction_id = $2`,
-			p.Tenant, instructionID).Scan(&mandateID, &sourceSystem, &actor)
+		var mandateID, sourceSystem, sourceRecord, actor string
+		err := tx.QueryRow(ctx, `SELECT mandate_id, source_system, source_record_id, actor_id FROM steelmatter.instructions WHERE tenant_id = $1 AND instruction_id = $2`,
+			p.Tenant, instructionID).Scan(&mandateID, &sourceSystem, &sourceRecord, &actor)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fault("NOT_FOUND", "instruction not found")
 		}
@@ -477,7 +575,24 @@ func (e *Engine) AmendInstruction(ctx context.Context, p auth.Principal, instruc
 			if recordedDigest != digest {
 				return fault("AMENDMENT_ID_CONFLICT", "amendment_id was used with a different request")
 			}
+			// NEW-RTFC79 API finding: an amendment whose revision recovery
+			// has since replaced by an older, anchored one is no longer
+			// effective. Answering 200 would let the caller carry on as if it
+			// were live, so it is a 409 naming the live revision. A revision
+			// that a later amendment replaced is still a valid recorded result:
+			// 200, with status SUPERSEDED and effective false.
+			if current < recordedResult {
+				return fault("REVISION_STALE", "AMENDMENT_SUPERSEDED: revision %d of this instruction is no longer effective; recovery restored revision %d "+
+					"(the one the recovery anchor shows was dispatched); amend again with a new amendment_id from revision %d", recordedResult, current, current)
+			}
 			view, err = loadAmendment(ctx, tx, p.Tenant, instructionID, r.AmendmentID, recordedResult)
+			if err == nil {
+				view.CurrentRevision = current
+				view.Status, view.Effective = "CURRENT", current == recordedResult
+				if !view.Effective {
+					view.Status = "SUPERSEDED"
+				}
+			}
 			return err
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
@@ -485,6 +600,11 @@ func (e *Engine) AmendInstruction(ctx context.Context, p auth.Principal, instruc
 		}
 		if aStatus == "COMMITTED" || iStatus == "CONSUMED" {
 			return fault("ALREADY_COMMITTED", "instruction has a committed operation")
+		}
+		// NEW-RTFC79-01/02: refuse a change the anchor's dispatch history
+		// contradicts, before any revision number is used.
+		if err := e.guardSourceHistory(ctx, tx, p.Tenant, sourceSystem, sourceRecord, instructionID, ""); err != nil {
+			return err
 		}
 		if current != r.ExpectedRevision {
 			return fault("REVISION_STALE", "expected_action_revision %d is not the current revision %d", r.ExpectedRevision, current)
@@ -542,7 +662,8 @@ func (e *Engine) AmendInstruction(ctx context.Context, p auth.Principal, instruc
 			invalidated = []string{}
 		}
 		view = &AmendmentView{AmendmentID: r.AmendmentID, InstructionID: instructionID, PreviousRevision: current, ActionRevision: next,
-			Action: canonical, ActionDigest: adigest, InvalidatedPermitIDs: invalidated, ReleasedMinor: released}
+			Action: canonical, ActionDigest: adigest, InvalidatedPermitIDs: invalidated, ReleasedMinor: released,
+			Status: "CURRENT", Effective: true, CurrentRevision: next}
 		return nil
 	})
 	if err != nil {

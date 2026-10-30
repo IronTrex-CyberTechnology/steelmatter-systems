@@ -4,7 +4,7 @@ import type {
   AdapterAssurance, AmendmentRequest, AmendmentResponse, Denied, ErrorCode, EvaluateRequest, EvidenceBundle,
   Identifier, InstructionCreateRequest, InstructionResponse, MandateCreateRequest, MandateResponse, OperationRequest,
   OperationResult, OperationStatus, PermitIssued, ReconcileResult, RevokeResponse, SimulationResult,
-  AnchorRepairRequest, AnchorRepairResult, ApprovalRequest, ApprovalResult, DispatchResult, FindingRequest, FindingResult, GateReport, ReconcileReport,
+  AdoptConflictRequest, AnchorRepairRequest, AnchorRepairResult, ConflictResolution, ApprovalRequest, ApprovalResult, DispatchResult, FindingRequest, FindingResult, GateReport, ReconcileReport,
   RepairRequest, RepairResult, RestoreReport, ReviewRequest, WriteState,
 } from './types.ts';
 
@@ -91,6 +91,7 @@ const E_WRITE_404 = [400, 401, 403, 404, 429, 500, 503] as const; // revokeManda
 const E_WRITE_409 = [400, 401, 403, 404, 409, 429, 500, 503] as const; // evaluateAction, simulateAction
 const E_WRITE_409_422 = [400, 401, 403, 404, 409, 422, 429, 500, 503] as const; // createInstruction, amendInstruction, admitOperation
 const E_READ = [401, 403, 404, 429, 500, 503] as const; // getOperation, getEvidence, getAdapterAssurance, getDispatch
+const E_READ_INSTRUCTION = [401, 403, 404, 429, 500, 503] as const; // getInstruction
 const E_READ_STATE = [401, 403, 429, 500, 503] as const; // getWriteState
 const E_RECOVERY_CHECK = [400, 401, 403, 429, 500, 503] as const; // checkRestore
 const E_RECOVERY = [400, 401, 403, 429, 500, 503] as const; // reconcileRestore, resumeWrites
@@ -211,6 +212,14 @@ export class SteelmatterClient {
   }
 
   /**
+   * The trusted issuer or the assigned actor reads an instruction. status is
+   * OPEN, COMMITTED or SUPERSEDED (recovery replaced it with superseded_by).
+   */
+  async getInstruction(instructionId: Identifier, opts?: RequestOptions): Promise<ApiResponse<InstructionResponse>> {
+    return this.#call({ method: 'GET', path: `/v1/instructions/${segment(instructionId, 'instructionId')}`, expect: [200], errors: E_READ_INSTRUCTION, idempotency: 'idempotent' }, opts);
+  }
+
+  /**
    * Authorised issuer appends a revision before commit (201). An exact
    * amendment_id retry returns the recorded result (200). Re-evaluation is
    * required afterwards; no capacity is reserved automatically.
@@ -292,6 +301,15 @@ export class SteelmatterClient {
   /** R1. Operator records a HELD finding. Never moves budget. Each call appends a record. */
   async recordHeldFinding(opRef: Identifier, body: FindingRequest, opts?: RequestOptions): Promise<ApiResponse<FindingResult>> {
     return this.#call({ method: 'POST', path: `/v1/dispatches/${segment(opRef, 'opRef')}/findings`, body, expect: [201], errors: E_WRITE_409, idempotency: 'rate-limit-only' }, opts);
+  }
+
+  /**
+   * R1. Operator resolves a CONFLICT_SPENT source-record conflict while writes are off: the anchored
+   * operation is recorded again with its amount held and a SOURCE_CONFLICT_ADOPTED finding is recorded
+   * for every operation of the source record. Creates and cancels no order; releases no amount.
+   */
+  async adoptAnchoredOperation(opRef: Identifier, body: AdoptConflictRequest, opts?: RequestOptions): Promise<ApiResponse<ConflictResolution>> {
+    return this.#call({ method: 'POST', path: `/v1/recovery/conflicts/${segment(opRef, 'opRef')}/adopt`, body, expect: [200], errors: E_WRITE_409, idempotency: 'idempotent' }, opts);
   }
 
   /** R1. Operator prepares repair evidence (COMMIT or RELEASE). Nothing moves yet. */

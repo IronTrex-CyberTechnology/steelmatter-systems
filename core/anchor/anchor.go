@@ -202,6 +202,38 @@ func (c *Client) IntentOpsForInstruction(ctx context.Context, tenant, instructio
 	return ops, nil
 }
 
+// IntentsForInstruction returns every DISPATCH_INTENT of one instruction.
+func (c *Client) IntentsForInstruction(ctx context.Context, tenant, instructionID string) ([]IntentRecord, error) {
+	return c.intents(ctx, `SELECT seq, record_type, tenant_id, op_ref, payload, recorded_at FROM anchor.engine_records
+		WHERE tenant_id = $1 AND record_type = 'DISPATCH_INTENT' AND payload->>'instruction_id' = $2 ORDER BY seq`, tenant, instructionID)
+}
+
+// IntentsForSource returns every DISPATCH_INTENT recorded for one trusted
+// source record, whatever instruction it was issued under (RTFC79-01). Intents
+// written before the source fields existed carry no source key and are not
+// found here; IntentsForInstruction still finds them by instruction.
+func (c *Client) IntentsForSource(ctx context.Context, tenant, sourceSystem, sourceRecordID string) ([]IntentRecord, error) {
+	return c.intents(ctx, `SELECT seq, record_type, tenant_id, op_ref, payload, recorded_at FROM anchor.engine_records
+		WHERE tenant_id = $1 AND record_type = 'DISPATCH_INTENT' AND payload->>'source_system' = $2 AND payload->>'source_record_id' = $3 ORDER BY seq`,
+		tenant, sourceSystem, sourceRecordID)
+}
+
+func (c *Client) intents(ctx context.Context, sql string, args ...any) ([]IntentRecord, error) {
+	recs, err := c.query(ctx, sql, args...)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]IntentRecord, 0, len(recs))
+	for _, r := range recs {
+		var ir IntentRecord
+		if err := json.Unmarshal(r.Payload, &ir); err != nil {
+			return nil, fmt.Errorf("anchor record %d: %w", r.Seq, err)
+		}
+		out = append(out, ir)
+	}
+	return out, nil
+}
+
 // RecordsForMandate reads the recovery history of one budget. The caller
 // holds that mandate's engine row lock, also used by dispatch and settlement,
 // so an anchor append cannot be mistaken for an uncommitted engine write.

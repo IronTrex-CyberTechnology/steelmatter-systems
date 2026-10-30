@@ -117,18 +117,56 @@ paths:
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/Internal' }
         '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/instructions/{instruction_id}:
+    get:
+      tags: [instructions]
+      operationId: getInstruction
+      summary: The trusted issuer or the assigned actor reads an instruction with its live status.
+      description: |
+        status is OPEN, COMMITTED, or SUPERSEDED. SUPERSEDED means recovery
+        replaced this instruction with superseded_by, the instruction the
+        recovery anchor shows was dispatched for the same source record. A
+        superseded instruction keeps its history but cannot be amended,
+        evaluated or dispatched (409 REVISION_STALE, INSTRUCTION_SUPERSEDED).
+        A principal kind that can never read instructions (owner, observer,
+        operator) gets 403; an issuer outside the source system or an actor
+        who is not assigned gets 404, as for an absent instruction.
+      x-steelmatter-principals: [issuer, actor]
+      parameters:
+        - $ref: '#/components/parameters/InstructionId'
+      responses:
+        '200':
+          description: The instruction at its current revision.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InstructionResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
   /v1/instructions/{instruction_id}/revisions:
     post:
       tags: [instructions]
       operationId: amendInstruction
       summary: Authorised issuer appends an uncommitted action revision.
       description: |
-        Exact retry of an amendment_id returns its recorded result with 200.
-        Changed reuse, outdated expected_action_revision or a committed
-        instruction return 409. A new revision has no reservation or permit;
-        the assigned actor must evaluate it again. 503 (retryable) while
-        recovery has writes off; 409 REVISION_STALE for an instruction that
-        recovery superseded with the anchored one.
+        Exact retry of an amendment_id returns its recorded result with 200,
+        marked status CURRENT (effective) or SUPERSEDED (a later amendment
+        replaced it; effective false). If recovery restored an older,
+        anchored revision, the retry is 409 REVISION_STALE (AMENDMENT_SUPERSEDED):
+        that revision is no longer effective; amend again with a new
+        amendment_id. Changed reuse, outdated expected_action_revision or a
+        committed instruction return 409. A new revision has no reservation or
+        permit; the assigned actor must evaluate it again. A caller who is not
+        an entitled issuer always gets 403 (404 for an instruction outside its
+        source systems), before any recovery state is considered. 503
+        (retryable) while recovery has writes off, or when the recovery anchor
+        shows a dispatch of this instruction that the engine database lacks
+        (RESTORE_SUSPECTED: writes are turned off and recovery must run);
+        409 REVISION_STALE for an instruction that recovery superseded with
+        the anchored one.
       x-steelmatter-principals: [issuer]
       parameters:
         - $ref: '#/components/parameters/InstructionId'
@@ -622,6 +660,47 @@ paths:
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/Internal' }
         '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/recovery/conflicts/{op_ref}/adopt:
+    post:
+      tags: [recovery]
+      operationId: adoptAnchoredOperation
+      summary: R1. Operator resolves a CONFLICT_SPENT source-record conflict by adopting the anchored operation. Writes must be off.
+      description: |
+        Used when reconciliation stopped with REBUILD_REFUSED CONFLICT_SPENT:
+        an instruction made after a restore for the same source record
+        already has a dispatch, so recovery did not supersede it. After the
+        two orders at the destination are reviewed and the business has decided
+        what to do with the duplicate, the operator adopts the anchored
+        operation. It is recorded again with its amount held (then settled by
+        lookup), the source record is given to the anchored instruction, every
+        row, order and amount of the other instruction is kept, and a
+        SOURCE_CONFLICT_ADOPTED finding is recorded in the anchor for every
+        operation of the source record. No order is created or cancelled and no
+        amount is released. Safe to repeat. The resume gate check
+        SOURCE_RECORDS_UNIQUE stays failed until every such operation has the
+        finding. Procedure: docs/r1-recovery-operations.md.
+      x-steelmatter-principals: [operator]
+      parameters:
+        - $ref: '#/components/parameters/OpRef'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdoptConflictRequest' }
+      responses:
+        '200':
+          description: Conflict adopted; operations and findings.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConflictResolution' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
   /v1/recovery/write-state:
     get:
       tags: [recovery]
@@ -1065,7 +1144,13 @@ components:
         action_revision: { $ref: '#/components/schemas/PositiveInteger' }
         action: { $ref: '../schemas/action.schema.json' }
         action_digest: { $ref: '#/components/schemas/Digest' }
-        status: { type: string, enum: [OPEN, COMMITTED] }
+        status:
+          type: string
+          enum: [OPEN, COMMITTED, SUPERSEDED]
+          description: SUPERSEDED means recovery replaced this instruction with superseded_by.
+        superseded_by:
+          description: Present only when status is SUPERSEDED.
+          allOf: [{ $ref: '#/components/schemas/Identifier' }]
     AmendmentRequest:
       type: object
       additionalProperties: false
@@ -1077,7 +1162,7 @@ components:
     AmendmentResponse:
       type: object
       additionalProperties: false
-      required: [amendment_id, instruction_id, previous_action_revision, action_revision, action, action_digest, invalidated_permit_ids, released_minor]
+      required: [amendment_id, instruction_id, previous_action_revision, action_revision, action, action_digest, invalidated_permit_ids, released_minor, status, effective, current_action_revision]
       properties:
         amendment_id: { $ref: '#/components/schemas/Identifier' }
         instruction_id: { $ref: '#/components/schemas/Identifier' }
@@ -1089,6 +1174,12 @@ components:
           type: array
           items: { $ref: '#/components/schemas/Identifier' }
         released_minor: { $ref: '#/components/schemas/NonNegativeInteger' }
+        status:
+          type: string
+          enum: [CURRENT, SUPERSEDED]
+          description: CURRENT while action_revision is the live revision; SUPERSEDED once a later amendment replaced it.
+        effective: { type: boolean, description: True exactly when status is CURRENT. }
+        current_action_revision: { $ref: '#/components/schemas/PositiveInteger' }
 
     EvaluateRequest:
       type: object
@@ -1279,6 +1370,28 @@ components:
       properties:
         finding: { type: string, minLength: 1, maxLength: 2000 }
         evidence_ref: { type: string, minLength: 1, maxLength: 512 }
+    AdoptConflictRequest:
+      type: object
+      additionalProperties: false
+      required: [evidence_ref, note]
+      properties:
+        evidence_ref: { type: string, minLength: 1, maxLength: 512 }
+        note: { type: string, minLength: 1, maxLength: 2000 }
+    ConflictResolution:
+      type: object
+      additionalProperties: false
+      required: [op_ref, instruction_id, operations, rebuilt, finding_seqs]
+      properties:
+        op_ref: { $ref: '#/components/schemas/Identifier' }
+        instruction_id: { $ref: '#/components/schemas/Identifier' }
+        superseded_instruction: { $ref: '#/components/schemas/Identifier' }
+        operations:
+          type: array
+          items: { $ref: '#/components/schemas/Identifier' }
+        rebuilt: { type: boolean }
+        finding_seqs:
+          type: array
+          items: { $ref: '#/components/schemas/PositiveInteger' }
     FindingResult:
       type: object
       additionalProperties: false

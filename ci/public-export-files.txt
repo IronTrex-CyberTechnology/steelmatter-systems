@@ -194,6 +194,7 @@ docs/engine.md
 docs/evidence.md
 docs/quickstart.md
 docs/r1-decisions.md
+docs/r1-recovery-operations.md
 docs/r1-recovery-timeout.md
 docs/r1-release-hardening.md
 docs/r1-sdet-defect-fixes.md

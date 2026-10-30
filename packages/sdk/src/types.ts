@@ -221,7 +221,9 @@ export interface InstructionResponse {
   action_revision: number;
   action: ActionPayload;
   action_digest: Digest;
-  status: 'OPEN' | 'COMMITTED';
+  /** SUPERSEDED: recovery replaced this instruction with superseded_by. */
+  status: 'OPEN' | 'COMMITTED' | 'SUPERSEDED';
+  superseded_by?: Identifier;
 }
 
 export interface AmendmentRequest {
@@ -239,6 +241,10 @@ export interface AmendmentResponse {
   action_digest: Digest;
   invalidated_permit_ids: Identifier[];
   released_minor: number;
+  /** CURRENT while action_revision is live; SUPERSEDED once a later amendment replaced it. */
+  status: 'CURRENT' | 'SUPERSEDED';
+  effective: boolean;
+  current_action_revision: number;
 }
 
 // ---- actions ----
@@ -386,6 +392,20 @@ export interface DispatchResult {
 export interface FindingRequest {
   finding: string;
   evidence_ref: string;
+}
+
+export interface AdoptConflictRequest {
+  evidence_ref: string;
+  note: string;
+}
+
+export interface ConflictResolution {
+  op_ref: Identifier;
+  instruction_id: Identifier;
+  superseded_instruction?: Identifier;
+  operations: Identifier[];
+  rebuilt: boolean;
+  finding_seqs: number[];
 }
 
 export interface FindingResult {

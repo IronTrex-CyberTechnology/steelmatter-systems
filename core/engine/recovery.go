@@ -605,6 +605,15 @@ func (e *Engine) ReconcileRestore(ctx context.Context, c connector.Connector) (*
 // reservation if the permit is still reserved, otherwise from available.
 // It refuses rather than over-commit the mandate.
 func (e *Engine) recreateDispatch(ctx context.Context, ir anchor.IntentRecord) (bool, error) {
+	return e.recreateDispatchOpt(ctx, ir, false)
+}
+
+// recreateDispatchOpt is recreateDispatch; adoptSpent is set only by the
+// operator action AdoptAnchoredOperation: the instruction made after the
+// restore for the same source record may then have spent, and still gives the
+// source key to the anchored one (keeping all its rows, orders and held
+// amounts) instead of stopping reconciliation.
+func (e *Engine) recreateDispatchOpt(ctx context.Context, ir anchor.IntentRecord, adoptSpent bool) (bool, error) {
 	created := false
 	err := e.inTx(ctx, ir.OpRef, func(tx pgx.Tx) error {
 		created = false
@@ -629,7 +638,7 @@ func (e *Engine) recreateDispatch(ctx context.Context, ir anchor.IntentRecord) (
 			// R1-DEF-05: the engine was restored to before the permit (and
 			// possibly the instruction) existed. Rebuild them from the
 			// anchor's signed intent and hold the amount again.
-			if err := e.rebuildFromIntent(ctx, tx, ir, m); err != nil {
+			if err := e.rebuildFromIntent(ctx, tx, ir, m, adoptSpent); err != nil {
 				return err
 			}
 			status, amount = "ACTIVE", ir.AmountMinor
@@ -906,6 +915,11 @@ func (e *Engine) TryResume(ctx context.Context, c connector.Connector) (*GateRep
 		add("BUCKETS_RECONCILE", buckets)
 	}
 	add("ANCHOR_NOT_BEHIND", anchorBehind)
+	if conflicts, cerr := e.sourceConflictProblems(ctx); cerr != nil {
+		add("SOURCE_RECORDS_UNIQUE", []string{cerr.Error()})
+	} else {
+		add("SOURCE_RECORDS_UNIQUE", conflicts)
+	}
 	var other []string
 	for _, s := range v.signals() {
 		switch s.Code {
@@ -1034,7 +1048,7 @@ func (b budget) spent() bool { return b.has && time.Now().After(b.deadline) }
 // normal rebuild then consumes it and holds the amount as unresolved.
 // Anything that does not fit is refused with a named cause and nothing is
 // written.
-func (e *Engine) rebuildFromIntent(ctx context.Context, tx pgx.Tx, ir anchor.IntentRecord, m *mandateRow) error {
+func (e *Engine) rebuildFromIntent(ctx context.Context, tx pgx.Tx, ir anchor.IntentRecord, m *mandateRow, adoptSpent bool) error {
 	refuse := func(cause, format string, args ...any) error {
 		return fault("REVISION_STALE", "REBUILD_REFUSED %s: operation %s: "+format, append([]any{cause, ir.OpRef}, args...)...)
 	}
@@ -1086,7 +1100,8 @@ func (e *Engine) rebuildFromIntent(ctx context.Context, tx pgx.Tx, ir anchor.Int
 			AND superseded_by IS NULL FOR UPDATE`, ir.Tenant, ir.SourceSystem, ir.SourceRecordID).Scan(&other)
 		switch {
 		case err == nil:
-			if err := e.releaseUnspent(ctx, tx, ir, other, 0); err != nil {
+			overSpent, err := e.releaseUnspent(ctx, tx, ir, other, 0, adoptSpent)
+			if err != nil {
 				return err
 			}
 			if _, err := tx.Exec(ctx, `UPDATE steelmatter.instructions SET superseded_by = $3, superseded_at = clock_timestamp()
@@ -1094,7 +1109,7 @@ func (e *Engine) rebuildFromIntent(ctx context.Context, tx pgx.Tx, ir anchor.Int
 				return err
 			}
 			if err := recoveryEvent(ctx, tx, ir, "instruction.superseded_by_recovery", map[string]any{
-				"instruction_id": other, "superseded_by": ir.InstructionID, "source_system": ir.SourceSystem, "source_record_id": ir.SourceRecordID}); err != nil {
+				"instruction_id": other, "superseded_by": ir.InstructionID, "source_system": ir.SourceSystem, "source_record_id": ir.SourceRecordID, "operator_adopted_over_spend": overSpent}); err != nil {
 				return err
 			}
 		case !errors.Is(err, pgx.ErrNoRows):
@@ -1139,7 +1154,7 @@ func (e *Engine) rebuildFromIntent(ctx context.Context, tx pgx.Tx, ir anchor.Int
 		ir.Tenant, ir.InstructionID).Scan(&priorRev); err != nil {
 		return err
 	}
-	if err := e.releaseUnspent(ctx, tx, ir, ir.InstructionID, ir.ActionRevision); err != nil {
+	if _, err := e.releaseUnspent(ctx, tx, ir, ir.InstructionID, ir.ActionRevision, false); err != nil {
 		return err
 	}
 	switch revStatus {
@@ -1215,7 +1230,7 @@ func (s instructionSource) apply(ir *anchor.IntentRecord) {
 // committed revision, a synthetic operation, or another dispatch intent in
 // the recovery anchor. A refusal leaves every held or committed amount as it
 // is and keeps the resume gate closed for operator review.
-func (e *Engine) releaseUnspent(ctx context.Context, tx pgx.Tx, ir anchor.IntentRecord, instID string, keepRevision int64) error {
+func (e *Engine) releaseUnspent(ctx context.Context, tx pgx.Tx, ir anchor.IntentRecord, instID string, keepRevision int64, adoptSpent bool) (string, error) {
 	var spent string
 	err := tx.QueryRow(ctx, `SELECT CASE
 		WHEN EXISTS (SELECT 1 FROM steelmatter.dispatches WHERE tenant_id = $1 AND instruction_id = $2) THEN 'a dispatch'
@@ -1224,7 +1239,7 @@ func (e *Engine) releaseUnspent(ctx context.Context, tx pgx.Tx, ir anchor.Intent
 		WHEN EXISTS (SELECT 1 FROM steelmatter.action_revisions WHERE tenant_id = $1 AND instruction_id = $2 AND status = 'COMMITTED' AND action_revision <> $4) THEN 'a committed revision'
 		ELSE '' END`, ir.Tenant, instID, ir.PermitID, keepRevision).Scan(&spent)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if spent == "" {
 		// The anchor is the proof of "never dispatched": any other dispatch
@@ -1232,7 +1247,7 @@ func (e *Engine) releaseUnspent(ctx context.Context, tx pgx.Tx, ir anchor.Intent
 		// 30 Oct 2026: dispatched, spent or uncertain stops for review).
 		ops, aerr := e.Anchor.IntentOpsForInstruction(ctx, ir.Tenant, instID)
 		if aerr != nil {
-			return dependency("recovery anchor", aerr)
+			return "", dependency("recovery anchor", aerr)
 		}
 		for _, op := range ops {
 			if op != ir.OpRef {
@@ -1241,16 +1256,21 @@ func (e *Engine) releaseUnspent(ctx context.Context, tx pgx.Tx, ir anchor.Intent
 			}
 		}
 	}
+	overSpent := ""
 	if spent != "" {
-		return fault("REVISION_STALE", "REBUILD_REFUSED CONFLICT_SPENT: operation %s: instruction %s, made or changed after the restore, already has %s; "+
-			"nothing was superseded, released or sent; an operator must review it",
-			ir.OpRef, instID, spent)
+		if !adoptSpent {
+			return "", fault("REVISION_STALE", "REBUILD_REFUSED CONFLICT_SPENT: operation %s: instruction %s, made or changed after the restore, already has %s; "+
+				"nothing was superseded, released or sent, and every held or committed amount is unchanged; an operator must review it "+
+				"(procedure: docs/r1-recovery-operations.md; action: POST /v1/recovery/conflicts/%s/adopt)",
+				ir.OpRef, instID, spent, ir.OpRef)
+		}
+		overSpent = spent
 	}
 	rows, err := tx.Query(ctx, `SELECT permit_id, mandate_id, amount_minor FROM steelmatter.issuances
 		WHERE tenant_id = $1 AND instruction_id = $2 AND status IN ('UNSIGNED', 'ACTIVE') AND permit_id <> $3 ORDER BY permit_id FOR UPDATE`,
 		ir.Tenant, instID, ir.PermitID)
 	if err != nil {
-		return err
+		return "", err
 	}
 	type hold struct {
 		permit, mandate string
@@ -1261,32 +1281,32 @@ func (e *Engine) releaseUnspent(ctx context.Context, tx pgx.Tx, ir anchor.Intent
 		var h hold
 		if err := rows.Scan(&h.permit, &h.mandate, &h.amount); err != nil {
 			rows.Close()
-			return err
+			return "", err
 		}
 		holds = append(holds, h)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return err
+		return "", err
 	}
 	for _, h := range holds {
 		if h.mandate != ir.MandateID {
 			if _, err := lockMandate(ctx, tx, ir.Tenant, h.mandate, "FOR UPDATE"); err != nil {
-				return err
+				return "", err
 			}
 		}
 		if _, err := tx.Exec(ctx, `UPDATE steelmatter.issuances SET status = 'RELEASED', release_reason = 'RECOVERED_UNUSED', released_at = clock_timestamp()
 			WHERE tenant_id = $1 AND permit_id = $2`, ir.Tenant, h.permit); err != nil {
-			return err
+			return "", err
 		}
 		if _, err := tx.Exec(ctx, `UPDATE steelmatter.mandates SET reserved_minor = reserved_minor - $3, available_minor = available_minor + $3
 			WHERE tenant_id = $1 AND mandate_id = $2`, ir.Tenant, h.mandate, h.amount); err != nil {
-			return err
+			return "", err
 		}
 	}
 	_, err = tx.Exec(ctx, `UPDATE steelmatter.action_revisions SET status = 'SUPERSEDED'
 		WHERE tenant_id = $1 AND instruction_id = $2 AND status = 'CURRENT' AND action_revision <> $3`, ir.Tenant, instID, keepRevision)
-	return err
+	return overSpent, err
 }
 
 // recoveryEvent records what reconciliation changed beyond the rebuilt

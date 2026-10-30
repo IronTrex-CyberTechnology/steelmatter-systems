@@ -42,6 +42,7 @@ func RegisterWith(mux *http.ServeMux, e *engine.Engine, a *auth.Authenticator, o
 	mux.HandleFunc("POST /v1/mandates", h.wrap(h.createMandate))
 	mux.HandleFunc("POST /v1/mandates/{mandate_id}/revoke", h.wrap(h.revokeMandate))
 	mux.HandleFunc("POST /v1/instructions", h.wrap(h.createInstruction))
+	mux.HandleFunc("GET /v1/instructions/{instruction_id}", h.wrap(h.getInstruction))
 	mux.HandleFunc("POST /v1/instructions/{instruction_id}/revisions", h.wrap(h.amendInstruction))
 	mux.HandleFunc("POST /v1/actions/evaluate", h.wrap(h.evaluate))
 	mux.HandleFunc("POST /v1/actions/simulate", h.wrap(h.simulate))
@@ -398,6 +399,18 @@ func (h *handlers) createInstruction(ctx context.Context, p auth.Principal, r *h
 		status = http.StatusCreated
 	}
 	return &response{status, v}, nil
+}
+
+func (h *handlers) getInstruction(ctx context.Context, p auth.Principal, r *http.Request) (*response, error) {
+	id := r.PathValue("instruction_id")
+	if !identifier.MatchString(id) {
+		return nil, bad("NOT_FOUND", "instruction not found")
+	}
+	v, err := h.e.GetInstruction(ctx, p, id)
+	if err != nil {
+		return nil, err
+	}
+	return &response{http.StatusOK, v}, nil
 }
 
 func (h *handlers) amendInstruction(ctx context.Context, p auth.Principal, r *http.Request) (*response, error) {

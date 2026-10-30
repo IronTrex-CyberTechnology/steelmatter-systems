@@ -32,6 +32,7 @@ func (h *handlers) registerR1(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/dispatches/{op_ref}/repairs/{repair_id}/review", h.wrap(h.reviewRepair))
 	mux.HandleFunc("POST /v1/dispatches/{op_ref}/repairs/{repair_id}/confirm", h.wrap(h.confirmRepair))
 	mux.HandleFunc("POST /v1/dispatches/{op_ref}/anchor-repair", h.wrap(h.anchorRepair))
+	mux.HandleFunc("POST /v1/recovery/conflicts/{op_ref}/adopt", h.wrap(h.adoptConflict))
 	mux.HandleFunc("GET /v1/recovery/write-state", h.wrap(h.writeState))
 	mux.HandleFunc("POST /v1/recovery/check", h.wrap(h.checkRestore))
 	mux.HandleFunc("POST /v1/recovery/reconcile", h.wrap(h.reconcileRestore))
@@ -207,6 +208,36 @@ func (h *handlers) settle(ctx context.Context, p auth.Principal, r *http.Request
 		return nil, err
 	}
 	v, err := h.e.Settle(ctx, p.Tenant, ref, c)
+	if err != nil {
+		return nil, err
+	}
+	return &response{http.StatusOK, v}, nil
+}
+
+func (h *handlers) adoptConflict(ctx context.Context, p auth.Principal, r *http.Request) (*response, error) {
+	if err := h.r1Kind(p, auth.Operator); err != nil {
+		return nil, err
+	}
+	o, err := readBody(r, false)
+	if err != nil {
+		return nil, err
+	}
+	if err := closed(o, "", []string{"evidence_ref", "note"}, nil); err != nil {
+		return nil, err
+	}
+	ev, err := text(o, "evidence_ref", 512)
+	if err != nil {
+		return nil, err
+	}
+	note, err := text(o, "note", 2000)
+	if err != nil {
+		return nil, err
+	}
+	ref, err := opRef(r)
+	if err != nil {
+		return nil, err
+	}
+	v, err := h.e.AdoptAnchoredOperation(ctx, p, ref, ev, note)
 	if err != nil {
 		return nil, err
 	}

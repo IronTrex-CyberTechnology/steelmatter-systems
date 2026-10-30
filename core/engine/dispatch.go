@@ -123,6 +123,21 @@ func (e *Engine) Dispatch(ctx context.Context, p auth.Principal, actionJSON []by
 		if err := e.verifyLiveAdmission(ctx, tx, p, a); err != nil {
 			return err
 		}
+		// NEW-RTFC79-01: never purchase the same source record twice. The
+		// anchor shows every dispatch ever made; one for this source record
+		// under another instruction or operation that this database lacks
+		// means it was restored to before it. Nothing is consumed or sent.
+		var srcSystem, srcRecord, superseded string
+		if err := tx.QueryRow(ctx, `SELECT source_system, source_record_id, COALESCE(superseded_by, '') FROM steelmatter.instructions
+			WHERE tenant_id = $1 AND instruction_id = $2`, p.Tenant, action.InstructionID).Scan(&srcSystem, &srcRecord, &superseded); err != nil {
+			return err
+		}
+		if superseded != "" {
+			return fault("REVISION_STALE", "INSTRUCTION_SUPERSEDED: recovery replaced this instruction with %s; nothing was dispatched", superseded)
+		}
+		if err := e.guardSourceHistory(ctx, tx, p.Tenant, srcSystem, srcRecord, action.InstructionID, permit.OperationID); err != nil {
+			return err
+		}
 		is := a.issuance
 
 		tag, err := tx.Exec(ctx, `UPDATE steelmatter.issuances SET status = 'CONSUMED', consumed_at = clock_timestamp()

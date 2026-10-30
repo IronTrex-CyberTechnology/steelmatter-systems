@@ -2523,7 +2523,7 @@
         {
           "phase": "sdk",
           "package": "packages/sdk",
-          "test": "contract.test.ts/the OpenAPI document declares the 11 documented operations"
+          "test": "contract.test.ts/the OpenAPI document declares the 12 documented operations"
         },
         {
           "phase": "sdk",
@@ -4301,7 +4301,7 @@
         {
           "phase": "sdk",
           "package": "packages/sdk",
-          "test": "contract.test.ts/the OpenAPI document declares the 11 documented operations"
+          "test": "contract.test.ts/the OpenAPI document declares the 12 documented operations"
         },
         {
           "phase": "sdk",
@@ -6117,7 +6117,7 @@
         {
           "phase": "sdk",
           "package": "packages/sdk",
-          "test": "contract.test.ts/the OpenAPI document declares the 11 documented operations"
+          "test": "contract.test.ts/the OpenAPI document declares the 12 documented operations"
         },
         {
           "phase": "sdk",
@@ -7067,7 +7067,7 @@
         {
           "phase": "sdk",
           "package": "packages/sdk",
-          "test": "contract.test.ts/the OpenAPI document declares the 13 R1 dispatch, repair, recovery and approval operations"
+          "test": "contract.test.ts/the OpenAPI document declares the 14 R1 dispatch, repair, recovery and approval operations"
         },
         {
           "phase": "integration",
@@ -7243,6 +7243,26 @@
           "phase": "integration",
           "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestRT0EESEC01DispatchedConflictStopsForReview"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestRTFC7901NoSecondPurchaseForTheSameSourceRecord"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestRTFC7902AmendCannotReuseAnchoredRevisionNumber"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestRTFC79RoleChecksComeBeforeRecoveryState"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestRTFC79AmendmentReplayAndInstructionStatus"
         },
         {
           "phase": "integration",

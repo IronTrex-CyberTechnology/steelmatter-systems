@@ -124,8 +124,18 @@ func (e *Engine) Evaluate(ctx context.Context, p auth.Principal, instructionID s
 			return err
 		}
 		var current int64
-		if err := tx.QueryRow(ctx, `SELECT current_revision FROM steelmatter.instructions WHERE tenant_id = $1 AND instruction_id = $2 FOR UPDATE`,
-			p.Tenant, instructionID).Scan(&current); err != nil {
+		var sourceRecord, supersededBy string
+		if err := tx.QueryRow(ctx, `SELECT current_revision, source_record_id, COALESCE(superseded_by, '') FROM steelmatter.instructions
+			WHERE tenant_id = $1 AND instruction_id = $2 FOR UPDATE`,
+			p.Tenant, instructionID).Scan(&current, &sourceRecord, &supersededBy); err != nil {
+			return err
+		}
+		if supersededBy != "" {
+			return fault("REVISION_STALE", "INSTRUCTION_SUPERSEDED: recovery replaced this instruction with %s, the one the anchor shows was dispatched", supersededBy)
+		}
+		// NEW-RTFC79-01: no new permit while the anchor shows a dispatch of
+		// this source record or instruction that the engine lacks.
+		if err := e.guardSourceHistory(ctx, tx, p.Tenant, sourceSystem, sourceRecord, instructionID, ""); err != nil {
 			return err
 		}
 		if err := currentEntitlement(ctx, tx, p, sourceSystem, mandateID, m, actor); err != nil {

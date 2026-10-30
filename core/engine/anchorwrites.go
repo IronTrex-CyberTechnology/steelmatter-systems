@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/auth"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -287,6 +288,118 @@ func (e *Engine) guardMandateHistory(ctx context.Context, tx pgx.Tx, tenant, man
 		return fault("SERVICE_UNAVAILABLE", "%s; reconcile recovery before new spending", problem)
 	}
 	return e.requireWrites(ctx)
+}
+
+// guardSourceHistory is the admission barrier at the level of the trusted
+// source record and the instruction (NEW-RTFC79-01/02). guardMandateHistory
+// compares one budget with its anchor history, so it cannot see that a
+// restored engine database lacks a dispatch the anchor recorded under
+// ANOTHER mandate or instruction for the same source record, or under the same
+// instruction at a revision the engine no longer has. Without this check an
+// issuer who re-creates or re-amends the lost instruction before the restore
+// is detected could get a second purchase for one ERP record, or a different
+// action under an anchored revision number.
+//
+// Before create (instructionID "" and opRef ""), amend, evaluate and dispatch
+// it reads the anchor and refuses, writing nothing, when:
+//   - the anchor holds a DISPATCH_INTENT for the same source record under a
+//     different instruction (or any intent, for a create), or
+//   - the anchor holds a DISPATCH_INTENT for this instruction under another
+//     operation that the engine database lacks and that is not an unsent
+//     dispatch whose engine commit never happened (R1-DEF-06).
+//
+// The refusal turns writes off, so the restore is handled by the recovery
+// procedure (check, reconcile, resume), which rebuilds the anchored
+// instruction before any issuer change can compete with it. Held and
+// committed amounts are never touched here. An intent written before the
+// source fields existed is found by instruction only.
+func (e *Engine) guardSourceHistory(ctx context.Context, tx pgx.Tx, tenant, sourceSystem, sourceRecord, instructionID, opRef string) error {
+	if e.Anchor == nil {
+		return nil
+	}
+	byOp := map[string]anchor.IntentRecord{}
+	if sourceSystem != "" && sourceRecord != "" {
+		irs, err := e.Anchor.IntentsForSource(ctx, tenant, sourceSystem, sourceRecord)
+		if err != nil {
+			return anchorFault(err)
+		}
+		for _, ir := range irs {
+			byOp[ir.OpRef] = ir
+		}
+	}
+	if instructionID != "" {
+		irs, err := e.Anchor.IntentsForInstruction(ctx, tenant, instructionID)
+		if err != nil {
+			return anchorFault(err)
+		}
+		for _, ir := range irs {
+			byOp[ir.OpRef] = ir
+		}
+	}
+	ops := make([]string, 0, len(byOp))
+	for op := range byOp {
+		ops = append(ops, op)
+	}
+	sort.Strings(ops)
+	problem := ""
+	for _, op := range ops {
+		ir := byOp[op]
+		if op == opRef {
+			continue
+		}
+		if ir.InstructionID != instructionID {
+			problem = fmt.Sprintf("the recovery anchor shows operation %s dispatched for source record %s/%s under instruction %s; "+
+				"the engine database may have been restored to before it", op, sourceSystem, sourceRecord, ir.InstructionID)
+			break
+		}
+		var exists bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM steelmatter.dispatches WHERE tenant_id = $1 AND op_ref = $2)`, tenant, op).Scan(&exists); err != nil {
+			return err
+		}
+		if exists {
+			continue
+		}
+		lost, err := e.intentLost(ctx, ir)
+		if err != nil {
+			return err
+		}
+		if lost {
+			problem = fmt.Sprintf("the recovery anchor shows operation %s (action revision %d) dispatched for instruction %s, "+
+				"which the engine database lacks", op, ir.ActionRevision, instructionID)
+			break
+		}
+	}
+	if problem == "" {
+		return nil
+	}
+	reason := "admission recovery barrier: " + problem
+	if _, err := e.Anchor.DisableWrites(ctx, reason); err != nil {
+		return anchorFault(err)
+	}
+	slog.Warn("restore suspected at admission", "tenant", tenant, "instruction", instructionID, "problem", problem)
+	return fault("SERVICE_UNAVAILABLE", "RESTORE_SUSPECTED: %s; writes are off, nothing was created, changed or dispatched; "+
+		"run recovery (check, reconcile, resume) and retry", problem)
+}
+
+// intentLost reports whether an anchored intent whose engine row is missing
+// is more than an unsent dispatch (no DISPATCHED marker, outcome, finding or
+// repair, and nothing at the destination), the R1-DEF-06 exemption.
+func (e *Engine) intentLost(ctx context.Context, ir anchor.IntentRecord) (bool, error) {
+	recs, err := e.Anchor.RecordsFor(ctx, ir.Tenant, ir.OpRef)
+	if err != nil {
+		return false, anchorFault(err)
+	}
+	for _, r := range recs {
+		switch r.Type {
+		case anchor.Outcome, anchor.OperatorFinding, anchor.RepairConfirmed:
+			return true, nil
+		}
+	}
+	p, err := e.Anchor.ProofFor(ctx, ir.CompanyRef, ir.OpRef)
+	if err != nil {
+		return false, anchorFault(err)
+	}
+	return p.CreateIntent || p.Blocked || p.CreateDone != nil, nil
 }
 
 // dispatchedOutcome is the OUTCOME the engine appends right after a dispatch
