@@ -107,6 +107,7 @@ core/engine/admitcheck.go
 core/engine/anchorwrites.go
 core/engine/approvals.go
 core/engine/backoff.go
+core/engine/conflicts.go
 core/engine/dispatch.go
 core/engine/engine.go
 core/engine/evaluate.go
