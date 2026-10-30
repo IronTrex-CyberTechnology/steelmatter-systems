@@ -556,3 +556,44 @@ func TestRTFC79AmendmentReplayAndInstructionStatus(t *testing.T) {
 }
 
 var _ = json.Marshal
+
+// NEW-RT913-SEC-01: another tenant's principals learn nothing about the
+// recovery state. Tenant authorisation (the caller's own mandates, instructions
+// and entitlements) is checked before the recovery state is read, so the
+// answer is the same as when the engine is healthy.
+func TestRT913SEC01OtherTenantLearnsNothingAboutRecovery(t *testing.T) {
+	e, a, m, _ := dispatchedThenRestored(t)
+	open := e.instruction("po-open-002", m)
+	id := open["instruction_id"].(string)
+	if r := a.check(); !r.WritesDisabled {
+		t.Fatal("restore not detected")
+	}
+	noState := func(what string, st int, body map[string]any, want int, code string) {
+		t.Helper()
+		requireStatus(t, what, st, body, want, code)
+		msg := fmt.Sprint(body["message"])
+		for _, leak := range []string{"RECOVERY_IN_PROGRESS", "RESTORE_SUSPECTED", "writes are disabled", "recovery", "restore", "anchor", "generation"} {
+			if strings.Contains(strings.ToLower(msg), strings.ToLower(leak)) {
+				t.Fatalf("%s: message reveals the recovery state: %v", what, body)
+			}
+		}
+	}
+	// issuer-x is entitled to this source system, but in its own tenant.
+	st, body := e.call("POST", "/v1/instructions", "issuer-x", instructionBody("po-request-001", m))
+	noState("other tenant issuer creates during recovery", st, body, 404, "NOT_FOUND")
+	st, body = e.call("POST", "/v1/instructions/"+id+"/revisions", "issuer-x", amendBody("amd-x", 1, line("item-a", 2, 25_000_000)))
+	noState("other tenant issuer amends during recovery", st, body, 404, "NOT_FOUND")
+	st, body = e.evaluate("agent-x", id, 1)
+	noState("other tenant actor evaluates during recovery", st, body, 404, "NOT_FOUND")
+	for _, who := range []string{"owner-x", "agent-x"} {
+		st, body = e.call("POST", "/v1/instructions", who, instructionBody("po-request-001", m))
+		noState(who+" creates during recovery", st, body, 403, "FORBIDDEN")
+	}
+	// The same requests when the engine is healthy answer the same way.
+	// (The entitled issuer of the served tenant still gets the retryable 503.)
+	st, body = e.call("POST", "/v1/instructions", "issuer-a", instructionBody("po-request-001", m))
+	requireStatus(t, "the entitled issuer during recovery", st, body, 503, "SERVICE_UNAVAILABLE")
+	if e.count(`SELECT count(*) FROM steelmatter.instructions WHERE tenant_id = 'other-org'`) != 0 {
+		t.Fatal("another tenant wrote an instruction")
+	}
+}
