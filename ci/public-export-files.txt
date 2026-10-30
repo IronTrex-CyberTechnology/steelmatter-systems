@@ -97,6 +97,7 @@ core/db/migrations/0015_r1_deleted_order_flag.sql
 core/db/migrations/0016_r1_supplier_sync.sql
 core/db/migrations/0017_r1_approvals.sql
 core/db/migrations/0018_r1_changed_order_flag.sql
+core/db/migrations/0019_r1_recovery_supersede.sql
 core/db/provision.go
 core/db/roles.go
 core/dbtest/anchor.go
@@ -311,6 +312,7 @@ tests/integration/r1_decisions_test.go
 tests/integration/r1_def07_test.go
 tests/integration/r1_def13_test.go
 tests/integration/r1_defect_fixes_test.go
+tests/integration/r1_recovery_conflicts_test.go
 tests/integration/r1_dispatch_test.go
 tests/integration/r1_evidence_test.go
 tests/integration/r1_hardening_test.go

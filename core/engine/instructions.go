@@ -309,6 +309,9 @@ func (e *Engine) CreateInstruction(ctx context.Context, p auth.Principal, r Inst
 	}
 	digest := requestDigest(map[string]any{"source_system": r.SourceSystem, "source_record_id": r.SourceRecordID, "mandate_id": r.MandateID, "proposed_action": norm})
 	instructionID := newID("inst")
+	if err := e.requireNoRecovery(ctx); err != nil {
+		return nil, false, err
+	}
 	if err := e.syncSupplierFor(ctx, p, r.Proposed.SupplierID); err != nil {
 		return nil, false, err
 	}
@@ -333,7 +336,7 @@ func (e *Engine) CreateInstruction(ctx context.Context, p auth.Principal, r Inst
 			}
 			var existingID, existingDigest string
 			err = tx.QueryRow(ctx, `SELECT instruction_id, creation_request_digest FROM steelmatter.instructions
-				WHERE tenant_id = $1 AND source_system = $2 AND source_record_id = $3 FOR UPDATE`,
+				WHERE tenant_id = $1 AND source_system = $2 AND source_record_id = $3 AND superseded_by IS NULL FOR UPDATE`,
 				p.Tenant, r.SourceSystem, r.SourceRecordID).Scan(&existingID, &existingDigest)
 			if err == nil {
 				if existingDigest != digest {
@@ -411,6 +414,9 @@ func (e *Engine) AmendInstruction(ctx context.Context, p auth.Principal, instruc
 	if p.Kind != auth.Issuer {
 		return nil, false, fault("FORBIDDEN", "only a trusted issuer can amend an instruction")
 	}
+	if err := e.requireNoRecovery(ctx); err != nil {
+		return nil, false, err
+	}
 	var view *AmendmentView
 	var created bool
 	err = e.inTx(ctx, "", func(tx pgx.Tx) error {
@@ -437,9 +443,13 @@ func (e *Engine) AmendInstruction(ctx context.Context, p auth.Principal, instruc
 			return err
 		}
 		var current int64
-		if err := tx.QueryRow(ctx, `SELECT current_revision FROM steelmatter.instructions WHERE tenant_id = $1 AND instruction_id = $2 FOR UPDATE`,
-			p.Tenant, instructionID).Scan(&current); err != nil {
+		var superseded string
+		if err := tx.QueryRow(ctx, `SELECT current_revision, COALESCE(superseded_by, '') FROM steelmatter.instructions
+			WHERE tenant_id = $1 AND instruction_id = $2 FOR UPDATE`, p.Tenant, instructionID).Scan(&current, &superseded); err != nil {
 			return err
+		}
+		if superseded != "" {
+			return fault("REVISION_STALE", "INSTRUCTION_SUPERSEDED: recovery replaced this instruction with %s, the one the anchor shows was dispatched", superseded)
 		}
 		var aStatus string
 		if err := tx.QueryRow(ctx, `SELECT status FROM steelmatter.action_revisions WHERE tenant_id = $1 AND instruction_id = $2 AND action_revision = $3 FOR UPDATE`,

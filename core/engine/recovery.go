@@ -1050,47 +1050,81 @@ func (e *Engine) rebuildFromIntent(ctx context.Context, tx pgx.Tx, ir anchor.Int
 		return refuse("ACTION_DIFFERS", "the anchored action does not match its permit")
 	}
 
-	// Instruction.
-	var instMandate string
-	err := tx.QueryRow(ctx, `SELECT mandate_id FROM steelmatter.instructions WHERE tenant_id = $1 AND instruction_id = $2 FOR UPDATE`,
-		ir.Tenant, ir.InstructionID).Scan(&instMandate)
+	// Instruction. One made after the restore for the same source record
+	// (an issuer re-creating the lost instruction) gives the key back to the
+	// anchored one, if it never spent (NEW-RT0EE-SEC-01).
+	var instMandate, instSuperseded string
+	err := tx.QueryRow(ctx, `SELECT mandate_id, COALESCE(superseded_by, '') FROM steelmatter.instructions WHERE tenant_id = $1 AND instruction_id = $2 FOR UPDATE`,
+		ir.Tenant, ir.InstructionID).Scan(&instMandate, &instSuperseded)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		if ir.SourceSystem == "" || ir.SourceRecordID == "" || ir.IssuerPrincipal == "" || ir.CreationDigest == "" {
 			return refuse("INSTRUCTION_MISSING", "instruction %s is not in the engine database and the anchor's intent predates the source fields needed to rebuild it",
 				ir.InstructionID)
 		}
+		var other string
+		err := tx.QueryRow(ctx, `SELECT instruction_id FROM steelmatter.instructions WHERE tenant_id = $1 AND source_system = $2 AND source_record_id = $3
+			AND superseded_by IS NULL FOR UPDATE`, ir.Tenant, ir.SourceSystem, ir.SourceRecordID).Scan(&other)
+		switch {
+		case err == nil:
+			if err := e.releaseUnspent(ctx, tx, ir, other, 0); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `UPDATE steelmatter.instructions SET superseded_by = $3, superseded_at = clock_timestamp()
+				WHERE tenant_id = $1 AND instruction_id = $2`, ir.Tenant, other, ir.InstructionID); err != nil {
+				return err
+			}
+			if err := recoveryEvent(ctx, tx, ir, "instruction.superseded_by_recovery", map[string]any{
+				"instruction_id": other, "superseded_by": ir.InstructionID, "source_system": ir.SourceSystem, "source_record_id": ir.SourceRecordID}); err != nil {
+				return err
+			}
+		case !errors.Is(err, pgx.ErrNoRows):
+			return err
+		}
 		if _, err := tx.Exec(ctx, `INSERT INTO steelmatter.instructions (tenant_id, instruction_id, source_system, source_record_id,
 			mandate_id, actor_id, issuer_principal, creation_request_digest, current_revision, created_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, clock_timestamp())`,
 			ir.Tenant, ir.InstructionID, ir.SourceSystem, ir.SourceRecordID, ir.MandateID, pm.ActorID, ir.IssuerPrincipal, ir.CreationDigest,
 			ir.ActionRevision); err != nil {
-			if isUnique(err, "instruction_source_unique") {
-				return refuse("SOURCE_TAKEN", "source record %s/%s now belongs to another instruction", ir.SourceSystem, ir.SourceRecordID)
-			}
 			return err
 		}
 	case err != nil:
 		return err
 	case instMandate != ir.MandateID:
 		return refuse("INSTRUCTION_DIFFERS", "instruction %s belongs to mandate %s", ir.InstructionID, instMandate)
+	case instSuperseded != "":
+		return refuse("INSTRUCTION_DIFFERS", "instruction %s was superseded by %s", ir.InstructionID, instSuperseded)
 	}
 
-	// Action revision.
+	// Action revision. The anchored revision becomes the live one. Another
+	// revision that is live in the restored database (made before the
+	// backup and amended later, NEW-RT0EE-SEC-02, or amended by the issuer
+	// after the restore, NEW-RT0EE-SEC-01) is superseded and its open
+	// reservation released, if it never spent. Its rows stay as history.
 	var revStatus, revDigest string
 	err = tx.QueryRow(ctx, `SELECT status, action_digest FROM steelmatter.action_revisions WHERE tenant_id = $1 AND instruction_id = $2 AND action_revision = $3 FOR UPDATE`,
 		ir.Tenant, ir.InstructionID, ir.ActionRevision).Scan(&revStatus, &revDigest)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		var live bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM steelmatter.action_revisions WHERE tenant_id = $1 AND instruction_id = $2
-			AND status IN ('CURRENT', 'COMMITTED'))`, ir.Tenant, ir.InstructionID).Scan(&live); err != nil {
-			return err
-		}
-		if live {
-			return refuse("REVISION_MISSING", "instruction %s has another live action revision; action revision %d cannot be rebuilt beside it",
-				ir.InstructionID, ir.ActionRevision)
-		}
+		revStatus = ""
+	case err != nil:
+		return err
+	case revDigest != ir.ActionDigest:
+		return refuse("REVISION_NUMBER_TAKEN", "action revision %d of instruction %s carries digest %s, not the anchored %s; "+
+			"it was amended after the restore to a different action under the same revision number", ir.ActionRevision, ir.InstructionID, revDigest, ir.ActionDigest)
+	case revStatus == "COMMITTED":
+		return refuse("REVISION_DIFFERS", "action revision %d is COMMITTED without a dispatch", ir.ActionRevision)
+	}
+	var priorRev int64
+	if err := tx.QueryRow(ctx, `SELECT current_revision FROM steelmatter.instructions WHERE tenant_id = $1 AND instruction_id = $2`,
+		ir.Tenant, ir.InstructionID).Scan(&priorRev); err != nil {
+		return err
+	}
+	if err := e.releaseUnspent(ctx, tx, ir, ir.InstructionID, ir.ActionRevision); err != nil {
+		return err
+	}
+	switch revStatus {
+	case "":
 		if _, err := tx.Exec(ctx, `INSERT INTO steelmatter.action_revisions (tenant_id, instruction_id, action_revision, status, action_canonical,
 			action_digest, supplier_id, supplier_revision, delivery_id, audience, amount_minor, created_at)
 			VALUES ($1, $2, $3, 'CURRENT', $4, $5, $6, $7, $8, $9, $10, clock_timestamp())`,
@@ -1098,16 +1132,23 @@ func (e *Engine) rebuildFromIntent(ctx context.Context, tx pgx.Tx, ir anchor.Int
 			act.AmountMinor); err != nil {
 			return err
 		}
+	case "SUPERSEDED":
+		if _, err := tx.Exec(ctx, `UPDATE steelmatter.action_revisions SET status = 'CURRENT' WHERE tenant_id = $1 AND instruction_id = $2 AND action_revision = $3`,
+			ir.Tenant, ir.InstructionID, ir.ActionRevision); err != nil {
+			return err
+		}
+	}
+	if priorRev != ir.ActionRevision {
 		if _, err := tx.Exec(ctx, `UPDATE steelmatter.instructions SET current_revision = $3 WHERE tenant_id = $1 AND instruction_id = $2`,
 			ir.Tenant, ir.InstructionID, ir.ActionRevision); err != nil {
 			return err
 		}
-	case err != nil:
-		return err
-	case revDigest != ir.ActionDigest:
-		return refuse("REVISION_DIFFERS", "action revision %d carries digest %s", ir.ActionRevision, revDigest)
-	case revStatus != "CURRENT":
-		return refuse("REVISION_DIFFERS", "action revision %d is %s", ir.ActionRevision, revStatus)
+	}
+	if revStatus != "CURRENT" && revStatus != "" || priorRev != ir.ActionRevision {
+		if err := recoveryEvent(ctx, tx, ir, "instruction.revision_restored_by_recovery", map[string]any{
+			"instruction_id": ir.InstructionID, "from_revision": priorRev, "to_revision": ir.ActionRevision, "action_digest": ir.ActionDigest}); err != nil {
+			return err
+		}
 	}
 
 	// Issuance: back to ACTIVE with its amount reserved.
@@ -1142,4 +1183,79 @@ type instructionSource struct {
 
 func (s instructionSource) apply(ir *anchor.IntentRecord) {
 	ir.SourceSystem, ir.SourceRecordID, ir.IssuerPrincipal, ir.CreationDigest = s.System, s.RecordID, s.Issuer, s.Digest
+}
+
+// releaseUnspent prepares instruction instID for recovery to replace its
+// live state with the anchored action: every open (UNSIGNED or ACTIVE)
+// permit other than the anchored one is released with RECOVERED_UNUSED and
+// its amount returned to available, and every CURRENT revision other than
+// keepRevision (0: all) is superseded. It refuses, writing nothing, if the
+// instruction ever spent outside the anchored permit: a dispatch, a
+// consumed permit, a committed revision or a synthetic operation.
+func (e *Engine) releaseUnspent(ctx context.Context, tx pgx.Tx, ir anchor.IntentRecord, instID string, keepRevision int64) error {
+	var spent string
+	err := tx.QueryRow(ctx, `SELECT CASE
+		WHEN EXISTS (SELECT 1 FROM steelmatter.dispatches WHERE tenant_id = $1 AND instruction_id = $2) THEN 'a dispatch'
+		WHEN EXISTS (SELECT 1 FROM steelmatter.operations WHERE tenant_id = $1 AND instruction_id = $2) THEN 'a synthetic operation'
+		WHEN EXISTS (SELECT 1 FROM steelmatter.issuances WHERE tenant_id = $1 AND instruction_id = $2 AND status = 'CONSUMED' AND permit_id <> $3) THEN 'a consumed permit'
+		WHEN EXISTS (SELECT 1 FROM steelmatter.action_revisions WHERE tenant_id = $1 AND instruction_id = $2 AND status = 'COMMITTED' AND action_revision <> $4) THEN 'a committed revision'
+		ELSE '' END`, ir.Tenant, instID, ir.PermitID, keepRevision).Scan(&spent)
+	if err != nil {
+		return err
+	}
+	if spent != "" {
+		return fault("REVISION_STALE", "REBUILD_REFUSED CONFLICT_SPENT: operation %s: instruction %s, made or changed after the restore, already has %s; an operator must review it",
+			ir.OpRef, instID, spent)
+	}
+	rows, err := tx.Query(ctx, `SELECT permit_id, mandate_id, amount_minor FROM steelmatter.issuances
+		WHERE tenant_id = $1 AND instruction_id = $2 AND status IN ('UNSIGNED', 'ACTIVE') AND permit_id <> $3 ORDER BY permit_id FOR UPDATE`,
+		ir.Tenant, instID, ir.PermitID)
+	if err != nil {
+		return err
+	}
+	type hold struct {
+		permit, mandate string
+		amount          int64
+	}
+	var holds []hold
+	for rows.Next() {
+		var h hold
+		if err := rows.Scan(&h.permit, &h.mandate, &h.amount); err != nil {
+			rows.Close()
+			return err
+		}
+		holds = append(holds, h)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, h := range holds {
+		if h.mandate != ir.MandateID {
+			if _, err := lockMandate(ctx, tx, ir.Tenant, h.mandate, "FOR UPDATE"); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.Exec(ctx, `UPDATE steelmatter.issuances SET status = 'RELEASED', release_reason = 'RECOVERED_UNUSED', released_at = clock_timestamp()
+			WHERE tenant_id = $1 AND permit_id = $2`, ir.Tenant, h.permit); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE steelmatter.mandates SET reserved_minor = reserved_minor - $3, available_minor = available_minor + $3
+			WHERE tenant_id = $1 AND mandate_id = $2`, ir.Tenant, h.mandate, h.amount); err != nil {
+			return err
+		}
+	}
+	_, err = tx.Exec(ctx, `UPDATE steelmatter.action_revisions SET status = 'SUPERSEDED'
+		WHERE tenant_id = $1 AND instruction_id = $2 AND status = 'CURRENT' AND action_revision <> $3`, ir.Tenant, instID, keepRevision)
+	return err
+}
+
+// recoveryEvent records what reconciliation changed beyond the rebuilt
+// dispatch, for the audit trail.
+func recoveryEvent(ctx context.Context, tx pgx.Tx, ir anchor.IntentRecord, eventType string, detail map[string]any) error {
+	detail["op_ref"] = ir.OpRef
+	payload, _ := json.Marshal(detail)
+	_, err := tx.Exec(ctx, `INSERT INTO steelmatter.outbox (event_id, tenant_id, event_type, aggregate_id, payload, created_at)
+		VALUES ($1, $2, $3, $4, $5, clock_timestamp())`, newID("evt"), ir.Tenant, eventType, ir.OpRef, payload)
+	return err
 }

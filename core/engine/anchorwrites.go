@@ -70,6 +70,27 @@ func (e *Engine) requireWrites(ctx context.Context) error {
 	return nil
 }
 
+// requireNoRecovery refuses instruction creation and amendment while writes
+// are off (NEW-RT0EE-SEC-01). After a restore the engine database may lack
+// instructions the anchor shows were dispatched; an issuer change made
+// before reconciliation rebuilds them would compete with the authorised
+// action. Retry once the resume gate has passed (503 is retryable).
+func (e *Engine) requireNoRecovery(ctx context.Context) error {
+	if e.Anchor == nil {
+		return nil
+	}
+	on, ws, err := e.writesOn(ctx)
+	switch {
+	case err != nil:
+		return fault("SERVICE_UNAVAILABLE", "recovery anchor is unavailable; instructions cannot be created or amended")
+	case !on && !ws.Enabled:
+		return fault("SERVICE_UNAVAILABLE", "RECOVERY_IN_PROGRESS: writes are disabled (%s); instructions cannot be created or amended until recovery resumes writes", ws.Reason)
+	case !on:
+		return fault("SERVICE_UNAVAILABLE", "this process's write generation is old; restart it to adopt generation %d", ws.Generation)
+	}
+	return nil
+}
+
 // anchorFault maps an anchor append failure to a client-visible fault.
 func anchorFault(err error) error {
 	if errors.Is(err, anchor.ErrWritesDisabled) {

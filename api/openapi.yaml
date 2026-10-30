@@ -89,7 +89,8 @@ paths:
         201 for a new instruction; 200 for an identical repeated creation
         request (returns the current revision, never rolling an amendment
         back); 409 SOURCE_CONFLICT when the same (tenant, source_system,
-        source_record_id) arrives with different content.
+        source_record_id) arrives with different content. 503 (retryable)
+        while recovery has writes off: retry after the resume gate passes.
       x-steelmatter-principals: [issuer]
       requestBody:
         required: true
@@ -125,7 +126,9 @@ paths:
         Exact retry of an amendment_id returns its recorded result with 200.
         Changed reuse, outdated expected_action_revision or a committed
         instruction return 409. A new revision has no reservation or permit;
-        the assigned actor must evaluate it again.
+        the assigned actor must evaluate it again. 503 (retryable) while
+        recovery has writes off; 409 REVISION_STALE for an instruction that
+        recovery superseded with the anchored one.
       x-steelmatter-principals: [issuer]
       parameters:
         - $ref: '#/components/parameters/InstructionId'
