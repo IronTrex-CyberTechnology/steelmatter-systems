@@ -356,32 +356,96 @@ func TestR1DEF30ReconcileStopsAtItsBudgetAndResumes(t *testing.T) {
 	}
 }
 
-// R1-OBS-01: a rebuild that cannot find its permit says so, instead of
-// INTERNAL_ERROR, and the gate stays closed.
-func TestR1OBS01MissingPermitIsNamed(t *testing.T) {
+// R1-DEF-05: an engine restored to before the instruction and permit
+// existed is rebuilt from the anchor's signed intent. Reconciliation
+// restores the instruction, action revision and permit, holds the amount,
+// confirms the order at the destination without creating another, and the
+// gate resumes writes; new purchases work afterwards.
+func TestR1DEF05RestoreBeforePermitIsRebuiltFromAnchor(t *testing.T) {
 	e := newR1Env(t)
 	a := withAnchor(t, e)
+	s := a.s
+	m := e.mandate(mandateOpts{limit: 2 * limit}) // room for a second purchase
+	e.assign(m, "agent-a")
+	snap := e.snapshotEngine() // before the instruction and permit exist
+	p := e.permittedFor(m, "po-request-001")
+	mustDispatch(t, e, p)
+	requireExecution(t, "settle", e.settle(p.operation, s), engine.DispatchCommitted)
+	if s.Creates() != 1 {
+		t.Fatalf("creates %d", s.Creates())
+	}
+	e.restoreEngine(snap)
+	if r := a.check(); !r.WritesDisabled {
+		t.Fatal("restore not detected")
+	}
+	rec := a.reconcile()
+	if len(rec.Problems) != 0 || len(rec.Recreated) != 1 || rec.Recreated[0] != p.operation {
+		t.Fatalf("reconcile %+v", rec)
+	}
+	d, err := e.eng.GetDispatch(context.Background(), tenant, p.operation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireExecution(t, "rebuilt", d, engine.DispatchCommitted)
+	requireBuckets(t, "rebuilt", e.buckets(m), buckets{Available: 2*limit - sixLakh, Committed: sixLakh})
+	if st, _ := e.issuanceStatus(p.permitID); st != "CONSUMED" {
+		t.Fatalf("issuance %s", st)
+	}
+	if n := e.count(`SELECT count(*) FROM steelmatter.instructions WHERE instruction_id = '` + p.instruction + `'`); n != 1 {
+		t.Fatalf("instruction rows %d", n)
+	}
+	if g := a.gate(); !g.Passed || !g.Resumed {
+		t.Fatalf("gate %+v", g)
+	}
+	if s.Creates() != 1 {
+		t.Fatalf("recovery created another order: creates %d", s.Creates())
+	}
+	// Writes are back: a new purchase dispatches and commits; the rebuilt
+	// source record cannot be reused for a second instruction.
+	q := e.permittedFor(m, "po-request-002")
+	mustDispatch(t, e, q)
+	requireExecution(t, "new purchase", e.settle(q.operation, s), engine.DispatchCommitted)
+	if s.Creates() != 2 {
+		t.Fatalf("creates %d", s.Creates())
+	}
+	st, body := e.call("POST", "/v1/instructions", "issuer-a", instructionBody("po-request-001", m, line("item-a", 2, 1_000_000)))
+	if st == 201 {
+		t.Fatalf("source record reused: %d %v", st, body)
+	}
+}
+
+// R1-OBS-01 / R1-DEF-05: what cannot be rebuilt is named, not an internal
+// error, and the gate stays closed. Here the engine was restored to before
+// the mandate existed.
+func TestR1OBS01MissingMandateIsNamed(t *testing.T) {
+	e := newR1Env(t)
+	a := withAnchor(t, e)
+	snap := e.snapshotEngine() // before the mandate exists
 	m := e.mandate(mandateOpts{})
 	e.assign(m, "agent-a")
-	snap := e.snapshotEngine() // before the permit exists
-	inst := e.instruction("po-request-001", m)
-	st, body := e.evaluate("agent-a", inst["instruction_id"].(string), 1)
-	requireStatus(t, "evaluate", st, body, 201, "")
-	permit := body["permit"].(map[string]any)
-	p := permitted{mandate: m, instruction: inst["instruction_id"].(string), action: body["action"].(map[string]any),
-		jws: body["permit_jws"].(string), permitID: permit["permit_id"].(string), operation: permit["operation_id"].(string)}
+	p := e.permittedFor(m, "po-request-001")
 	mustDispatch(t, e, p)
 	e.restoreEngine(snap)
 	if r := a.check(); !r.WritesDisabled {
 		t.Fatal("restore not detected")
 	}
 	rec := a.reconcile()
-	if len(rec.Problems) != 1 || !strings.Contains(rec.Problems[0], "PERMIT_MISSING") || strings.Contains(rec.Problems[0], "INTERNAL_ERROR") {
+	if len(rec.Problems) != 1 || !strings.Contains(rec.Problems[0], "MANDATE_MISSING") || strings.Contains(rec.Problems[0], "INTERNAL_ERROR") {
 		t.Fatalf("problems %v", rec.Problems)
 	}
 	if g := a.gate(); g.Passed {
 		t.Fatalf("gate passed with a missing operation: %+v", g)
 	}
+}
+
+func (e *env) permittedFor(m, source string) permitted {
+	e.t.Helper()
+	inst := e.instruction(source, m)
+	st, body := e.evaluate("agent-a", inst["instruction_id"].(string), 1)
+	requireStatus(e.t, "evaluate", st, body, 201, "")
+	permit := body["permit"].(map[string]any)
+	return permitted{mandate: m, instruction: inst["instruction_id"].(string), action: body["action"].(map[string]any),
+		jws: body["permit_jws"].(string), permitID: permit["permit_id"].(string), operation: permit["operation_id"].(string)}
 }
 
 // R1-P4-DEF-01: concurrent reconciliations and resumes report only their

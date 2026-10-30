@@ -13,6 +13,7 @@ import (
 
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/anchor"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract"
 )
 
 // Restore detection, reconciliation and the resume gate (D5 v3, decided
@@ -595,7 +596,12 @@ func (e *Engine) recreateDispatch(ctx context.Context, ir anchor.IntentRecord) (
 	created := false
 	err := e.inTx(ctx, ir.OpRef, func(tx pgx.Tx) error {
 		created = false
-		if _, err := lockMandate(ctx, tx, ir.Tenant, ir.MandateID, "FOR UPDATE"); err != nil {
+		m, err := lockMandate(ctx, tx, ir.Tenant, ir.MandateID, "FOR UPDATE")
+		if err != nil {
+			if fe, ok := err.(*Fault); ok && fe.Code == "NOT_FOUND" {
+				return fault("NOT_FOUND", "MANDATE_MISSING: mandate %s of operation %s is not in the engine database (it was restored to before the mandate existed); "+
+					"restore or re-provision the mandate, then reconcile again", ir.MandateID, ir.OpRef)
+			}
 			return err
 		}
 		var exists bool
@@ -605,13 +611,17 @@ func (e *Engine) recreateDispatch(ctx context.Context, ir anchor.IntentRecord) (
 		}
 		var status string
 		var amount int64
-		err := tx.QueryRow(ctx, `SELECT status, amount_minor FROM steelmatter.issuances WHERE tenant_id = $1 AND permit_id = $2 FOR UPDATE`,
+		err = tx.QueryRow(ctx, `SELECT status, amount_minor FROM steelmatter.issuances WHERE tenant_id = $1 AND permit_id = $2 FOR UPDATE`,
 			ir.Tenant, ir.PermitID).Scan(&status, &amount)
 		if errors.Is(err, pgx.ErrNoRows) {
-			// R1-OBS-01: name the cause instead of an internal error.
-			return fault("NOT_FOUND", "PERMIT_MISSING: permit %s is not in the engine database (it was restored to before the permit was issued); "+
-				"its %d minor units cannot be held again from the engine's records; an operator must reconcile mandate %s before writes resume",
-				ir.PermitID, ir.AmountMinor, ir.MandateID)
+			// R1-DEF-05: the engine was restored to before the permit (and
+			// possibly the instruction) existed. Rebuild them from the
+			// anchor's signed intent and hold the amount again.
+			if err := e.rebuildFromIntent(ctx, tx, ir, m); err != nil {
+				return err
+			}
+			status, amount = "ACTIVE", ir.AmountMinor
+			err = nil
 		}
 		if err != nil {
 			return err
@@ -994,3 +1004,142 @@ func newBudget(ctx context.Context) budget {
 }
 
 func (b budget) spent() bool { return b.has && time.Now().After(b.deadline) }
+
+// rebuildFromIntent restores the instruction, action revision and issuance
+// of an anchored dispatch that an engine restore lost (R1-DEF-05). Nothing
+// is taken on trust: the permit's signature is verified against the trust
+// store and every field must match the intent; the action canonical must
+// reproduce the anchored digest; the mandate must exist (and, at the
+// permit's revision, carry the permit's mandate digest). The issuance comes
+// back ACTIVE with its amount moved from available to reserved, so the
+// normal rebuild then consumes it and holds the amount as unresolved.
+// Anything that does not fit is refused with a named cause and nothing is
+// written.
+func (e *Engine) rebuildFromIntent(ctx context.Context, tx pgx.Tx, ir anchor.IntentRecord, m *mandateRow) error {
+	refuse := func(cause, format string, args ...any) error {
+		return fault("REVISION_STALE", "REBUILD_REFUSED %s: operation %s: "+format, append([]any{cause, ir.OpRef}, args...)...)
+	}
+	if ir.PermitJWS == "" {
+		return refuse("PERMIT_UNSIGNED", "the anchor's intent carries no signed permit")
+	}
+	v, verr := contract.Verify(ir.PermitJWS, contract.KindPermit, e.Trust)
+	if verr != nil {
+		return refuse("PERMIT_INVALID", "the anchored permit does not verify: %s", verr.Detail)
+	}
+	pm := v.Value.(*contract.Permit)
+	switch {
+	case v.Digest != ir.PermitDigest:
+		return refuse("PERMIT_DIGEST_DIFFERS", "permit digest %s, intent %s", v.Digest, ir.PermitDigest)
+	case pm.PermitID != ir.PermitID || pm.OperationID != ir.OpRef || pm.TenantID != ir.Tenant || pm.InstructionID != ir.InstructionID ||
+		pm.ActionRevision != ir.ActionRevision || pm.ActionDigest != ir.ActionDigest || pm.MandateID != ir.MandateID ||
+		pm.ControlEpoch != ir.ControlEpoch || pm.AmountMinor != ir.AmountMinor || pm.Currency != ir.Currency:
+		return refuse("PERMIT_INTENT_DIFFERS", "the signed permit does not match the anchor's intent")
+	case m.Revision == pm.MandateRevision && m.Digest != pm.MandateDigest:
+		return refuse("MANDATE_DIFFERS", "mandate %s revision %d does not carry the permit's mandate digest", ir.MandateID, m.Revision)
+	}
+	canonical, digest, cerr := contract.CanonicalDigest(contract.KindAction, []byte(ir.ActionCanonical))
+	if cerr != nil || digest != ir.ActionDigest || string(canonical) != ir.ActionCanonical {
+		return refuse("ACTION_DIFFERS", "the anchored action does not reproduce digest %s", ir.ActionDigest)
+	}
+	var act contract.Action
+	if err := json.Unmarshal(canonical, &act); err != nil {
+		return refuse("ACTION_DIFFERS", "the anchored action does not parse: %v", err)
+	}
+	if act.TenantID != ir.Tenant || act.InstructionID != ir.InstructionID || act.ActionRevision != ir.ActionRevision ||
+		act.AmountMinor != ir.AmountMinor || act.ActorID != pm.ActorID || act.Audience != pm.Audience {
+		return refuse("ACTION_DIFFERS", "the anchored action does not match its permit")
+	}
+
+	// Instruction.
+	var instMandate string
+	err := tx.QueryRow(ctx, `SELECT mandate_id FROM steelmatter.instructions WHERE tenant_id = $1 AND instruction_id = $2 FOR UPDATE`,
+		ir.Tenant, ir.InstructionID).Scan(&instMandate)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		if ir.SourceSystem == "" || ir.SourceRecordID == "" || ir.IssuerPrincipal == "" || ir.CreationDigest == "" {
+			return refuse("INSTRUCTION_MISSING", "instruction %s is not in the engine database and the anchor's intent predates the source fields needed to rebuild it",
+				ir.InstructionID)
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO steelmatter.instructions (tenant_id, instruction_id, source_system, source_record_id,
+			mandate_id, actor_id, issuer_principal, creation_request_digest, current_revision, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, clock_timestamp())`,
+			ir.Tenant, ir.InstructionID, ir.SourceSystem, ir.SourceRecordID, ir.MandateID, pm.ActorID, ir.IssuerPrincipal, ir.CreationDigest,
+			ir.ActionRevision); err != nil {
+			if isUnique(err, "instruction_source_unique") {
+				return refuse("SOURCE_TAKEN", "source record %s/%s now belongs to another instruction", ir.SourceSystem, ir.SourceRecordID)
+			}
+			return err
+		}
+	case err != nil:
+		return err
+	case instMandate != ir.MandateID:
+		return refuse("INSTRUCTION_DIFFERS", "instruction %s belongs to mandate %s", ir.InstructionID, instMandate)
+	}
+
+	// Action revision.
+	var revStatus, revDigest string
+	err = tx.QueryRow(ctx, `SELECT status, action_digest FROM steelmatter.action_revisions WHERE tenant_id = $1 AND instruction_id = $2 AND action_revision = $3 FOR UPDATE`,
+		ir.Tenant, ir.InstructionID, ir.ActionRevision).Scan(&revStatus, &revDigest)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		var live bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM steelmatter.action_revisions WHERE tenant_id = $1 AND instruction_id = $2
+			AND status IN ('CURRENT', 'COMMITTED'))`, ir.Tenant, ir.InstructionID).Scan(&live); err != nil {
+			return err
+		}
+		if live {
+			return refuse("REVISION_MISSING", "instruction %s has another live action revision; action revision %d cannot be rebuilt beside it",
+				ir.InstructionID, ir.ActionRevision)
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO steelmatter.action_revisions (tenant_id, instruction_id, action_revision, status, action_canonical,
+			action_digest, supplier_id, supplier_revision, delivery_id, audience, amount_minor, created_at)
+			VALUES ($1, $2, $3, 'CURRENT', $4, $5, $6, $7, $8, $9, $10, clock_timestamp())`,
+			ir.Tenant, ir.InstructionID, ir.ActionRevision, canonical, digest, act.SupplierID, act.SupplierRevision, act.DeliveryID, act.Audience,
+			act.AmountMinor); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE steelmatter.instructions SET current_revision = $3 WHERE tenant_id = $1 AND instruction_id = $2`,
+			ir.Tenant, ir.InstructionID, ir.ActionRevision); err != nil {
+			return err
+		}
+	case err != nil:
+		return err
+	case revDigest != ir.ActionDigest:
+		return refuse("REVISION_DIFFERS", "action revision %d carries digest %s", ir.ActionRevision, revDigest)
+	case revStatus != "CURRENT":
+		return refuse("REVISION_DIFFERS", "action revision %d is %s", ir.ActionRevision, revStatus)
+	}
+
+	// Issuance: back to ACTIVE with its amount reserved.
+	var avail int64
+	if err := tx.QueryRow(ctx, `SELECT available_minor FROM steelmatter.mandates WHERE tenant_id = $1 AND mandate_id = $2`, ir.Tenant, ir.MandateID).
+		Scan(&avail); err != nil {
+		return err
+	}
+	if avail < ir.AmountMinor {
+		return refuse("INSUFFICIENT_BUDGET", "mandate %s has only %d minor units available to hold %d again", ir.MandateID, avail, ir.AmountMinor)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO steelmatter.issuances (tenant_id, permit_id, reservation_id, operation_id, instruction_id,
+		action_revision, mandate_id, control_epoch, amount_minor, status, permit_canonical, permit_digest, permit_jws, issued_at, expires_at, signed_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ACTIVE', $10, $11, $12, $13, $14, clock_timestamp())`,
+		ir.Tenant, pm.PermitID, pm.ReservationID, pm.OperationID, pm.InstructionID, pm.ActionRevision, pm.MandateID, pm.ControlEpoch,
+		pm.AmountMinor, v.Payload, v.Digest, ir.PermitJWS, pm.IssuedAt, pm.ExpiresAt); err != nil {
+		if isUnique(err, "issuance_reservation_unique") || isUnique(err, "issuance_operation_unique") {
+			return refuse("PERMIT_USED_ELSEWHERE", "the permit's reservation or operation is already used by another issuance")
+		}
+		return err
+	}
+	_, err = tx.Exec(ctx, `UPDATE steelmatter.mandates SET available_minor = available_minor - $3, reserved_minor = reserved_minor + $3
+		WHERE tenant_id = $1 AND mandate_id = $2`, ir.Tenant, ir.MandateID, ir.AmountMinor)
+	return err
+}
+
+// instructionSource is the instruction's trusted source key, issuer and
+// creation digest, copied into each DISPATCH_INTENT (R1-DEF-05).
+type instructionSource struct {
+	System, RecordID, Issuer, Digest string
+}
+
+func (s instructionSource) apply(ir *anchor.IntentRecord) {
+	ir.SourceSystem, ir.SourceRecordID, ir.IssuerPrincipal, ir.CreationDigest = s.System, s.RecordID, s.Issuer, s.Digest
+}

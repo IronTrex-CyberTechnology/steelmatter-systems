@@ -139,8 +139,9 @@ func (e *Engine) Dispatch(ctx context.Context, p auth.Principal, actionJSON []by
 		// authorised request, so the same intent (and admission time) is
 		// reused and the append is an idempotent repeat.
 		admitted := now
+		var prior *anchor.IntentRecord
 		if e.Anchor != nil {
-			prior, err := e.priorIntent(ctx, p.Tenant, permit.OperationID)
+			prior, err = e.priorIntent(ctx, p.Tenant, permit.OperationID)
 			if err != nil {
 				return anchorFault(err)
 			}
@@ -179,11 +180,22 @@ func (e *Engine) Dispatch(ctx context.Context, p auth.Principal, actionJSON []by
 		// (D5 mechanism step 1). No anchor record, no dispatch; and none can be
 		// appended once writes are off or this engine's generation is old.
 		if e.Anchor != nil {
+			var src instructionSource
+			if err := tx.QueryRow(ctx, `SELECT source_system, source_record_id, issuer_principal, creation_request_digest FROM steelmatter.instructions
+				WHERE tenant_id = $1 AND instruction_id = $2`, p.Tenant, action.InstructionID).
+				Scan(&src.System, &src.RecordID, &src.Issuer, &src.Digest); err != nil {
+				return err
+			}
 			ir := anchor.IntentRecord{AdmittedAt: ts(admitted), Tenant: p.Tenant, OpRef: permit.OperationID, InstructionID: action.InstructionID,
 				ActionRevision: action.ActionRevision, MandateID: permit.MandateID, ControlEpoch: permit.ControlEpoch, CompanyRef: e.Cfg.CompanyRef,
 				PermitID: permit.PermitID, PermitJWS: permitJWS, PermitDigest: a.verified.Digest, ActionCanonical: string(a.canonical),
 				ActionDigest: a.actionDigest, AmountMinor: is.Amount, Currency: action.Currency, SupplierRef: action.SupplierID,
 				SupplierRevision: action.SupplierRevision, DeliveryRef: action.DeliveryID}
+			// A retry reuses its earlier intent unchanged; an intent written
+			// before the source fields existed stays without them.
+			if prior == nil || prior.SourceSystem != "" {
+				src.apply(&ir)
+			}
 			if _, err := e.Anchor.Append(ctx, anchor.DispatchIntent, p.Tenant, permit.OperationID, ir, e.anchorGen.Load()); err != nil {
 				return anchorFault(err)
 			}

@@ -96,6 +96,13 @@ type IntentRecord struct {
 	SupplierRef      string `json:"supplier_ref"`
 	SupplierRevision int64  `json:"supplier_revision"`
 	DeliveryRef      string `json:"delivery_ref"`
+	// The instruction's trusted source key, issuer and creation digest
+	// (R1-DEF-05). With them, recovery can rebuild an instruction that an
+	// engine restore lost. Empty in intents written before they were added.
+	SourceSystem    string `json:"source_system,omitempty"`
+	SourceRecordID  string `json:"source_record_id,omitempty"`
+	IssuerPrincipal string `json:"issuer_principal,omitempty"`
+	CreationDigest  string `json:"creation_request_digest,omitempty"`
 }
 
 // OutcomeRecord is the OUTCOME payload: the destination result and the

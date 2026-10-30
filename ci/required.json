@@ -7212,7 +7212,17 @@
         {
           "phase": "integration",
           "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
-          "test": "TestR1OBS01MissingPermitIsNamed"
+          "test": "TestR1OBS01MissingMandateIsNamed"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1DEF05RestoreBeforePermitIsRebuiltFromAnchor"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/cmd/smdemo",
+          "test": "TestSmdemoResetWithR1Tables"
         },
         {
           "phase": "integration",

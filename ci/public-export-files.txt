@@ -37,6 +37,7 @@ ci/required.json
 ci/sprint-report-notes.md
 cmd/smci/main.go
 cmd/smdemo/main.go
+cmd/smdemo/reset_test.go
 cmd/smkeys/main.go
 cmd/smkeys/main_test.go
 cmd/smlossproxy/main.go

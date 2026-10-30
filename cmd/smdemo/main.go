@@ -123,9 +123,14 @@ func setup(ctx context.Context, pool *pgxpool.Pool, tokensPath string) error {
 
 // reset returns scenario state to the synthetic starting point.
 func reset(ctx context.Context, pool *pgxpool.Pool) error {
+	// R1 tables (dispatches, R1 evidence, approvals, worker backoff) refer to
+	// the R0 rows, so they are truncated in the same statement
+	// (NEW-P6-SDET-01). Trusted configuration (principals, entitlements,
+	// approval policies) is kept.
 	_, err := pool.Exec(ctx, `TRUNCATE target.payment_requests, target.invoice_references, steelmatter.observations, steelmatter.operations, steelmatter.obligations, steelmatter.outbox,
 		steelmatter.event_receipts, steelmatter.amendments, steelmatter.issuances, steelmatter.action_revisions, steelmatter.instructions,
-		steelmatter.workflow_assignments, steelmatter.mandates, target.purchase_order_lines, target.purchase_orders;
+		steelmatter.workflow_assignments, steelmatter.mandates, target.purchase_order_lines, target.purchase_orders,
+		steelmatter.r1_observations, steelmatter.r1_executions, steelmatter.dispatches, steelmatter.approvals, steelmatter.worker_backoff;
 		UPDATE target.suppliers SET revision = 1, status = 'ACTIVE'`)
 	if err == nil {
 		fmt.Println("demo state reset to the synthetic starting point")

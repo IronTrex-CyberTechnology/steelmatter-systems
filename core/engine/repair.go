@@ -557,5 +557,11 @@ func intentFromDispatch(ctx context.Context, tx pgx.Tx, tenant, opRef string) (a
 		return ir, fmt.Errorf("stored action for %s: %w", opRef, err)
 	}
 	ir.Currency, ir.SupplierRef, ir.SupplierRevision, ir.DeliveryRef = act.Currency, act.SupplierID, act.SupplierRevision, act.DeliveryID
+	var src instructionSource
+	if err := tx.QueryRow(ctx, `SELECT source_system, source_record_id, issuer_principal, creation_request_digest FROM steelmatter.instructions
+		WHERE tenant_id = $1 AND instruction_id = $2`, tenant, ir.InstructionID).Scan(&src.System, &src.RecordID, &src.Issuer, &src.Digest); err != nil {
+		return ir, classify(err)
+	}
+	src.apply(&ir)
 	return ir, nil
 }
