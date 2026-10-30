@@ -3,6 +3,7 @@ package odoo
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -339,6 +340,52 @@ func TestListRejectsRowsOutOfOrder(t *testing.T) {
 	})
 	if _, err := c.List(context.Background(), 0, 10); err == nil {
 		t.Fatal("out-of-order rows must be an error")
+	}
+}
+
+// C-07: an observe-only connector holds no executor login and sends no
+// write, fence or executor readiness call to Odoo; reads still work.
+func TestReadOnlyNeverUsesTheExecutor(t *testing.T) {
+	f := &fakeOdoo{t: t, handlers: map[string]func([]json.RawMessage) (any, *rpcErr){}}
+	var mu sync.Mutex
+	var sent int
+	f.raw = func(http.ResponseWriter) bool { mu.Lock(); sent++; mu.Unlock(); return false }
+	srv := httptest.NewServer(f)
+	t.Cleanup(srv.Close)
+	cfg := Config{URL: srv.URL, Database: "smr1", Observer: Credentials{"sm_observer", obsPW}, ReadOnly: true, Timeout: 2 * time.Second}
+	withExec := cfg
+	withExec.Executor = Credentials{"sm_executor", execPW}
+	if _, err := New(withExec); err == nil {
+		t.Fatal("read-only connector accepted executor credentials")
+	}
+	c, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SetCredentials(Credentials{"sm_executor", execPW}, Credentials{"sm_observer", obsPW}); err == nil {
+		t.Fatal("read-only connector accepted executor credentials on rotation")
+	}
+	ctx := context.Background()
+	if _, err := c.Execute(ctx, act("op-1")); !errors.Is(err, ErrReadOnly) {
+		t.Fatalf("execute: %v", err)
+	}
+	if _, err := c.Fence(ctx, "op-1", 0); !errors.Is(err, ErrReadOnly) {
+		t.Fatalf("fence: %v", err)
+	}
+	if r, _ := c.Readiness(ctx, act("op-1")); r.Outcome != connector.NotReady || r.Reason != ReasonReadOnly {
+		t.Fatalf("readiness %+v", r)
+	}
+	if sent != 0 {
+		t.Fatalf("%d requests sent to Odoo for refused calls", sent)
+	}
+	f.on("sm_lookup", func([]json.RawMessage) (any, *rpcErr) { return result("op-1", "lookup", "NOT_FOUND_NOW", nil), nil })
+	if r, _ := c.Lookup(ctx, "op-1"); r.Outcome != connector.NotFoundNow {
+		t.Fatalf("lookup %+v", r)
+	}
+	for _, call := range f.callsMade() {
+		if !strings.HasPrefix(call, "sm_observer:") {
+			t.Fatalf("read-only connector used the executor: %s", call)
+		}
 	}
 }
 

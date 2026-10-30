@@ -223,7 +223,14 @@ func serve(parent context.Context) error {
 	}
 	eng.RepairReviewers = splitList(os.Getenv("STEELMATTER_REPAIR_REVIEWERS"))
 	eng.RepairConfirmers = splitList(os.Getenv("STEELMATTER_REPAIR_CONFIRMERS"))
-	conn, connKind, err := connectorFromEnv(os.Getenv)
+	switch v := os.Getenv("STEELMATTER_OBSERVE_ONLY"); v {
+	case "", "false":
+	case "true":
+		eng.Cfg.ObserveOnly = true
+	default:
+		return fmt.Errorf("STEELMATTER_OBSERVE_ONLY must be true or false, not %q", v)
+	}
+	conn, connKind, err := connectorFromEnv(os.Getenv, eng.Cfg.ObserveOnly)
 	if err != nil {
 		return err
 	}
@@ -232,13 +239,6 @@ func serve(parent context.Context) error {
 	eng.Cfg.Tenant = os.Getenv("STEELMATTER_TENANT")
 	if conn != nil && eng.Cfg.Tenant == "" {
 		return errors.New("STEELMATTER_TENANT is required with an R1 destination connector: one tenant and one company per deployment")
-	}
-	switch v := os.Getenv("STEELMATTER_OBSERVE_ONLY"); v {
-	case "", "false":
-	case "true":
-		eng.Cfg.ObserveOnly = true
-	default:
-		return fmt.Errorf("STEELMATTER_OBSERVE_ONLY must be true or false, not %q", v)
 	}
 	slog.Info("R1 destination connector", "kind", connKind, "company_ref", eng.Cfg.CompanyRef, "tenant", eng.Cfg.Tenant,
 		"observe_only", eng.Cfg.ObserveOnly)
