@@ -2,8 +2,8 @@
 # Build release binaries for the current platform with checksums.
 source "$(dirname "$0")/lib.sh"
 require_go
-commit="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
-[[ -z "$(git status --porcelain 2>/dev/null)" ]] || commit="$commit-dirty"
+commit="$(source_commit)"
+[[ "$commit" == unknown ]] || commit="${commit:0:12}${commit:40}" # short SHA, keeping any -dirty
 dest="$ROOT/dist/$(go env GOOS)-$(go env GOARCH)"
 rm -rf "$dest"; mkdir -p "$dest"
 for cmd in steelmatter smkeys; do

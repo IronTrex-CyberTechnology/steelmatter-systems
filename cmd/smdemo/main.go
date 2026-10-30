@@ -4,6 +4,7 @@
 //	smdemo setup -admin-url URL -tokens FILE      create synthetic principals, entitlements and suppliers
 //	smdemo run   -server URL -admin-url URL -tokens FILE [-scenario all|flagship|stale-supplier|lost-response|agent-injection]
 //	             [-out DIR] [-json FILE] [-commit SHA] [-reference FILE]
+//	                                               -commit defaults to the commit built in (T43)
 //	                                               exit 1 if any scenario fails or results drift from the
 //	                                               pinned reference (T43; "" skips the comparison)
 //	smdemo reset -admin-url URL                    return to the synthetic starting state (keeps principals)
@@ -18,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -34,6 +36,37 @@ var principals = []struct{ id, kind string }{
 	{"observer-a", auth.Observer}, {"operator-a", auth.Operator},
 }
 
+// buildCommit is the source commit, set at build time by scripts/demo
+// (-ldflags "-X main.buildCommit=...") from git or a release bundle's COMMIT.
+var buildCommit string
+
+// defaultCommit is the commit recorded when -commit is not given (T43): the
+// one set at build time, else the one Go recorded from git (-dirty when the
+// tree had changes), else "unknown".
+func defaultCommit(set string, info *debug.BuildInfo) string {
+	if set != "" {
+		return set
+	}
+	rev, dirty := "", false
+	if info != nil {
+		for _, s := range info.Settings {
+			switch s.Key {
+			case "vcs.revision":
+				rev = s.Value
+			case "vcs.modified":
+				dirty = s.Value == "true"
+			}
+		}
+	}
+	if rev == "" {
+		return "unknown"
+	}
+	if dirty {
+		rev += "-dirty"
+	}
+	return rev
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "usage: smdemo setup|run|reset [flags]")
@@ -46,7 +79,8 @@ func main() {
 	scenario := fs.String("scenario", "all", "scenario name or all")
 	outDir := fs.String("out", "", "directory for the flagship evidence bundle")
 	jsonOut := fs.String("json", "", "write scenario results as JSON")
-	commit := fs.String("commit", "unknown", "source commit recorded in the results trace")
+	info, _ := debug.ReadBuildInfo()
+	commit := fs.String("commit", defaultCommit(buildCommit, info), "source commit recorded in the results trace")
 	refPath := fs.String("reference", procurement.ReferencePath, "pinned demo reference to compare with (\"\" to skip)")
 	_ = fs.Parse(os.Args[2:])
 	if *adminURL == "" {

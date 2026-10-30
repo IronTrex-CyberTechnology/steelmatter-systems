@@ -32,7 +32,7 @@ It prints the elapsed time and writes `.out/demo.json`.
 
 Run one scenario with `DEMO_SCENARIO=flagship scripts/demo`.
 
-Each scenario prints, and `.out/demo.json` records, the commit, the tests that cover it and the SHA-256 of every fixture it uses. The run is compared with the pinned results in `fixtures/demo/reference-results-v1.json` (T43); a changed outcome or fixture fails the demo until the reference is regenerated and reviewed:
+Each scenario prints, and `.out/demo.json` records, the commit (from git, or in a release bundle from its `COMMIT` file), the tests that cover it and the SHA-256 of every fixture it uses. The run is compared with the pinned results in `fixtures/demo/reference-results-v1.json` (T43); a changed outcome or fixture fails the demo until the reference is regenerated and reviewed:
 ```bash
 STEELMATTER_UPDATE_DEMO_REFERENCE=1 go test -tags integration,failpoints -run '^TestT43DemoEvidenceConsistency$' ./tests/integration
 ```

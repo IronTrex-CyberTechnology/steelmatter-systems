@@ -197,3 +197,68 @@ func copyWorkingTree(t *testing.T, root, dst string) {
 		}
 	}
 }
+
+// T43: scripts/demo names its source commit in a release bundle too. The
+// bundle has no .git, so the commit comes from the COMMIT file that
+// scripts/release-bundle writes, and a bundle unpacked inside another git
+// repository never reports that repository's HEAD.
+func TestT43SourceCommitInReleaseBundle(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const sha = "8c1ecd3a6f0e4b1c2d3e4f5a6b7c8d9e0f1a2b3c"
+	commitIn := func(dir string) string {
+		t.Helper()
+		cmd := exec.Command("bash", "-c", `source scripts/lib.sh && source_commit`)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("source_commit in %s: %v\n%s", dir, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	bundle := func(parent string, commit string) string {
+		dir := filepath.Join(parent, "steelmatter-bundle")
+		for _, f := range []string{"scripts/lib.sh", "versions.env"} {
+			b, err := os.ReadFile(filepath.Join(root, f))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, f)), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, f), b, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if commit != "" {
+			if err := os.WriteFile(filepath.Join(dir, "COMMIT"), []byte(commit+"\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return dir
+	}
+	if got := commitIn(bundle(t.TempDir(), sha)); got != sha {
+		t.Fatalf("release bundle: commit %q, want %q", got, sha)
+	}
+	if got := commitIn(bundle(t.TempDir(), "")); got != "unknown" {
+		t.Fatalf("no git and no COMMIT: %q", got)
+	}
+	// Unpacked inside another repository: still the bundle's own commit.
+	outer := t.TempDir()
+	if out, err := exec.Command("git", "-C", outer, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+	if got := commitIn(bundle(outer, sha)); got != sha {
+		t.Fatalf("bundle inside another repository: commit %q, want %q", got, sha)
+	}
+	// The checkout itself: its HEAD, with -dirty only for tracked changes.
+	head, err := exec.Command("git", "-C", root, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := commitIn(root); strings.TrimSuffix(got, "-dirty") != strings.TrimSpace(string(head)) {
+		t.Fatalf("checkout: commit %q, HEAD %s", got, head)
+	}
+}

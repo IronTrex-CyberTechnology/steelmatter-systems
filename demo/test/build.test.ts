@@ -3,10 +3,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildSite, data, tempDir } from './helpers.ts';
+import { buildSite, data, sourceCommit, tempDir } from './helpers.ts';
 
 const dir = fileURLToPath(new URL('..', import.meta.url));
 const tsc = join(dir, 'node_modules', '.bin', process.platform === 'win32' ? 'tsc.cmd' : 'tsc');
@@ -36,4 +36,14 @@ test('the page embeds the pinned recording and evidence fixtures unchanged', asy
   assert.ok(app.includes(JSON.stringify(data.reference.data.generated_at_commit)), 'recorded commit is embedded');
   assert.equal(data.reference.data.simulation, true);
   assert.equal(data.reference.data.synthetic, true);
+});
+
+test('T43: a release bundle (no .git) builds from the commit in its COMMIT file, never from an enclosing repository', () => {
+  const sha = '8c1ecd3a6f0e4b1c2d3e4f5a6b7c8d9e0f1a2b3c';
+  const bundle = tempDir('bundle');
+  assert.deepEqual(sourceCommit(bundle), { commit: 'unknown', dirty: false });
+  writeFileSync(join(bundle, 'COMMIT'), `${sha}\n`);
+  assert.deepEqual(sourceCommit(bundle), { commit: sha, dirty: false });
+  writeFileSync(join(bundle, 'COMMIT'), 'not-a-commit\n');
+  assert.deepEqual(sourceCommit(bundle), { commit: 'unknown', dirty: false });
 });

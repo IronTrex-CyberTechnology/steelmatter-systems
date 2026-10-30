@@ -8,6 +8,24 @@ source "$ROOT/versions.env"
 OUT="$ROOT/.out"
 mkdir -p "$OUT"
 
+# source_commit prints the source commit (T43): HEAD of this checkout, with
+# -dirty when tracked files have uncommitted changes; in a release bundle,
+# which has no .git, the commit scripts/release-bundle wrote to COMMIT;
+# otherwise unknown. A bundle unpacked inside another repository never takes
+# that repository's HEAD.
+source_commit() {
+  local c top
+  top="$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [[ -n "$top" && "$(cd "$top" && pwd -P)" == "$(cd "$ROOT" && pwd -P)" ]] && c="$(git -C "$ROOT" rev-parse --verify -q HEAD)"; then
+    [[ -z "$(git -C "$ROOT" status --porcelain --untracked-files=no 2>/dev/null)" ]] || c="$c-dirty"
+  elif [[ -f "$ROOT/COMMIT" ]] && c="$(tr -d '[:space:]' < "$ROOT/COMMIT")" && [[ "$c" =~ ^[0-9a-f]{40}$ ]]; then
+    :
+  else
+    c=unknown
+  fi
+  printf '%s\n' "$c"
+}
+
 log()  { printf '==> %s\n' "$*"; }
 warn() { printf 'WARN: %s\n' "$*" >&2; }
 die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }

@@ -38,6 +38,9 @@ out="$ROOT/dist/release"; rm -rf "$out"; mkdir -p "$out"
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 
 git archive --format=tar --prefix="$name/" "$commit" -- "${pathspec[@]}" | tar -x -C "$work"
+# The bundle has no .git: COMMIT names its source commit for scripts/demo,
+# smdemo and the demo page build (T43).
+printf '%s\n' "$commit" > "$work/$name/COMMIT"
 
 fail=0; audit="$out/AUDIT.txt"
 {
@@ -48,7 +51,7 @@ fail=0; audit="$out/AUDIT.txt"
   echo "allowlist: $ALLOWLIST (exact files; additions need review)"
   echo "files:     $(find "$work/$name" -type f | wc -l)"
   echo
-  printf '%s\n' "${paths[@]}" | LC_ALL=C sort > "$work/expected-files"
+  printf '%s\n' "${paths[@]}" COMMIT | LC_ALL=C sort > "$work/expected-files"
   (cd "$work/$name" && find . -type f | sed 's#^./##' | LC_ALL=C sort) > "$work/actual-files"
   if diff -u "$work/expected-files" "$work/actual-files"; then
     echo "ok   exported files exactly match reviewed allowlist"

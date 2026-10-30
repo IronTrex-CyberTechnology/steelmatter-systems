@@ -6435,6 +6435,26 @@
           "test": "verifier.test.ts/browser bundle reports every chronology case (ADR-003) exactly like the Node verifier, and the CLI gates agree"
         },
         {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/cmd/smdemo",
+          "test": "TestDefaultCommit"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestT43SourceCommitInReleaseBundle"
+        },
+        {
+          "phase": "demo",
+          "package": "demo",
+          "test": "build.test.ts/T43: a release bundle (no .git) builds from the commit in its COMMIT file, never from an enclosing repository"
+        },
+        {
+          "phase": "demo",
+          "package": "demo",
+          "test": "render.test.ts/T43: the header says how the recorded commit relates to the commit the page was built from"
+        },
+        {
           "phase": "sdk",
           "package": "packages/sdk",
           "test": "limits.test.ts/chunked body without Content-Length: rejected soon after 16 MiB, not after downloading everything, and not retried"
