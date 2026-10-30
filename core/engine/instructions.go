@@ -370,6 +370,20 @@ func (e *Engine) requireIssuer(ctx context.Context, p auth.Principal, sourceSyst
 	return nil
 }
 
+// requireTenantMandate answers NOT_FOUND for a mandate that is not in the
+// caller's own tenant, without touching recovery state or the destination.
+func (e *Engine) requireTenantMandate(ctx context.Context, tenant, mandateID string) error {
+	var ok bool
+	if err := e.Pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM steelmatter.mandates
+		WHERE tenant_id = $1 AND mandate_id = $2)`, tenant, mandateID).Scan(&ok); err != nil {
+		return unavailable(err)
+	}
+	if !ok {
+		return fault("NOT_FOUND", "mandate not found")
+	}
+	return nil
+}
+
 // CreateInstruction creates a trusted instruction (201), returns the existing
 // one for an identical request (200, at its current revision), or conflicts
 // on a changed request for the same source record (409 SOURCE_CONFLICT).
@@ -383,6 +397,12 @@ func (e *Engine) CreateInstruction(ctx context.Context, p auth.Principal, r Inst
 	}
 	digest := requestDigest(map[string]any{"source_system": r.SourceSystem, "source_record_id": r.SourceRecordID, "mandate_id": r.MandateID, "proposed_action": norm})
 	instructionID := newID("inst")
+	// NEW-RT913-SEC-01: tenant authorisation comes before the recovery state.
+	// A mandate outside the caller's tenant is NOT_FOUND whatever the state of
+	// recovery, so another tenant learns nothing about it.
+	if err := e.requireTenantMandate(ctx, p.Tenant, r.MandateID); err != nil {
+		return nil, false, err
+	}
 	if err := e.requireNoRecovery(ctx); err != nil {
 		return nil, false, err
 	}

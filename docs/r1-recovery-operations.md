@@ -49,9 +49,11 @@ is committed).
 Tests: `TestRTFC7901NoSecondPurchaseForTheSameSourceRecord` (create, evaluate,
 dispatch), `TestRTFC7902AmendCannotReuseAnchoredRevisionNumber`.
 
-Role checks come first: a caller who is not an entitled issuer gets 403 (404 for
-an instruction outside its source systems) whatever the recovery state is
-(`TestRTFC79RoleChecksComeBeforeRecoveryState`).
+Role and tenant checks come first: a caller who is not an entitled issuer gets 403
+(404 for an instruction outside its source systems, 404 for a mandate outside its
+tenant) whatever the recovery state is, and nothing about recovery appears in
+those answers (`TestRTFC79RoleChecksComeBeforeRecoveryState`,
+`TestRT913SEC01OtherTenantLearnsNothingAboutRecovery`).
 
 Limit: a DISPATCH_INTENT written before commit 0ee221a carries no source key, so
 the source-record check cannot see it (the instruction check still can), and it
@@ -146,7 +148,7 @@ confirmed by lookup before any amount moves out of held.
 
 | Call | During recovery |
 |---|---|
-| `POST /v1/instructions` | 403 if the caller is not an entitled issuer; otherwise 503 `RECOVERY_IN_PROGRESS` while writes are off; 503 `RESTORE_SUSPECTED` if the anchor shows the source record dispatched. |
+| `POST /v1/instructions` | 403 if the caller is not an entitled issuer; 404 if the mandate is not in the caller's tenant; otherwise 503 `RECOVERY_IN_PROGRESS` while writes are off; 503 `RESTORE_SUSPECTED` if the anchor shows the source record dispatched. |
 | `POST /v1/instructions/{id}/revisions` | 403 not an issuer; 404 outside the issuer's source systems; 503 while writes are off or `RESTORE_SUSPECTED`; an exact retry of a recorded amendment is 200 with `status` and `effective`, except 409 `AMENDMENT_SUPERSEDED` when recovery restored an older revision; 409 `INSTRUCTION_SUPERSEDED` for a superseded instruction. |
 | `GET /v1/instructions/{id}` | `status` is `OPEN`, `COMMITTED` or `SUPERSEDED`; `superseded_by` names the instruction recovery kept. |
 | `POST /v1/actions/evaluate`, `POST /v1/dispatches` | 503 while writes are off or `RESTORE_SUSPECTED`; 409 `INSTRUCTION_SUPERSEDED`. |
