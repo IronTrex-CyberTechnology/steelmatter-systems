@@ -70,6 +70,9 @@ func (e *Engine) settle(ctx context.Context, tenant, opRef string, c connector.C
 	if e.Anchor != nil {
 		on, _, werr := e.writesOn(ctx)
 		writes = werr == nil && on
+		if writes && e.checkAnchorClock(ctx) != nil {
+			writes = false // never create while the clocks cannot be trusted; look up and fence only
+		}
 		if writes {
 			if d.minSeq, err = e.Anchor.ExpectedMinSeq(ctx, d.companyRef); err != nil {
 				return nil, false, dependency("recovery anchor", err)
@@ -87,6 +90,13 @@ func (e *Engine) settle(ctx context.Context, tenant, opRef string, c connector.C
 	} else {
 		res, err = c.Lookup(ctx, opRef)
 		if err == nil && res.Outcome == connector.NotFoundNow {
+			if e.Cfg.ObserveOnly {
+				// Observe-only never writes to the destination, not even a
+				// fence (Aakhil, 30 Oct 2026): the amount stays held until a
+				// deployment with write authority fences it.
+				r, gerr := e.GetDispatch(ctx, tenant, opRef)
+				return r, false, gerr
+			}
 			res, err = c.Fence(ctx, opRef, d.minSeq)
 		}
 	}

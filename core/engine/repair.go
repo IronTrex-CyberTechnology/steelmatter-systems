@@ -60,6 +60,10 @@ func (e *Engine) releaseProof(ctx context.Context, c connector.Connector, opRef 
 	if c == nil {
 		return nil // checked again, with a fence, at confirmation
 	}
+	if e.Cfg.ObserveOnly {
+		return fault("FORBIDDEN", "OBSERVE_ONLY: %s has no BLOCK record and this deployment never writes to the destination; "+
+			"a deployment with write authority must fence it before a release", opRef)
+	}
 	if _, err := c.Fence(ctx, opRef, 0); err != nil {
 		return dependency("destination", err)
 	}

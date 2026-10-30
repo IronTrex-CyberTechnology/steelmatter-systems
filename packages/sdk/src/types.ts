@@ -455,7 +455,7 @@ export interface WriteState {
 }
 
 export type RestoreSignalCode = 'ENGINE_MISSING_OPERATION' | 'ANCHOR_MISSING_OPERATION' | 'ENGINE_STATUS_BEHIND' | 'DESTINATION_BEHIND'
-  | 'UNKNOWN_DESTINATION_OPERATION' | 'COMMITTED_ORDER_MISSING';
+  | 'UNKNOWN_DESTINATION_OPERATION' | 'COMMITTED_ORDER_MISSING' | 'CLOCK_SKEW';
 
 export interface RestoreSignal {
   code: RestoreSignalCode;
@@ -490,7 +490,7 @@ export interface ReconcileReport {
 }
 
 export type GateCheckName = 'WRITES_ALREADY_ON' | 'ALL_READABLE' | 'ALL_OPERATIONS_PRESENT' | 'NONE_PENDING_OR_UNRESOLVED' | 'HELD_RULE'
-  | 'BUCKETS_RECONCILE' | 'ANCHOR_NOT_BEHIND' | 'NO_UNEXPLAINED_SIGNALS';
+  | 'BUCKETS_RECONCILE' | 'ANCHOR_NOT_BEHIND' | 'NO_UNEXPLAINED_SIGNALS' | 'CLOCKS_AGREE';
 
 export interface GateCheck {
   name: GateCheckName;

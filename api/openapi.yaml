@@ -1361,7 +1361,7 @@ components:
         code:
           type: string
           enum: [ENGINE_MISSING_OPERATION, ANCHOR_MISSING_OPERATION, ENGINE_STATUS_BEHIND, DESTINATION_BEHIND,
-                 UNKNOWN_DESTINATION_OPERATION, COMMITTED_ORDER_MISSING]
+                 UNKNOWN_DESTINATION_OPERATION, COMMITTED_ORDER_MISSING, CLOCK_SKEW]
         tenant_id: { $ref: '#/components/schemas/Identifier' }
         op_ref: { $ref: '#/components/schemas/Identifier' }
         detail: { type: string, maxLength: 1024 }
@@ -1413,7 +1413,7 @@ components:
         name:
           type: string
           enum: [WRITES_ALREADY_ON, ALL_READABLE, ALL_OPERATIONS_PRESENT, NONE_PENDING_OR_UNRESOLVED, HELD_RULE, BUCKETS_RECONCILE,
-                 ANCHOR_NOT_BEHIND, NO_UNEXPLAINED_SIGNALS]
+                 ANCHOR_NOT_BEHIND, NO_UNEXPLAINED_SIGNALS, CLOCKS_AGREE]
         passed: { type: boolean }
         detail: { type: string, maxLength: 4096 }
     GateReport:

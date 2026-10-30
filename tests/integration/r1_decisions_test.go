@@ -494,12 +494,22 @@ func TestR1ObserveOnlyNeverPurchases(t *testing.T) {
 	if e.count(`SELECT count(*) FROM steelmatter.dispatches WHERE op_ref = $1`, p.operation) != 0 {
 		t.Fatal("observe-only recorded a dispatch")
 	}
-	requireExecution(t, "earlier dispatch", e.settle(earlier.operation, a.s), engine.DispatchFenced)
-	if a.s.Creates() != 0 {
-		t.Fatal("observe-only sent a create")
+	// Observe-only never writes to the destination, not even a fence
+	// (Aakhil, 30 Oct 2026): the earlier operation is only looked up and
+	// stays held.
+	requireExecution(t, "earlier dispatch", e.settle(earlier.operation, a.s), engine.DispatchPending)
+	if a.s.Creates() != 0 || a.s.StateOf(earlier.operation) != stub.Absent {
+		t.Fatalf("observe-only wrote to the destination: creates %d, state %q", a.s.Creates(), a.s.StateOf(earlier.operation))
 	}
 	if r := a.check(); r.WritesDisabled {
 		t.Fatalf("restore check in observe-only: %+v", r)
+	}
+	// A deployment with write authority settles it later (here: sends the
+	// never-sent create once).
+	e.eng.Cfg.ObserveOnly = false
+	requireExecution(t, "settled by a writer", e.settle(earlier.operation, a.s), engine.DispatchCommitted)
+	if a.s.Creates() != 1 {
+		t.Fatalf("creates %d", a.s.Creates())
 	}
 }
 

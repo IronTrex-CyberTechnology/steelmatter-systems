@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/auth"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -89,6 +91,53 @@ func (e *Engine) requireNoRecovery(ctx context.Context) error {
 		return fault("SERVICE_UNAVAILABLE", "this process's write generation is old; restart it to adopt generation %d", ws.Generation)
 	}
 	return nil
+}
+
+// The 2-second clock limit also applies between this engine and the
+// recovery anchor (Aakhil, 30 Oct 2026). Restore detection compares
+// timestamps written by both, so a larger difference can hide a restore.
+
+// anchorClockSkew returns |engine clock - anchor clock|.
+func (e *Engine) anchorClockSkew(ctx context.Context) (time.Duration, error) {
+	read := e.AnchorClock
+	if read == nil {
+		read = e.Anchor.Now
+	}
+	t, err := read(ctx)
+	if err != nil {
+		return 0, err
+	}
+	d := e.Now().Sub(t)
+	if d < 0 {
+		d = -d
+	}
+	return d, nil
+}
+
+// checkAnchorClock fails readiness and new execution when the anchor's clock
+// differs by more than MaxClockSkew or cannot be read. A measured excess also
+// turns writes off, so they come back only through the resume gate, which
+// checks the clocks again and verifies recovery.
+func (e *Engine) checkAnchorClock(ctx context.Context) error {
+	if e.Anchor == nil {
+		return nil
+	}
+	skew, err := e.anchorClockSkew(ctx)
+	if err != nil {
+		return fault("CLOCK_UNHEALTHY", "the recovery anchor's clock cannot be checked; nothing new is executed")
+	}
+	if skew <= e.Cfg.MaxClockSkew {
+		return nil
+	}
+	slog.Warn("anchor clock unhealthy", "skew", skew, "limit", e.Cfg.MaxClockSkew)
+	if ws, werr := e.Anchor.WriteState(ctx); werr == nil && ws.Enabled {
+		reason := fmt.Sprintf("%s: recovery anchor clock differs by %s (limit %s)", SignalClockSkew, skew.Round(time.Millisecond), e.Cfg.MaxClockSkew)
+		if ws, werr = e.Anchor.DisableWrites(ctx, reason); werr == nil {
+			_ = e.systemEvent(ctx, writesDisabledEvent, ws.Generation, map[string]any{"reason": reason, "generation": ws.Generation})
+		}
+	}
+	return fault("CLOCK_UNHEALTHY", "the recovery anchor's clock differs from the engine's by %s (limit %s); writes are off until the clocks agree and recovery is verified",
+		skew.Round(time.Millisecond), e.Cfg.MaxClockSkew)
 }
 
 // anchorFault maps an anchor append failure to a client-visible fault.

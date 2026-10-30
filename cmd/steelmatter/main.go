@@ -133,7 +133,10 @@ func envInt(name string, def int) (int, error) {
 	return n, nil
 }
 
-func serve(ctx context.Context) error {
+func serve(parent context.Context) error {
+	// A lost single-backend lock stops the service (cause returned).
+	ctx, stop := context.WithCancelCause(parent)
+	defer stop(nil)
 	dsn, err := requireEnv("STEELMATTER_DATABASE_URL")
 	if err != nil {
 		return err
@@ -183,6 +186,15 @@ func serve(ctx context.Context) error {
 		return fmt.Errorf("database config: %w", err)
 	}
 	defer pool.Close()
+	// Decision 7: the running backend never uses owner credentials.
+	if err := engine.CheckNotOwner(ctx, pool, "STEELMATTER_DATABASE_URL", "steelmatter", "steelmatter_meta", "target"); err != nil {
+		return err
+	}
+	// One active backend per deployment: refuse before touching anything a
+	// running backend depends on.
+	if err := holdInstance(ctx, stop, "engine database", pool); err != nil {
+		return err
+	}
 	engineSigners, obsSigner, ok := contract.SplitObserver(signers)
 	if !ok {
 		return errors.New("no signing key for SM-OBSERVATION+JWS")
@@ -236,6 +248,12 @@ func serve(ctx context.Context) error {
 			return fmt.Errorf("anchor database config: %w", err)
 		}
 		defer anchorPool.Close()
+		if err := engine.CheckNotOwner(ctx, anchorPool, "STEELMATTER_ANCHOR_URL", "anchor"); err != nil {
+			return err
+		}
+		if err := holdInstance(ctx, stop, "recovery anchor", anchorPool); err != nil {
+			return err
+		}
 		ws, err := eng.UseAnchor(ctx, &anchor.Client{Pool: anchorPool})
 		if err != nil {
 			return fmt.Errorf("recovery anchor: %w", err)
@@ -286,6 +304,28 @@ func serve(ctx context.Context) error {
 	if err := <-errc; !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
+	if cause := context.Cause(ctx); cause != nil && parent.Err() == nil {
+		return cause // the single-backend lock was lost
+	}
+	return nil
+}
+
+// holdInstance takes the single-backend lock in pool for the life of serve.
+// If its connection is lost, serve stops: another backend may then start.
+func holdInstance(ctx context.Context, stop context.CancelCauseFunc, what string, pool *pgxpool.Pool) error {
+	in, err := engine.AcquireInstance(ctx, map[string]*pgxpool.Pool{what: pool})
+	if err != nil {
+		return err
+	}
+	go func() {
+		defer in.Close()
+		select {
+		case err := <-in.Lost():
+			slog.Error("stopping: single-backend lock lost", "store", what, "err", err)
+			stop(err)
+		case <-ctx.Done():
+		}
+	}()
 	return nil
 }
 

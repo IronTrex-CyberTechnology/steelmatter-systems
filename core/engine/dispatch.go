@@ -91,6 +91,9 @@ func (e *Engine) Dispatch(ctx context.Context, p auth.Principal, actionJSON []by
 		}
 		return nil, err
 	}
+	if err := e.checkAnchorClock(ctx); err != nil {
+		return nil, err
+	}
 	if err := e.checkReadiness(ctx, p, a); err != nil {
 		return nil, err
 	}

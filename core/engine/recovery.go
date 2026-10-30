@@ -29,6 +29,7 @@ const (
 	SignalDestinationBehind      = "DESTINATION_BEHIND"            // destination head is behind what the anchor has seen (Odoo restored)
 	SignalUnknownDestinationOp   = "UNKNOWN_DESTINATION_OPERATION" // destination has an op_ref neither anchor nor engine knows (case C)
 	SignalCommittedOrderMissing  = "COMMITTED_ORDER_MISSING"       // committed operation whose destination order is gone (case E)
+	SignalClockSkew              = "CLOCK_SKEW"                    // engine and anchor clocks differ by more than the limit, or cannot be compared
 	FlagOrderMissingAfterRestore = "ORDER_MISSING_AFTER_RESTORE"
 	// FlagOrderDeletedAtDestination marks a committed operation whose order
 	// was deleted at the destination; the journal records the deletion, so
@@ -374,6 +375,13 @@ func (e *Engine) CheckRestore(ctx context.Context, c connector.Connector) (*Rest
 		return nil, errors.Join(err, disableErr)
 	}
 	rep := &RestoreReport{Signals: v.signals(), Flagged: []string{}, Unconfirmed: v.unconfirmedOps()}
+	if skew, cerr := e.anchorClockSkew(ctx); cerr != nil || skew > e.Cfg.MaxClockSkew {
+		detail := fmt.Sprintf("engine and recovery anchor clocks differ by %s (limit %s); timestamps cannot be compared safely", skew.Round(time.Millisecond), e.Cfg.MaxClockSkew)
+		if cerr != nil {
+			detail = "the recovery anchor's clock cannot be read: " + cerr.Error()
+		}
+		rep.Signals = append(rep.Signals, RestoreSignal{Code: SignalClockSkew, Detail: detail})
+	}
 	if rep.Flagged, err = e.flagDeletedOrders(ctx, v); err != nil {
 		return nil, err
 	}
@@ -561,6 +569,10 @@ func (e *Engine) ReconcileRestore(ctx context.Context, c connector.Connector) (*
 		switch {
 		case o.status == DispatchCommitted && o.flag == "" && v.deletedAtDestination(k[1]):
 			// Flagged just above; deletion at the destination is not a restore.
+		case e.Cfg.ObserveOnly && ((o.status == DispatchCommitted && o.flag == "" && !v.orderPresent(k[1])) ||
+			(o.status == DispatchFenced && v.proofs[k[1]].Blocked && v.dest[k[1]].State == "")):
+			rep.Problems = append(rep.Problems, fmt.Sprintf("%s: needs a fence at the destination; OBSERVE_ONLY never writes there, "+
+				"so a deployment with write authority must reconcile it", k[1]))
 		case o.status == DispatchCommitted && o.flag == "" && !v.orderPresent(k[1]):
 			r, err := c.Fence(ctx, k[1], 0)
 			if err != nil || r.BlockCommitted == nil || !*r.BlockCommitted {
@@ -822,6 +834,13 @@ func (e *Engine) TryResume(ctx context.Context, c connector.Connector) (*GateRep
 		return rep, nil
 	}
 	add("ALL_READABLE", nil)
+	if skew, cerr := e.anchorClockSkew(ctx); cerr != nil {
+		add("CLOCKS_AGREE", []string{"the recovery anchor's clock cannot be read: " + cerr.Error()})
+	} else if skew > e.Cfg.MaxClockSkew {
+		add("CLOCKS_AGREE", []string{fmt.Sprintf("engine and recovery anchor clocks differ by %s (limit %s)", skew.Round(time.Millisecond), e.Cfg.MaxClockSkew)})
+	} else {
+		add("CLOCKS_AGREE", nil)
+	}
 
 	var missing, unsettled, held, anchorBehind []string
 	for k := range v.intents {

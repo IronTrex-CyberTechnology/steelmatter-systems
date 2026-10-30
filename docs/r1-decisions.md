@@ -19,6 +19,16 @@ tests that pin it. Odoo-side parts are Kaif's and are listed only for context.
 | 10 | Release scope | `STEELMATTER_OBSERVE_ONLY=true` runs R1 without purchasing: dispatch is refused (`OBSERVE_ONLY`), an operation dispatched earlier is only looked up and fenced, and the observer, coverage, restore check and recovery keep running. R1 purchases go through HTTP and the TypeScript SDK. The Odoo module installs on a fresh database (`destinations/odoo/sandbox/up`, Kaif). MCP purchase creation is excluded from R1, below. | `TestR1ObserveOnlyNeverPurchases` |
 | 11 | Evidence | Operation history is permanent: dispatches, anchor records (hash-chained, append-only) and approvals are never deleted or rewritten. Signed permits in the anchor's engine stream are readable only by the engine's recovery identity; the module and the anchor observer cannot read them. T34 results are recorded as Odoo-specific (the destination journal and `CREATE_DONE` record are Odoo module features). | `TestAnchorRoleSeparation`, `TestR1OdooEndToEnd` (T34 case E) |
 
+## Owner decisions of 30 Oct 2026 (SDET points)
+
+| Point | Decision | Engine behaviour now | Tests |
+|---|---|---|---|
+| NEW-SDET-01 | One active backend per deployment | `serve` takes a single-backend lock in the engine database and in the recovery anchor before it touches the anchor's write switch. A second backend for the same deployment refuses to start and changes nothing, so the running one keeps serving. If a lock connection is lost, the backend stops. Multiple active backends are a later enhancement. | `TestR1SingleBackendPerDeployment`, `TestR1InstanceLockInEngineAndAnchor` |
+| NEW-QA-03 | Database owner is a trusted administrator (decision 7) | Documented limitation below. `serve` refuses to start when its engine or anchor connection is a superuser or owns the schemas; the backend and agents use only the restricted runtime roles. | `TestR1BackendRefusesOwnerCredentials` |
+| C-07 | Observe-only never writes to Odoo | No create, no fence and no BLOCK from an observe-only deployment: settle only looks up (the amount stays held), reconciliation reports any needed fence as a problem for a deployment with write authority, and a release that would need a fence is refused (`OBSERVE_ONLY`). Running observe-only without Odoo executor credentials needs the connector change on Kaif's side. | `TestR1ObserveOnlyNeverPurchases` |
+| C-11 | No approval of an action you requested or execute | Unchanged rule, now tested both ways: the issuer and the actor are refused even with approver rights; a mandate owner with independent approver rights may approve someone else's action. | `TestT18ApproverAuthority`, `TestR1OwnerMayApproveOthersAction` |
+| Clock skew | The 2-second limit also applies to the recovery anchor | Readiness fails and new execution (dispatch, and creates from settle) is blocked when the engine and anchor clocks differ by more than 2 s or the anchor clock cannot be read. A measured excess also turns writes off, the restore check reports `CLOCK_SKEW`, and the resume gate checks `CLOCKS_AGREE` with the full recovery verification before writes resume. | `TestR1AnchorClockLimit` |
+
 ## New configuration
 
 | Setting | Meaning |
@@ -48,6 +58,12 @@ BLOCK) applies to new anchors automatically; upgrade an existing one once with
 
 ## Limitations (decision 7) and excluded scope (decision 10)
 
+- **Database owner.** A database owner or superuser can change or delete
+  any engine row, including dispatch history; the anchor's hash chain and
+  role separation detect a rewrite but do not prevent it. This is an
+  accepted trusted-administrator risk (Aakhil, 30 Oct 2026). `serve` refuses
+  owner or superuser connections, so only administrators hold these
+  credentials.
 - **Backend credential compromise.** Whoever holds the engine's database
   credential can act as the engine: issue reservations, record dispatches and
   read signed permits. The anchor's hash chain and its separate roles detect a

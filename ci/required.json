@@ -7241,6 +7241,31 @@
         },
         {
           "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1SingleBackendPerDeployment"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1InstanceLockInEngineAndAnchor"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1BackendRefusesOwnerCredentials"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1AnchorClockLimit"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1OwnerMayApproveOthersAction"
+        },
+        {
+          "phase": "integration",
           "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/cmd/smdemo",
           "test": "TestSmdemoResetWithR1Tables"
         },

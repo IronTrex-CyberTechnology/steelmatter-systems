@@ -121,6 +121,9 @@ type Engine struct {
 	// Anchor is the recovery anchor (D5 v3); set it with UseAnchor. Nil keeps
 	// R1 working without restore protection (tests and local development).
 	Anchor *anchor.Client
+	// AnchorClock reads the recovery anchor's clock; nil uses Anchor.Now.
+	// Tests replace it to simulate a skewed anchor.
+	AnchorClock func(context.Context) (time.Time, error)
 	// anchorGen is the anchor write generation this engine dispatches under.
 	anchorGen atomic.Int64
 	// RepairReviewers and RepairConfirmers are the principal IDs allowed to
@@ -322,6 +325,9 @@ func (e *Engine) checkClock(ctx context.Context, q interface {
 // the clocks agree (used by GET /v1/ready).
 func (e *Engine) Ready(ctx context.Context) error {
 	if err := e.checkClock(ctx, e.Pool); err != nil {
+		return err
+	}
+	if err := e.checkAnchorClock(ctx); err != nil {
 		return err
 	}
 	if e.Cfg.RequireRecoveryAnchor {
