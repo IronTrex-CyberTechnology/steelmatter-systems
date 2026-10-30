@@ -78,6 +78,13 @@ func (h *handlers) wrap(fn handlerFunc) http.HandlerFunc {
 			writeFault(w, r, &engine.Fault{Code: "SERVICE_UNAVAILABLE", Message: "authoritative database unavailable"})
 			return
 		}
+		// R1 decision 6: a deployment serves one tenant. Any other tenant's
+		// principal is refused here, before any endpoint reads or writes.
+		if err := h.e.ServesTenant(p.Tenant); err != nil {
+			f, _ := engine.AsFault(err)
+			writeFault(w, r, f)
+			return
+		}
 		if h.lim != nil {
 			if ok, wait := h.lim.Allow(p.ID); !ok {
 				w.Header().Set("Retry-After", strconv.FormatInt(int64((wait+time.Second-1)/time.Second), 10))

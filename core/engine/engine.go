@@ -163,6 +163,10 @@ type Fault struct {
 
 func (f *Fault) Error() string { return f.Code + ": " + f.Message }
 
+// PublicMessage is the message a client may see (the readiness endpoint
+// reports it, NEW-QA-04).
+func (f *Fault) PublicMessage() string { return f.Message }
+
 func fault(code, format string, a ...any) *Fault {
 	return &Fault{Code: code, Message: fmt.Sprintf(format, a...)}
 }
@@ -327,11 +331,31 @@ func (e *Engine) Ready(ctx context.Context) error {
 	if err := e.checkClock(ctx, e.Pool); err != nil {
 		return err
 	}
-	if err := e.checkAnchorClock(ctx); err != nil {
-		return err
-	}
 	if e.Cfg.RequireRecoveryAnchor {
-		return e.requireWrites(ctx)
+		// Before the anchor clock, so an unreachable anchor is reported as
+		// unavailable rather than as a clock problem.
+		if err := e.readyWrites(ctx); err != nil {
+			return err
+		}
+	}
+	return e.checkAnchorClock(ctx)
+}
+
+// readyWrites names the reason the recovery anchor keeps this backend from
+// being ready (NEW-QA-04): the status stays 503, only the message differs.
+// The restore reason itself is not shown; /v1/ready is unauthenticated.
+func (e *Engine) readyWrites(ctx context.Context) error {
+	if e.Anchor == nil {
+		return fault("SERVICE_UNAVAILABLE", "recovery anchor not configured")
+	}
+	on, ws, err := e.writesOn(ctx)
+	switch {
+	case err != nil:
+		return fault("SERVICE_UNAVAILABLE", "recovery anchor unavailable")
+	case !on && !ws.Enabled:
+		return fault("SERVICE_UNAVAILABLE", "recovery in progress: writes disabled")
+	case !on:
+		return fault("SERVICE_UNAVAILABLE", "write generation is old: restart this process to adopt generation %d", ws.Generation)
 	}
 	return nil
 }

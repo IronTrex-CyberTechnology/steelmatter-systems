@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"os/exec"
 	"strings"
 	"testing"
@@ -13,8 +14,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/anchor"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/dbtest"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/engine"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/server"
 )
 
 // Aakhil's decisions of 30 Oct 2026 on the five SDET points (engine side).
@@ -177,4 +180,47 @@ func TestR1OwnerMayApproveOthersAction(t *testing.T) {
 			t.Fatalf("%s approved an action they requested or execute: %v", who, body)
 		}
 	}
+}
+
+// NEW-QA-04: /v1/ready stays 503 when the backend is not ready, and names the
+// actual reason instead of always blaming the authoritative database.
+func TestR1ReadyNamesTheReason(t *testing.T) {
+	e := newR1Env(t)
+	h := server.New(server.Info{}, server.ReadyFunc(e.eng.Ready))
+	ready := func(what, want string) {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/ready", nil))
+		if want == "" {
+			if rec.Code != 200 {
+				t.Fatalf("%s: %d %s", what, rec.Code, rec.Body)
+			}
+			return
+		}
+		if rec.Code != 503 || !strings.Contains(rec.Body.String(), `"error_code":"SERVICE_UNAVAILABLE"`) || !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("%s: %d %s, want %q", what, rec.Code, rec.Body, want)
+		}
+	}
+	ctx := context.Background()
+	dead, err := pgxpool.New(ctx, "postgres://nobody@127.0.0.1:1/none?connect_timeout=1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(dead.Close)
+	e.eng.Cfg.RequireRecoveryAnchor = true
+	e.eng.Anchor = nil
+	ready("anchor missing", "recovery anchor not configured")
+	a := withAnchor(t, e)
+	ready("healthy", "")
+	e.eng.Anchor = &anchor.Client{Pool: dead}
+	ready("anchor unavailable", "recovery anchor unavailable")
+	e.eng.Anchor = a.c
+	if _, err := a.c.DisableWrites(ctx, "test"); err != nil {
+		t.Fatal(err)
+	}
+	ready("writes disabled", "recovery in progress: writes disabled")
+	live := e.eng.Pool
+	e.eng.Pool = dead
+	ready("database down", "authoritative database unavailable")
+	e.eng.Pool = live
 }

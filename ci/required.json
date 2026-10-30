@@ -7267,6 +7267,16 @@
         {
           "phase": "integration",
           "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
+          "test": "TestR1ReadyNamesTheReason"
+        },
+        {
+          "phase": "unit",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/core/server",
+          "test": "TestReadyNamesTheReason"
+        },
+        {
+          "phase": "integration",
+          "package": "github.com/IronTrex-CyberTechnology/steelmatter-systems/tests/integration",
           "test": "TestRTFC79AmendmentReplayAndInstructionStatus"
         },
         {

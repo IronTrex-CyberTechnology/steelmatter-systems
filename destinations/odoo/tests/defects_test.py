@@ -67,17 +67,23 @@ class LockedOrders(unittest.TestCase):
         a = action(op)
         self.assertEqual(EXECUTOR.api("sm_create", a)["outcome"], "CREATED")
         po = po_of(op)
+        journal = "SELECT event FROM steelmatter_journal WHERE op_ref = '%s' ORDER BY seq" % op
+        events = odoo_sql(journal)
         ADMIN.call("purchase.order", "button_done", [po])  # the Lock button
         self.assertEqual(odoo_sql("SELECT state FROM purchase_order WHERE id = %d" % po), ["done"])
+        self.assertEqual(odoo_sql(journal), events, "NEW-QA-01: locking is not an edit")
+        self.assertEqual(OBSERVER.api("sm_observe", a)["outcome"], "MATCH")
         look = OBSERVER.api("sm_lookup", op)
         self.assertEqual((look["outcome"], look["destination"]["state"]), ("FOUND", "purchase"))
         retry = EXECUTOR.api("sm_create", a)
         self.assertEqual((retry["outcome"], retry["destination"]["state"]), ("EXISTS", "purchase"))
         # Locking is not cancelling: a cancelled order is still not confirmed.
         ADMIN.call("purchase.order", "button_unlock", [po])
+        self.assertEqual(odoo_sql(journal), events, "NEW-QA-01: unlocking is not an edit")
         ADMIN.call("purchase.order", "button_cancel", [po])
         cancelled = OBSERVER.api("sm_lookup", op)
         self.assertEqual((cancelled["outcome"], cancelled["destination"]["state"]), ("MISMATCH", "cancel"))
+        self.assertEqual(odoo_sql(journal), events + ["po_cancelled"], "a cancel is still journalled")
 
 
 class UnitOfMeasure(unittest.TestCase):

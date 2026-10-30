@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/anchor"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/auth"
@@ -445,15 +446,48 @@ func TestR1OrderWithDifferentUnitOrDeliveryIsMismatch(t *testing.T) {
 
 // ---- Decision 6: one tenant per deployment ----
 
-// An R1 deployment serves one tenant: another tenant's actor cannot
-// dispatch and its operators cannot run recovery or repairs.
+// An R1 deployment serves one tenant: every request of another tenant's
+// principals is refused before any endpoint reads or writes (NEW-SEC-01,
+// QA 30 Oct 2026): no mandate, instruction, amendment, permit or reservation,
+// no dispatch, no recovery or repairs.
 func TestR1OneTenantPerDeployment(t *testing.T) {
 	e := newR1Env(t)
 	a := withAnchor(t, e)
-	e.eng.Cfg.Tenant = tenant
+	// Another tenant's state that predates the restriction (built while the
+	// deployment served any tenant).
 	other := e.permittedIn("other-org", "owner-x", "issuer-x", "agent-x", "po-other-r1")
-	st, body := e.call("POST", "/v1/dispatches", "agent-x", dispatchBody(other))
-	requireStatus(t, "other tenant dispatch", st, body, 403, "FORBIDDEN")
+	e.eng.Cfg.Tenant = tenant
+	rows := func() int {
+		return e.count(`SELECT (SELECT count(*) FROM steelmatter.mandates WHERE tenant_id = 'other-org')
+			+ (SELECT count(*) FROM steelmatter.instructions WHERE tenant_id = 'other-org')
+			+ (SELECT count(*) FROM steelmatter.action_revisions WHERE tenant_id = 'other-org')
+			+ (SELECT count(*) FROM steelmatter.amendments WHERE tenant_id = 'other-org')
+			+ (SELECT count(*) FROM steelmatter.issuances WHERE tenant_id = 'other-org')
+			+ (SELECT count(*) FROM steelmatter.obligations WHERE tenant_id = 'other-org')`)
+	}
+	before := rows()
+	for _, c := range []struct {
+		what, method, path, who string
+		body                    map[string]any
+	}{
+		{"create mandate", "POST", "/v1/mandates", "owner-x", map[string]any{
+			"actor_ids": []string{"agent-x"}, "audience": audience, "supplier_ids": []string{"supplier-a"}, "delivery_ids": []string{"warehouse-a"},
+			"currency": "INR", "limit_minor": limit, "expires_at": time.Now().UTC().Add(time.Hour).Format("2006-01-02T15:04:05Z")}},
+		{"revoke mandate", "POST", "/v1/mandates/" + other.mandate + "/revoke", "owner-x", nil},
+		{"create instruction", "POST", "/v1/instructions", "issuer-x", instructionBody("po-other-r1-2", other.mandate)},
+		{"read instruction", "GET", "/v1/instructions/" + other.instruction, "issuer-x", nil},
+		{"amend instruction", "POST", "/v1/instructions/" + other.instruction + "/revisions", "issuer-x", amendBody("amd-x", 1, line("item-a", 2, 25_000_000))},
+		{"evaluate", "POST", "/v1/actions/evaluate", "agent-x", map[string]any{"instruction_id": other.instruction, "action_revision": 1}},
+		{"simulate", "POST", "/v1/actions/simulate", "agent-x", map[string]any{"instruction_id": other.instruction, "action_revision": 1}},
+		{"admit", "POST", "/v1/operations", "agent-x", map[string]any{"action": other.action, "permit_jws": other.jws}},
+		{"dispatch", "POST", "/v1/dispatches", "agent-x", dispatchBody(other)},
+	} {
+		st, body := e.call(c.method, c.path, c.who, c.body)
+		requireStatus(t, "other tenant "+c.what, st, body, 403, "FORBIDDEN")
+	}
+	if n := rows(); n != before {
+		t.Fatalf("another tenant changed engine state: %d rows, was %d", n, before)
+	}
 	if e.count(`SELECT count(*) FROM steelmatter.dispatches`) != 0 || a.s.Creates() != 0 {
 		t.Fatal("another tenant dispatched")
 	}
@@ -472,7 +506,7 @@ func TestR1OneTenantPerDeployment(t *testing.T) {
 	}
 	// The served tenant works as before.
 	p := e.permitted()
-	st, body = e.call("POST", "/v1/dispatches", "agent-a", dispatchBody(p))
+	st, body := e.call("POST", "/v1/dispatches", "agent-a", dispatchBody(p))
 	requireStatus(t, "served tenant", st, body, 201, "")
 }
 

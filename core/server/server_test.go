@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -93,4 +94,18 @@ func TestAbortHandlerStillDropsConnection(t *testing.T) {
 		}
 	}()
 	do(t, h, http.MethodGet, "/abort")
+}
+
+type reasonErr string
+
+func (r reasonErr) Error() string         { return "internal: " + string(r) }
+func (r reasonErr) PublicMessage() string { return string(r) }
+
+// NEW-QA-04: readiness stays 503 but names the reason the check gives.
+func TestReadyNamesTheReason(t *testing.T) {
+	rec := do(t, New(Info{}, fakePinger{err: fmt.Errorf("ready: %w", reasonErr("recovery anchor unavailable"))}), http.MethodGet, "/v1/ready")
+	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), `"recovery anchor unavailable"`) ||
+		!strings.Contains(rec.Body.String(), `"error_code":"SERVICE_UNAVAILABLE"`) || strings.Contains(rec.Body.String(), "internal:") {
+		t.Fatalf("status %d body %s", rec.Code, rec.Body)
+	}
 }

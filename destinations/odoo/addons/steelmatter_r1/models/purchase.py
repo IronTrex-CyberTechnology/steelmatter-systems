@@ -25,6 +25,13 @@ LINE_FIELDS = {"product_id", "product_qty", "product_uom", "price_unit", "taxes_
 # Bookkeeping Odoo itself writes on an order when someone posts in its chatter.
 CHATTER_FIELDS = {"message_main_attachment_id"}
 
+# Odoo 18's Lock and Unlock buttons move a confirmed order between these two
+# states (button_done also resets priority). Neither changes what was
+# authorised, so neither is an edit (NEW-QA-01); the order stays FOUND as
+# confirmed (R1-DEF-19).
+CONFIRMED_STATES = ("purchase", "done")
+LOCK_FIELDS = {"state", "priority"}
+
 
 def internal(env):
     """The module's own path: superuser, never an RPC caller's context flag."""
@@ -67,9 +74,11 @@ class PurchaseOrder(models.Model):
 
     def write(self, vals):
         guard(self, vals)
+        lock_only = (set(vals) <= LOCK_FIELDS and vals.get("state") in CONFIRMED_STATES
+                     and all(o.state in CONFIRMED_STATES for o in self))
         res = super().write(vals)
         sm = self.filtered("sm_op_ref")
-        if sm and not internal(self.env):
+        if sm and not internal(self.env) and not lock_only:
             if vals.get("state") == "cancel":
                 for o in sm:
                     append_journal(self.env.cr, "po_cancelled", op_ref=o.sm_op_ref, po_name=o.name)
