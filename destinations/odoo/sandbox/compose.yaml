@@ -1,0 +1,76 @@
+# Steelmatter R1 Odoo sandbox: disposable, synthetic data only, local only.
+#
+#   odoo-db    Odoo's own PostgreSQL (restored in recovery tests)
+#   anchor-db  the recovery anchor: a separate PostgreSQL with its own volume,
+#              never restored together with Odoo or the engine (D5 v3)
+#   odoo       Odoo 18 with the steelmatter_r1 module
+#
+# Start with destinations/odoo/sandbox/up; never run this file directly
+# (it needs the generated .local/odoo-sandbox.env).
+name: steelmatter-odoo
+
+services:
+  odoo-db:
+    image: ${POSTGRES_IMAGE}
+    environment:
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: ${ODOO_DB_PASSWORD}
+      POSTGRES_DB: postgres
+    volumes:
+      - odoo-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "odoo"]
+      interval: 2s
+      retries: 30
+
+  anchor-db:
+    image: ${POSTGRES_IMAGE}
+    environment:
+      POSTGRES_PASSWORD: ${ANCHOR_PG_PASSWORD}
+    ports:
+      - "127.0.0.1:${ANCHOR_PORT}:5432"
+    volumes:
+      - anchor-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 2s
+      retries: 30
+
+  odoo:
+    image: ${ODOO_IMAGE}
+    depends_on:
+      odoo-db:
+        condition: service_healthy
+      anchor-db:
+        condition: service_healthy
+    environment:
+      HOST: odoo-db
+      USER: odoo
+      PASSWORD: ${ODOO_DB_PASSWORD}
+      # Restore-proof record (anchor destination stream). From the server
+      # environment only, never stored in the Odoo database.
+      STEELMATTER_ANCHOR_DEST_URL: ${ANCHOR_DEST_URL_IN_NETWORK}
+      STEELMATTER_DESTINATION: ${STEELMATTER_DESTINATION}
+      STEELMATTER_ANCHOR_TIMEOUT_MS: "2000"
+      # Sandbox only: test fault injection for op_refs starting "fp-<name>-".
+      STEELMATTER_FAILPOINTS: commit_after_intent,lose_create_done
+    command:
+      - odoo
+      - --database=${ODOO_DB_NAME}
+      - --db-filter=^${ODOO_DB_NAME}$$
+      - --no-database-list
+      - --without-demo=all
+      # No real outbound mail: point SMTP at a closed local port.
+      - --smtp=127.0.0.1
+      - --smtp-port=9
+      - --max-cron-threads=0
+    ports:
+      - "127.0.0.1:${ODOO_PORT}:8069"
+    volumes:
+      - ../addons:/mnt/extra-addons:ro
+      - odoo-data:/var/lib/odoo
+
+volumes:
+  odoo-db:
+  anchor-db:
+  odoo-data:

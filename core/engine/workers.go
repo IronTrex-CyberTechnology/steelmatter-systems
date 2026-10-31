@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -97,7 +98,9 @@ type Event struct {
 	Tenant      string
 	Type        string
 	AggregateID string
-	Payload     json.RawMessage
+	// AggregateSeq orders events within one aggregate (D6).
+	AggregateSeq int64
+	Payload      json.RawMessage
 }
 
 // Sink receives outbox events. Delivery is at-least-once; sinks deduplicate
@@ -122,42 +125,86 @@ func (s ReceiptSink) Deliver(ctx context.Context, ev Event) error {
 // DispatchOutbox delivers undelivered events with their original event IDs,
 // then marks them delivered. A crash between delivery and marking causes
 // redelivery of the same event ID (T15). Returns the number delivered.
+//
+// Ordering is per aggregate (D6): only the oldest undelivered event of each
+// aggregate (one operation or one mandate) is eligible, so events of one
+// aggregate arrive in aggregate_seq order. A failing event is backed off on
+// its own and holds back only the later events of its aggregate; every other
+// aggregate keeps flowing. No global order is promised.
 func (e *Engine) DispatchOutbox(ctx context.Context, sink Sink) (int, error) {
-	rows, err := e.Pool.Query(ctx, `SELECT event_id, tenant_id, event_type, aggregate_id, payload FROM steelmatter.outbox
-		WHERE delivered_at IS NULL ORDER BY created_at, event_id LIMIT 100`)
-	if err != nil {
-		return 0, unavailable(err)
+	n := 0
+	var firstErr error
+	for round := 0; round < outboxRounds; round++ {
+		evs, err := e.outboxHeads(ctx)
+		if err != nil {
+			return n, err
+		}
+		if len(evs) == 0 {
+			break
+		}
+		delivered := 0
+		err = runIsolated(ctx, e, workerOutbox, evs, func(ev Event) (string, string) { return ev.Tenant, ev.EventID }, func(ev Event) error {
+			if err := sink.Deliver(ctx, ev); err != nil {
+				return err
+			}
+			if err := failpoint.Inject(ctx, failpoint.OutboxAfterDeliver); err != nil {
+				return err
+			}
+			if _, err := e.Pool.Exec(ctx, `UPDATE steelmatter.outbox SET delivered_at = clock_timestamp() WHERE event_id = $1 AND delivered_at IS NULL`, ev.EventID); err != nil {
+				return err
+			}
+			delivered++
+			return nil
+		})
+		n += delivered
+		if err != nil {
+			if ctx.Err() != nil {
+				return n, err
+			}
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
+		if delivered == 0 {
+			break
+		}
 	}
+	return n, firstErr
+}
+
+// outboxRounds bounds how far one DispatchOutbox call walks down each
+// aggregate's queue.
+const outboxRounds = 10
+
+// outboxHeads returns the oldest undelivered event of each aggregate whose
+// delivery is not currently backed off.
+func (e *Engine) outboxHeads(ctx context.Context) ([]Event, error) {
+	rows, err := e.Pool.Query(ctx, `SELECT o.event_id, o.tenant_id, o.event_type, o.aggregate_id, o.aggregate_seq, o.payload FROM steelmatter.outbox o
+		WHERE o.delivered_at IS NULL
+		AND NOT EXISTS (SELECT 1 FROM steelmatter.outbox p WHERE p.tenant_id = o.tenant_id AND p.aggregate_id = o.aggregate_id
+			AND p.delivered_at IS NULL AND p.aggregate_seq < o.aggregate_seq)
+		AND `+notBackedOff(workerOutbox, "o.tenant_id", "o.event_id")+`
+		ORDER BY o.created_at, o.event_id LIMIT 100`)
+	if err != nil {
+		return nil, unavailable(err)
+	}
+	defer rows.Close()
 	var evs []Event
 	for rows.Next() {
 		var ev Event
-		if err := rows.Scan(&ev.EventID, &ev.Tenant, &ev.Type, &ev.AggregateID, &ev.Payload); err != nil {
-			rows.Close()
-			return 0, err
+		if err := rows.Scan(&ev.EventID, &ev.Tenant, &ev.Type, &ev.AggregateID, &ev.AggregateSeq, &ev.Payload); err != nil {
+			return nil, err
 		}
 		evs = append(evs, ev)
 	}
-	rows.Close()
 	if err := rows.Err(); err != nil {
-		return 0, classify(err)
+		return nil, classify(err)
 	}
-	n := 0
-	for _, ev := range evs {
-		if err := sink.Deliver(ctx, ev); err != nil {
-			return n, err
-		}
-		if err := failpoint.Inject(ctx, failpoint.OutboxAfterDeliver); err != nil {
-			return n, err
-		}
-		if _, err := e.Pool.Exec(ctx, `UPDATE steelmatter.outbox SET delivered_at = clock_timestamp() WHERE event_id = $1 AND delivered_at IS NULL`, ev.EventID); err != nil {
-			return n, err
-		}
-		n++
-	}
-	return n, nil
+	return evs, nil
 }
 
-// RunWorkers runs cleanup, unsigned-issuance recovery, outbox dispatch,
+// RunWorkers runs cleanup, unsigned-issuance recovery, R1 settlement (when a
+// connector is configured), outbox dispatch,
 // evidence signing and observation every interval until ctx ends, then
 // reports any worker backlog older than BacklogAlertAge. Errors are reported
 // to onErr and retried.
@@ -171,6 +218,18 @@ func (e *Engine) RunWorkers(ctx context.Context, interval time.Duration, sink Si
 		if _, err := e.CleanupExpired(ctx); err != nil {
 			onErr("cleanup", err)
 		}
+		if e.Connector != nil && e.Anchor != nil {
+			if r, err := e.CheckRestore(ctx, e.Connector); err != nil {
+				onErr("restore-check", err)
+			} else if r.WritesDisabled {
+				onErr("restore-check", fmt.Errorf("writes disabled: %d restore signals; reconcile and run the resume gate", len(r.Signals)))
+			}
+		}
+		if e.Connector != nil {
+			if _, err := e.SettleDue(ctx); err != nil {
+				onErr("settle", err)
+			}
+		}
 		if _, err := e.DispatchOutbox(ctx, sink); err != nil {
 			onErr("outbox", err)
 		}
@@ -179,6 +238,9 @@ func (e *Engine) RunWorkers(ctx context.Context, interval time.Duration, sink Si
 		}
 		if _, err := e.ObserveUnobserved(ctx); err != nil {
 			onErr("observer", err)
+		}
+		if _, err := e.ObserveR1Due(ctx); err != nil {
+			onErr("observer-refresh", err)
 		}
 		if err := e.checkBacklog(ctx); err != nil {
 			onErr("backlog", err)
@@ -220,8 +282,8 @@ func (e *Engine) GetOperation(ctx context.Context, p auth.Principal, operationID
 		o.execution_jws, b.status, b.observation_jws
 		FROM steelmatter.issuances i
 		JOIN steelmatter.mandates m ON m.tenant_id = i.tenant_id AND m.mandate_id = i.mandate_id
-		LEFT JOIN steelmatter.operations o ON o.tenant_id = i.tenant_id AND o.operation_id = i.operation_id
-		LEFT JOIN LATERAL (SELECT status, observation_jws FROM steelmatter.observations x
+		LEFT JOIN steelmatter.evidence_operations o ON o.tenant_id = i.tenant_id AND o.operation_id = i.operation_id
+		LEFT JOIN LATERAL (SELECT status, observation_jws FROM steelmatter.evidence_observations x
 			WHERE x.tenant_id = i.tenant_id AND x.operation_id = i.operation_id ORDER BY recorded_at DESC LIMIT 1) b ON true
 		WHERE i.tenant_id = $1 AND i.operation_id = $2`, p.Tenant, operationID).
 		Scan(&iStatus, &reason, &expired, &orderID, &mandateJWS, &permitJWS, &execJWS, &obs, &obsJWS)
@@ -244,6 +306,17 @@ func (e *Engine) GetOperation(ctx context.Context, p auth.Principal, operationID
 	if orderID != nil {
 		s.Execution = "COMMITTED"
 		s.TargetRef = &TargetRef{AdapterID: e.Cfg.AdapterID, OrderID: *orderID}
+	}
+	// R1 dispatched operation: execution is the dispatch status (draft 7).
+	// Only COMMITTED is success; a destination order is shown only once
+	// committed, never for an order that is held or mismatched.
+	if d, err := e.GetDispatch(ctx, p.Tenant, operationID); err != nil {
+		return nil, err
+	} else if d != nil {
+		s.Execution = d.Execution
+		if d.Execution == DispatchCommitted && d.DestinationOrder != "" {
+			s.TargetRef = &TargetRef{AdapterID: e.Cfg.AdapterID, OrderID: d.DestinationOrder}
+		}
 	}
 	if obs != nil {
 		s.Observation = *obs

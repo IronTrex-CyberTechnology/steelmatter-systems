@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
@@ -48,8 +49,15 @@ func New(info Info, db Pinger, register ...func(*http.ServeMux)) http.Handler {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
 		if err := db.Ping(ctx); err != nil {
-			// Fail closed: no admission without the authoritative database.
-			httpapi.WriteError(w, r, http.StatusServiceUnavailable, httpapi.CodeServiceUnavailable, "authoritative database unavailable", true)
+			// Fail closed: always 503. The message names the reason when the
+			// check gives one (recovery anchor, writes, clocks: NEW-QA-04);
+			// any other failure is the authoritative database.
+			msg := "authoritative database unavailable"
+			var pm interface{ PublicMessage() string }
+			if errors.As(err, &pm) && pm.PublicMessage() != "" {
+				msg = pm.PublicMessage()
+			}
+			httpapi.WriteError(w, r, http.StatusServiceUnavailable, httpapi.CodeServiceUnavailable, msg, true)
 			return
 		}
 		httpapi.WriteJSON(w, http.StatusOK, map[string]string{"status": "ready"})

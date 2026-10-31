@@ -4,9 +4,9 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 // @ts-ignore: build.mjs is plain JavaScript
-import { buildSite, buildVerifierBundle, demoData } from '../build.mjs';
+import { buildSite, buildVerifierBundle, demoData, sourceCommit } from '../build.mjs';
 import type { DemoData } from '../src/types.ts';
 
 export const data = demoData() as DemoData;
 export const tempDir = (p: string) => mkdtempSync(join(tmpdir(), `smdemo-${p}-`));
-export { buildSite, buildVerifierBundle };
+export { buildSite, buildVerifierBundle, sourceCommit };

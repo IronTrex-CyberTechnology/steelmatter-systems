@@ -21,7 +21,7 @@ const TIMESTAMP_FIELDS: Record<Kind, string[]> = {
   mandate: ['issued_at', 'expires_at'],
   action: [],
   permit: ['issued_at', 'expires_at'],
-  execution: ['committed_at'],
+  execution: ['committed_at', 'admitted_at'],
   observation: ['observed_at'],
 };
 
@@ -50,7 +50,7 @@ export function byteCompare(a: string, b: string): number {
 export function validate(kind: Kind, raw: Uint8Array): { [k: string]: JsonValue } {
   const tree = parseStrict(raw);
   if (!isObject(tree)) throw new ContractError('SCHEMA_VIOLATION', '', 'payload must be a JSON object');
-  if (tree.schema_version !== SCHEMA_VERSION) {
+  if (tree.schema_version !== SCHEMA_VERSION && !(tree.schema_version === '2' && (kind === 'execution' || kind === 'observation'))) {
     throw new ContractError('UNSUPPORTED_VERSION', '/schema_version', `schema_version must be "${SCHEMA_VERSION}"`);
   }
   if (tree.crypto_profile !== CRYPTO_PROFILE) {
@@ -108,10 +108,48 @@ export function parseTimestamp(s: string): number | null {
 }
 
 function checkSemantics(kind: Kind, p: { [k: string]: any }): void {
-  if (kind === 'action') checkLines(p.lines, p.amount_minor);
+  if (kind === 'action') checkAction(p);
   if (kind === 'mandate') checkRange(p.issued_at, p.expires_at, 0);
   if (kind === 'permit') checkRange(p.issued_at, p.expires_at, MAX_PERMIT_LIFETIME_SECONDS);
+  if (kind === 'execution' && p.schema_version === '2' && parseTimestamp(p.admitted_at)! > parseTimestamp(p.committed_at)!) throw new ContractError('INVALID_TIME_RANGE', '/committed_at', 'settlement precedes admission');
   if (kind === 'observation') checkObservation(p as Parameters<typeof checkObservation>[0]);
+}
+
+// D1 v1.4 tax rules (mirrors checkAction in core/contract/payloads.go):
+// tax_ids sorted and unique per line; amount_untaxed_minor and tax_minor
+// together, untaxed = line total, amount = untaxed + tax; no tax_ids without them.
+function checkAction(p: { [k: string]: any }): void {
+  const lines = p.lines as { item_id: string; quantity: number; unit_price_minor: number; tax_ids?: string[] }[];
+  let taxed = false;
+  lines.forEach((l, i) => {
+    const t = l.tax_ids ?? [];
+    for (let j = 1; j < t.length; j++) {
+      if (byteCompare(t[j - 1], t[j]) >= 0) throw new ContractError('LINES_NOT_CANONICAL', `/lines/${i}/tax_ids/${j}`, 'tax_ids must be sorted and unique');
+    }
+    taxed = taxed || t.length > 0;
+  });
+  const hasUntaxed = 'amount_untaxed_minor' in p;
+  if (hasUntaxed !== ('tax_minor' in p)) {
+    throw new ContractError('SCHEMA_VIOLATION', '/tax_minor', 'amount_untaxed_minor and tax_minor must be given together');
+  }
+  if (!hasUntaxed) {
+    if (taxed) throw new ContractError('SCHEMA_VIOLATION', '/tax_minor', 'lines with tax_ids require amount_untaxed_minor and tax_minor');
+    checkLines(lines, p.amount_minor);
+    return;
+  }
+  try {
+    checkLines(lines, p.amount_untaxed_minor);
+  } catch (e) {
+    if (e instanceof ContractError && e.code === 'AMOUNT_MISMATCH') {
+      throw new ContractError('AMOUNT_MISMATCH', '/amount_untaxed_minor', e.message.slice(e.message.indexOf(': ') + 2));
+    }
+    throw e;
+  }
+  const sum = BigInt(p.amount_untaxed_minor) + BigInt(p.tax_minor);
+  if (sum > BigInt(MAX_SAFE)) throw new ContractError('ARITHMETIC_OVERFLOW', '/amount_minor', 'amount_untaxed_minor + tax_minor exceeds 2^53-1');
+  if (sum !== BigInt(p.amount_minor)) {
+    throw new ContractError('AMOUNT_MISMATCH', '/amount_minor', `amount_minor ${p.amount_minor} does not equal amount_untaxed_minor ${p.amount_untaxed_minor} + tax_minor ${p.tax_minor}`);
+  }
 }
 
 function checkLines(lines: { item_id: string; quantity: number; unit_price_minor: number }[], amount: number): void {
@@ -147,11 +185,13 @@ function checkRange(issued: string, expires: string, maxSeconds: number): void {
   }
 }
 
-function checkObservation(o: { status: string; expected_action_digest: string; observed_action_digest: string | null }): void {
+function checkObservation(o: { [k: string]: any }): void {
   const obs = o.observed_action_digest;
-  const bad =
-    (o.status === 'MATCH' && (obs === null || obs !== o.expected_action_digest)) ||
-    (o.status === 'MISMATCH' && (obs === null || obs === o.expected_action_digest)) ||
+  let matches = obs !== null && obs === o.expected_action_digest;
+  if (o.schema_version === '2') matches = matches && o.observed_company_ref === o.expected_company_ref &&
+    o.observed_state === 'purchase' && o.observed_permit_digest === o.expected_permit_digest;
+  const bad = (o.status === 'MATCH' && !matches) ||
+    (o.status === 'MISMATCH' && (obs === null || matches)) ||
     (o.status === 'INSUFFICIENT_EVIDENCE' && obs !== null);
-  if (bad) throw new ContractError('OBSERVATION_INCONSISTENT', '/status', `status ${o.status} is inconsistent with observed_action_digest`);
+  if (bad) throw new ContractError('OBSERVATION_INCONSISTENT', '/status', `status ${o.status} is inconsistent with destination evidence`);
 }

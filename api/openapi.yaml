@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
-  title: Steelmatter R0 reference API
-  version: 0.6.0-i02
-  summary: Closed request/response contract for baseline 0.6 (I02).
+  title: Steelmatter reference API (R0 + R1)
+  version: 0.7.0-r1
+  summary: Closed request/response contract for baseline 0.6 (I02) plus the R1 dispatch, repair and recovery endpoints.
   description: |
     Every request body is UTF-8 JSON parsed by the strict input profile
     (docs/contracts/I02-contract.md section 2): duplicate keys, unknown fields,
@@ -30,6 +30,10 @@ tags:
   - name: actions
   - name: operations
   - name: adapters
+  - name: dispatches
+    description: R1 dispatch to a real destination, settle, HELD findings and repairs.
+  - name: recovery
+    description: R1 restore check, reconciliation, resume gate and anchor repair (instance-wide).
 paths:
   /v1/mandates:
     post:
@@ -85,7 +89,8 @@ paths:
         201 for a new instruction; 200 for an identical repeated creation
         request (returns the current revision, never rolling an amendment
         back); 409 SOURCE_CONFLICT when the same (tenant, source_system,
-        source_record_id) arrives with different content.
+        source_record_id) arrives with different content. 503 (retryable)
+        while recovery has writes off: retry after the resume gate passes.
       x-steelmatter-principals: [issuer]
       requestBody:
         required: true
@@ -112,16 +117,56 @@ paths:
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/Internal' }
         '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/instructions/{instruction_id}:
+    get:
+      tags: [instructions]
+      operationId: getInstruction
+      summary: The trusted issuer or the assigned actor reads an instruction with its live status.
+      description: |
+        status is OPEN, COMMITTED, or SUPERSEDED. SUPERSEDED means recovery
+        replaced this instruction with superseded_by, the instruction the
+        recovery anchor shows was dispatched for the same source record. A
+        superseded instruction keeps its history but cannot be amended,
+        evaluated or dispatched (409 REVISION_STALE, INSTRUCTION_SUPERSEDED).
+        A principal kind that can never read instructions (owner, observer,
+        operator) gets 403; an issuer outside the source system or an actor
+        who is not assigned gets 404, as for an absent instruction.
+      x-steelmatter-principals: [issuer, actor]
+      parameters:
+        - $ref: '#/components/parameters/InstructionId'
+      responses:
+        '200':
+          description: The instruction at its current revision.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InstructionResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
   /v1/instructions/{instruction_id}/revisions:
     post:
       tags: [instructions]
       operationId: amendInstruction
       summary: Authorised issuer appends an uncommitted action revision.
       description: |
-        Exact retry of an amendment_id returns its recorded result with 200.
-        Changed reuse, outdated expected_action_revision or a committed
-        instruction return 409. A new revision has no reservation or permit;
-        the assigned actor must evaluate it again.
+        Exact retry of an amendment_id returns its recorded result with 200,
+        marked status CURRENT (effective) or SUPERSEDED (a later amendment
+        replaced it; effective false). If recovery restored an older,
+        anchored revision, the retry is 409 REVISION_STALE (AMENDMENT_SUPERSEDED):
+        that revision is no longer effective; amend again with a new
+        amendment_id. Changed reuse, outdated expected_action_revision or a
+        committed instruction return 409. A new revision has no reservation or
+        permit; the assigned actor must evaluate it again. A caller who is not
+        an entitled issuer always gets 403 (404 for an instruction outside its
+        source systems), before any recovery state is considered. 503
+        (retryable) while recovery has writes off, or when the recovery anchor
+        shows a dispatch of this instruction that the engine database lacks
+        (RESTORE_SUSPECTED: writes are turned off and recovery must run);
+        409 REVISION_STALE for an instruction that recovery superseded with
+        the anchored one.
       x-steelmatter-principals: [issuer]
       parameters:
         - $ref: '#/components/parameters/InstructionId'
@@ -147,6 +192,40 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/Unsupported' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/instructions/{instruction_id}/approvals:
+    post:
+      tags: [instructions]
+      operationId: recordApproval
+      summary: R1. An entitled approver approves or rejects the exact current action revision (T17-T19).
+      description: >-
+        R1 decision 9. Above the tenant's approval threshold, evaluation issues a permit only with a current
+        approval: the latest decision on that action revision is APPROVED, it names the current action digest,
+        supplier revision, mandate revision and control epoch, and its approver still holds approval rights.
+        Otherwise evaluation returns DENY APPROVAL_REQUIRED or APPROVAL_STALE. The issuer and actor of an action
+        can never approve it (403). An approval reserves nothing; capacity is checked when the permit is issued.
+        Each call records one decision; approvals are never changed or deleted.
+      x-steelmatter-principals: [operator, owner]
+      parameters:
+        - $ref: '#/components/parameters/InstructionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApprovalRequest' }
+      responses:
+        '201':
+          description: Decision recorded.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApprovalResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/Internal' }
         '503': { $ref: '#/components/responses/Unavailable' }
@@ -335,6 +414,397 @@ paths:
         '500': { $ref: '#/components/responses/Internal' }
         '503': { $ref: '#/components/responses/Unavailable' }
 
+  /v1/dispatches:
+    post:
+      tags: [dispatches]
+      operationId: dispatchOperation
+      summary: R1. Assigned actor dispatches the exact permitted action to the configured destination (Odoo).
+      description: |
+        Same gate as admitOperation, then one transaction consumes the permit,
+        records the operation (op_ref = the permit's operation ID) and moves
+        the amount reserved -> unresolved. The order is created by the settle
+        worker; poll getDispatch or getOperation for the outcome. Refused with
+        503 SERVICE_UNAVAILABLE (retryable, nothing consumed or moved) while
+        writes are off after a restore signal, when the recovery anchor or the
+        destination is unreachable, and when no destination company or
+        connector is configured. 200 returns the stored state for an
+        identical repeat.
+      x-steelmatter-principals: [actor]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OperationRequest' }
+      responses:
+        '201':
+          description: Dispatch recorded.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DispatchResult' }
+        '200':
+          description: Identical repeat; stored state, no new effect.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DispatchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unsupported' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/dispatches/{op_ref}:
+    get:
+      tags: [dispatches]
+      operationId: getDispatch
+      summary: R1. Observer or operator reads the stored state of a dispatched operation.
+      x-steelmatter-principals: [observer, operator]
+      parameters:
+        - $ref: '#/components/parameters/OpRef'
+      responses:
+        '200':
+          description: Dispatch state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DispatchResult' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/dispatches/{op_ref}/settle:
+    post:
+      tags: [dispatches]
+      operationId: settleDispatch
+      summary: R1. Operator runs one settle step now (send or lookup-first, then fence). Never invents success.
+      description: |
+        The settle worker does this on its own schedule; this endpoint runs
+        it immediately. A final operation (COMMITTED, FENCED, MISMATCH, HELD)
+        returns its stored state unchanged. Body empty or {}.
+      x-steelmatter-principals: [operator]
+      parameters:
+        - $ref: '#/components/parameters/OpRef'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyRequest' }
+      responses:
+        '200':
+          description: State after the step.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DispatchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/dispatches/{op_ref}/findings:
+    post:
+      tags: [dispatches]
+      operationId: recordHeldFinding
+      summary: R1. Operator records a HELD finding (D5 HELD rule). Never moves budget.
+      description: |
+        Applies to HELD, MISMATCH, or committed operations flagged
+        ORDER_MISSING_AFTER_RESTORE. Appended to the recovery anchor; the
+        resume gate accepts such an operation only once a finding exists.
+      x-steelmatter-principals: [operator]
+      parameters:
+        - $ref: '#/components/parameters/OpRef'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FindingRequest' }
+      responses:
+        '201':
+          description: Finding recorded in the anchor.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FindingResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/dispatches/{op_ref}/repairs:
+    post:
+      tags: [dispatches]
+      operationId: prepareRepair
+      summary: R1. Operator prepares repair evidence proposing COMMIT, RELEASE or ANCHOR_REPAIR. Nothing moves yet.
+      description: >-
+        COMMIT and RELEASE require a recorded finding and a HELD or MISMATCH operation. RELEASE is refused
+        (403, RELEASE_NOT_PROVEN) when the recovery anchor records a create attempt for the operation: HELD
+        money is released only with proof that no purchase occurred, and confirmation fences the reference
+        first so it is permanently blocked. ANCHOR_REPAIR applies to an operation the engine has and the
+        recovery anchor does not; it moves no budget and is confirmed with anchor-repair. Returns the repair ID.
+      x-steelmatter-principals: [operator]
+      parameters:
+        - $ref: '#/components/parameters/OpRef'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RepairRequest' }
+      responses:
+        '201':
+          description: Repair evidence recorded in the anchor.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RepairResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/dispatches/{op_ref}/repairs/{repair_id}/review:
+    post:
+      tags: [dispatches]
+      operationId: reviewRepair
+      summary: R1. A configured repair reviewer (not the preparer) approves or rejects the evidence.
+      x-steelmatter-principals: [operator]
+      parameters:
+        - $ref: '#/components/parameters/OpRef'
+        - $ref: '#/components/parameters/RepairId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewRequest' }
+      responses:
+        '200':
+          description: Review recorded in the anchor.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RepairResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/dispatches/{op_ref}/repairs/{repair_id}/confirm:
+    post:
+      tags: [dispatches]
+      operationId: confirmRepair
+      summary: R1. A configured confirmer (distinct from preparer and reviewer) confirms; the only way a held amount moves.
+      description: |
+        Requires an approved review, writes on at this engine's generation and
+        no restore signal. Status, bucket move and anchor records commit in
+        one transaction. A repeat is refused (409). Body empty or {}.
+      x-steelmatter-principals: [operator]
+      parameters:
+        - $ref: '#/components/parameters/OpRef'
+        - $ref: '#/components/parameters/RepairId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyRequest' }
+      responses:
+        '200':
+          description: Repaired; the operation is now COMMITTED or FENCED.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DispatchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/dispatches/{op_ref}/anchor-repair:
+    post:
+      tags: [recovery]
+      operationId: confirmAnchorRepair
+      summary: R1. A configured confirmer confirms a prepared and approved ANCHOR_REPAIR, re-appending the intent from the engine's own dispatch record.
+      description: >-
+        Three different people (R1 decision 4): an operator prepares the ANCHOR_REPAIR evidence, a configured
+        reviewer approves it, and a configured confirmer who is neither confirms it here. A repeat is idempotent.
+        Writes still resume only through the resume gate.
+      x-steelmatter-principals: [operator]
+      parameters:
+        - $ref: '#/components/parameters/OpRef'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AnchorRepairRequest' }
+      responses:
+        '200':
+          description: DISPATCH_INTENT re-appended with a REPAIR_CONFIRMED record.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnchorRepairResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/recovery/conflicts/{op_ref}/adopt:
+    post:
+      tags: [recovery]
+      operationId: adoptAnchoredOperation
+      summary: R1. Operator resolves a CONFLICT_SPENT source-record conflict by adopting the anchored operation. Writes must be off.
+      description: |
+        Used when reconciliation stopped with REBUILD_REFUSED CONFLICT_SPENT:
+        an instruction made after a restore for the same source record
+        already has a dispatch, so recovery did not supersede it. After the
+        two orders at the destination are reviewed and the business has decided
+        what to do with the duplicate, the operator adopts the anchored
+        operation. It is recorded again with its amount held (then settled by
+        lookup), the source record is given to the anchored instruction, every
+        row, order and amount of the other instruction is kept, and a
+        SOURCE_CONFLICT_ADOPTED finding is recorded in the anchor for every
+        operation of the source record. No order is created or cancelled and no
+        amount is released. Safe to repeat. The resume gate check
+        SOURCE_RECORDS_UNIQUE stays failed until every such operation has the
+        finding. Procedure: docs/r1-recovery-operations.md.
+      x-steelmatter-principals: [operator]
+      parameters:
+        - $ref: '#/components/parameters/OpRef'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdoptConflictRequest' }
+      responses:
+        '200':
+          description: Conflict adopted; operations and findings.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConflictResolution' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/recovery/write-state:
+    get:
+      tags: [recovery]
+      operationId: getWriteState
+      summary: R1. Observer or operator reads the instance write switch from the recovery anchor.
+      x-steelmatter-principals: [observer, operator]
+      responses:
+        '200':
+          description: Current write state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WriteState' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/recovery/check:
+    post:
+      tags: [recovery]
+      operationId: checkRestore
+      summary: R1. Operator runs the restore check now; any signal turns writes off (instance-wide).
+      description: |
+        The worker runs the same check on a schedule. Body empty or {}. An
+        order deleted at the destination (its journal records the deletion)
+        is not a restore: its operation is flagged ORDER_DELETED_AT_DESTINATION,
+        stays committed, and writes stay on. A dispatch intent whose engine
+        commit never happened is listed as unconfirmed, not as a restore.
+        503 when the anchor or the destination is unreachable.
+      x-steelmatter-principals: [operator]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyRequest' }
+      responses:
+        '200':
+          description: Check result.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RestoreReport' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/recovery/reconcile:
+    post:
+      tags: [recovery]
+      operationId: reconcileRestore
+      summary: R1. Operator runs restore reconciliation (cases A to G) while writes are off. Safe to repeat.
+      description: |
+        Rebuilds missing operations from the anchor (or, case C, from the
+        engine's own permit), writes BLOCK for committed operations whose
+        order is gone, re-fences fenced ones and settles the rest by lookup
+        and fence. Never creates an order and never releases without proof.
+        Concurrent calls run one at a time; each reports only its own work.
+        complete is false when the pass stopped at its time budget (10
+        seconds before the request deadline); run it again to continue.
+        Body empty or {}.
+      x-steelmatter-principals: [operator]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyRequest' }
+      responses:
+        '200':
+          description: What this pass did.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReconcileReport' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/recovery/resume:
+    post:
+      tags: [recovery]
+      operationId: resumeWrites
+      summary: R1. Operator runs the resume gate; writes restart only if every check passes.
+      description: A failed gate returns 200 with passed false and the failing checks. Body empty or {}.
+      x-steelmatter-principals: [operator]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyRequest' }
+      responses:
+        '200':
+          description: Gate result.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GateReport' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
 components:
   securitySchemes:
     principalToken:
@@ -363,6 +833,17 @@ components:
       schema: { $ref: '#/components/schemas/Identifier' }
     AdapterId:
       name: adapter_id
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Identifier' }
+
+    OpRef:
+      name: op_ref
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Identifier' }
+    RepairId:
+      name: repair_id
       in: path
       required: true
       schema: { $ref: '#/components/schemas/Identifier' }
@@ -470,6 +951,7 @@ components:
         - AUDIENCE_MISMATCH
         - AUTHORITY_REVOKED
         - CLOCK_UNHEALTHY
+        - DELIVERY_REVISION_STALE
         - DUPLICATE_KEY
         - DUPLICATE_LINE_ITEM
         - FORBIDDEN
@@ -510,6 +992,8 @@ components:
     DenyReason:
       type: string
       enum:
+        - APPROVAL_REQUIRED
+        - APPROVAL_STALE
         - AUTHORITY_REVOKED
         - CAPACITY_EXHAUSTED
         - DELIVERY_NOT_PERMITTED
@@ -523,7 +1007,18 @@ components:
       properties:
         item_id: { $ref: '#/components/schemas/Identifier' }
         quantity: { $ref: '#/components/schemas/PositiveInteger' }
-        unit_price_minor: { $ref: '#/components/schemas/NonNegativeInteger' }
+        unit_price_minor:
+          allOf: [{ $ref: '#/components/schemas/NonNegativeInteger' }]
+          description: Per unit_id (the product's base unit when absent), before tax.
+        unit_id:
+          allOf: [{ $ref: '#/components/schemas/Identifier' }]
+          description: D1 v1.4. The authorised unit of quantity; absent means the product's base unit. Never converted.
+        tax_ids:
+          description: D1 v1.4. The authorised taxes on the line, normalised to sorted order; a repeat is refused. Absent means no tax.
+          type: array
+          minItems: 1
+          maxItems: 10
+          items: { $ref: '#/components/schemas/Identifier' }
     ProposedAction:
       description: |
         Material fields an issuer may propose. Server-owned fields are not
@@ -532,6 +1027,17 @@ components:
         supplier record) and amount_minor (computed with checked arithmetic).
         Lines are normalised before authorisation: duplicate item_id rejects,
         order is sorted by item_id bytes.
+        D1 v1.4 (R1 decisions 1 and 2): lines may carry unit_id and tax_ids.
+        Lines with tax_ids require tax_minor, and tax_minor requires at least
+        one taxed line. The action then carries amount_untaxed_minor (the line
+        total), tax_minor, and amount_minor = untaxed + tax, the full total
+        that is held; the destination recomputes the tax at create and refuses
+        any difference. With a destination configured, the engine always
+        stores the destination's delivery address revision (delivery_revision);
+        the delivery check is not optional: an action without one is refused
+        at evaluation and dispatch (409 DELIVERY_REVISION_STALE), and an
+        address the destination does not know is refused (422
+        ADAPTER_UNSUPPORTED).
       type: object
       additionalProperties: false
       required: [supplier_id, delivery_id, currency, lines]
@@ -544,6 +1050,7 @@ components:
           minItems: 1
           maxItems: 100
           items: { $ref: '#/components/schemas/Line' }
+        tax_minor: { $ref: '#/components/schemas/NonNegativeInteger' }
 
     MandateCreateRequest:
       description: tenant_id, issuer_id (the authenticated owner), mandate_id, revision, control_epoch and issued_at are server-owned.
@@ -597,13 +1104,20 @@ components:
     RevokeResponse:
       type: object
       additionalProperties: false
-      required: [mandate_id, status, control_epoch, revoked_at, buckets]
+      required: [mandate_id, status, control_epoch, revoked_at, buckets, in_flight]
       properties:
         mandate_id: { $ref: '#/components/schemas/Identifier' }
         status: { const: REVOKED }
         control_epoch: { $ref: '#/components/schemas/PositiveInteger' }
         revoked_at: { $ref: '#/components/schemas/Timestamp' }
         buckets: { $ref: '#/components/schemas/Buckets' }
+        in_flight:
+          type: array
+          description: |
+            R1 operations dispatched before the revocation and still PENDING or
+            UNRESOLVED (D4). Revocation cannot stop them; each goes straight to
+            lookup and fence and its amount stays unresolved until settled.
+          items: { $ref: '#/components/schemas/Identifier' }
 
     InstructionCreateRequest:
       type: object
@@ -630,7 +1144,13 @@ components:
         action_revision: { $ref: '#/components/schemas/PositiveInteger' }
         action: { $ref: '../schemas/action.schema.json' }
         action_digest: { $ref: '#/components/schemas/Digest' }
-        status: { type: string, enum: [OPEN, COMMITTED] }
+        status:
+          type: string
+          enum: [OPEN, COMMITTED, SUPERSEDED]
+          description: SUPERSEDED means recovery replaced this instruction with superseded_by.
+        superseded_by:
+          description: Present only when status is SUPERSEDED.
+          allOf: [{ $ref: '#/components/schemas/Identifier' }]
     AmendmentRequest:
       type: object
       additionalProperties: false
@@ -642,7 +1162,7 @@ components:
     AmendmentResponse:
       type: object
       additionalProperties: false
-      required: [amendment_id, instruction_id, previous_action_revision, action_revision, action, action_digest, invalidated_permit_ids, released_minor]
+      required: [amendment_id, instruction_id, previous_action_revision, action_revision, action, action_digest, invalidated_permit_ids, released_minor, status, effective, current_action_revision]
       properties:
         amendment_id: { $ref: '#/components/schemas/Identifier' }
         instruction_id: { $ref: '#/components/schemas/Identifier' }
@@ -654,6 +1174,12 @@ components:
           type: array
           items: { $ref: '#/components/schemas/Identifier' }
         released_minor: { $ref: '#/components/schemas/NonNegativeInteger' }
+        status:
+          type: string
+          enum: [CURRENT, SUPERSEDED]
+          description: CURRENT while action_revision is the live revision; SUPERSEDED once a later amendment replaced it.
+        effective: { type: boolean, description: True exactly when status is CURRENT. }
+        current_action_revision: { $ref: '#/components/schemas/PositiveInteger' }
 
     EvaluateRequest:
       type: object
@@ -722,7 +1248,7 @@ components:
         committed_at: { $ref: '#/components/schemas/Timestamp' }
     OperationStatus:
       description: |
-        Four independent status fields (document 03). OUTCOME_UNKNOWN is R1.
+        Four independent status fields (document 03). An R1 outcome that is not yet known is reported as execution PENDING or UNRESOLVED.
         R0 derivation: authorisation is PERMITTED for an active or consumed
         permit; REVOKED when released by revocation or withdrawn by an
         amendment; EXPIRED when expired (cleaned up or not), released as an
@@ -737,7 +1263,17 @@ components:
         operation_id: { $ref: '#/components/schemas/Identifier' }
         instruction_id: { $ref: '#/components/schemas/Identifier' }
         authorisation: { type: string, enum: [PERMITTED, DENIED, REVOKED, EXPIRED] }
-        execution: { type: string, enum: [NOT_ADMITTED, COMMITTED, REJECTED] }
+        execution:
+          type: string
+          enum: [NOT_ADMITTED, PENDING, UNRESOLVED, COMMITTED, FENCED, MISMATCH, HELD, REJECTED]
+          description: |
+            COMMITTED is the only success value. R1 dispatched operations:
+            PENDING (dispatch recorded, send in progress), UNRESOLVED (outcome
+            unknown; lookup and fence in progress), FENCED (the destination
+            proved no order and blocked the reference; amount released),
+            MISMATCH (an order exists but differs; held), HELD (blocked over an
+            earlier create attempt whose outcome is not established; held for
+            an operator finding).
         observation: { type: string, enum: [NOT_OBSERVED, MATCH, MISMATCH, INSUFFICIENT_EVIDENCE] }
         evidence: { type: string, enum: [PENDING, AVAILABLE, INVALID] }
         target_ref: { $ref: '#/components/schemas/TargetRef' }
@@ -804,3 +1340,203 @@ components:
         test_references:
           type: array
           items: { type: string, maxLength: 256 }
+
+    EmptyRequest:
+      type: object
+      additionalProperties: false
+      properties: {}
+    DispatchResult:
+      type: object
+      additionalProperties: false
+      required: [op_ref, instruction_id, action_revision, action_digest, execution]
+      properties:
+        op_ref: { $ref: '#/components/schemas/Identifier' }
+        instruction_id: { $ref: '#/components/schemas/Identifier' }
+        action_revision: { $ref: '#/components/schemas/PositiveInteger' }
+        action_digest: { $ref: '#/components/schemas/Digest' }
+        execution: { type: string, enum: [PENDING, UNRESOLVED, COMMITTED, FENCED, MISMATCH, HELD] }
+        last_outcome: { type: string, maxLength: 64, description: Last connector outcome code (D1). }
+        destination_order: { type: string, maxLength: 128, description: Destination order reference once committed. }
+        flag:
+          type: string
+          enum: [ORDER_MISSING_AFTER_RESTORE, ORDER_DELETED_AT_DESTINATION, ORDER_CHANGED_AT_DESTINATION]
+          description: >-
+            Set on a committed operation whose order changed at the destination afterwards (lost in a restore,
+            deleted, or edited or cancelled). The amount stays committed; record a finding.
+    FindingRequest:
+      type: object
+      additionalProperties: false
+      required: [finding, evidence_ref]
+      properties:
+        finding: { type: string, minLength: 1, maxLength: 2000 }
+        evidence_ref: { type: string, minLength: 1, maxLength: 512 }
+    AdoptConflictRequest:
+      type: object
+      additionalProperties: false
+      required: [evidence_ref, note]
+      properties:
+        evidence_ref: { type: string, minLength: 1, maxLength: 512 }
+        note: { type: string, minLength: 1, maxLength: 2000 }
+    ConflictResolution:
+      type: object
+      additionalProperties: false
+      required: [op_ref, instruction_id, operations, rebuilt, finding_seqs]
+      properties:
+        op_ref: { $ref: '#/components/schemas/Identifier' }
+        instruction_id: { $ref: '#/components/schemas/Identifier' }
+        superseded_instruction: { $ref: '#/components/schemas/Identifier' }
+        operations:
+          type: array
+          items: { $ref: '#/components/schemas/Identifier' }
+        rebuilt: { type: boolean }
+        finding_seqs:
+          type: array
+          items: { $ref: '#/components/schemas/PositiveInteger' }
+    FindingResult:
+      type: object
+      additionalProperties: false
+      required: [op_ref, anchor_seq]
+      properties:
+        op_ref: { $ref: '#/components/schemas/Identifier' }
+        anchor_seq: { $ref: '#/components/schemas/PositiveInteger' }
+    RepairRequest:
+      type: object
+      additionalProperties: false
+      required: [outcome, evidence_ref]
+      properties:
+        outcome: { type: string, enum: [COMMIT, RELEASE, ANCHOR_REPAIR] }
+        evidence_ref: { type: string, minLength: 1, maxLength: 512 }
+        summary: { type: string, minLength: 1, maxLength: 2000 }
+    ReviewRequest:
+      type: object
+      additionalProperties: false
+      required: [approved]
+      properties:
+        approved: { type: boolean }
+        note: { type: string, minLength: 1, maxLength: 2000 }
+    RepairResult:
+      type: object
+      additionalProperties: false
+      required: [op_ref, repair_id]
+      properties:
+        op_ref: { $ref: '#/components/schemas/Identifier' }
+        repair_id: { $ref: '#/components/schemas/Identifier' }
+        outcome: { type: string, enum: [COMMIT, RELEASE, ANCHOR_REPAIR] }
+        approved: { type: boolean }
+    AnchorRepairRequest:
+      type: object
+      additionalProperties: false
+      required: [repair_id]
+      properties:
+        repair_id: { $ref: '#/components/schemas/Identifier' }
+    ApprovalRequest:
+      type: object
+      additionalProperties: false
+      required: [action_revision, action_digest, approved]
+      properties:
+        action_revision: { $ref: '#/components/schemas/PositiveInteger' }
+        action_digest: { type: string, pattern: '^[a-f0-9]{64}$' }
+        approved: { type: boolean }
+        note: { type: string, minLength: 1, maxLength: 2000 }
+    ApprovalResult:
+      type: object
+      additionalProperties: false
+      required: [approval_id, instruction_id, action_revision, action_digest, decision, approver_id]
+      properties:
+        approval_id: { $ref: '#/components/schemas/Identifier' }
+        instruction_id: { $ref: '#/components/schemas/Identifier' }
+        action_revision: { $ref: '#/components/schemas/PositiveInteger' }
+        action_digest: { type: string, pattern: '^[a-f0-9]{64}$' }
+        decision: { type: string, enum: [APPROVED, REJECTED] }
+        approver_id: { $ref: '#/components/schemas/Identifier' }
+    AnchorRepairResult:
+      type: object
+      additionalProperties: false
+      required: [op_ref, repair_id, repaired]
+      properties:
+        op_ref: { $ref: '#/components/schemas/Identifier' }
+        repair_id: { $ref: '#/components/schemas/Identifier' }
+        repaired: { const: true }
+    WriteState:
+      type: object
+      additionalProperties: false
+      required: [enabled, generation, reason, baseline_seq]
+      properties:
+        enabled: { type: boolean }
+        generation: { $ref: '#/components/schemas/PositiveInteger' }
+        reason: { type: string, maxLength: 1024 }
+        baseline_seq: { $ref: '#/components/schemas/NonNegativeInteger' }
+    RestoreSignal:
+      type: object
+      additionalProperties: false
+      required: [code, detail]
+      properties:
+        code:
+          type: string
+          enum: [ENGINE_MISSING_OPERATION, ANCHOR_MISSING_OPERATION, ENGINE_STATUS_BEHIND, DESTINATION_BEHIND,
+                 UNKNOWN_DESTINATION_OPERATION, COMMITTED_ORDER_MISSING, CLOCK_SKEW]
+        tenant_id: { $ref: '#/components/schemas/Identifier' }
+        op_ref: { $ref: '#/components/schemas/Identifier' }
+        detail: { type: string, maxLength: 1024 }
+    RestoreReport:
+      type: object
+      additionalProperties: false
+      required: [signals, writes_disabled, write_state, flagged, unconfirmed]
+      properties:
+        signals:
+          type: array
+          items: { $ref: '#/components/schemas/RestoreSignal' }
+        writes_disabled: { type: boolean, description: true when this check turned writes off. }
+        write_state: { $ref: '#/components/schemas/WriteState' }
+        flagged:
+          description: Committed operations this check flagged because their order was deleted at the destination.
+          type: array
+          items: { $ref: '#/components/schemas/Identifier' }
+        unconfirmed:
+          description: Dispatch intents whose engine commit never happened; not a restore; the client may retry.
+          type: array
+          items: { $ref: '#/components/schemas/Identifier' }
+    OpRefList:
+      type: array
+      items: { $ref: '#/components/schemas/Identifier' }
+    ReconcileReport:
+      type: object
+      additionalProperties: false
+      required: [recreated, from_odoo, flagged, refenced, settled, problems, unconfirmed, complete]
+      properties:
+        recreated: { $ref: '#/components/schemas/OpRefList' }
+        from_odoo: { $ref: '#/components/schemas/OpRefList' }
+        flagged: { $ref: '#/components/schemas/OpRefList' }
+        refenced: { $ref: '#/components/schemas/OpRefList' }
+        settled:
+          description: One "op_ref=STATUS" entry for each operation this pass brought to a final state.
+          type: array
+          items: { type: string, maxLength: 160, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]*=(COMMITTED|FENCED|MISMATCH|HELD)$' }
+        problems:
+          description: Operator-facing text, one entry per problem; the gate does not pass while any remain.
+          type: array
+          items: { type: string, maxLength: 1024 }
+        unconfirmed: { $ref: '#/components/schemas/OpRefList' }
+        complete: { type: boolean, description: false when the pass stopped at its time budget; run reconciliation again. }
+    GateCheck:
+      type: object
+      additionalProperties: false
+      required: [name, passed]
+      properties:
+        name:
+          type: string
+          enum: [WRITES_ALREADY_ON, ALL_READABLE, ALL_OPERATIONS_PRESENT, NONE_PENDING_OR_UNRESOLVED, HELD_RULE, BUCKETS_RECONCILE,
+                 ANCHOR_NOT_BEHIND, NO_UNEXPLAINED_SIGNALS, CLOCKS_AGREE]
+        passed: { type: boolean }
+        detail: { type: string, maxLength: 4096 }
+    GateReport:
+      type: object
+      additionalProperties: false
+      required: [checks, passed, resumed, write_state]
+      properties:
+        checks:
+          type: array
+          items: { $ref: '#/components/schemas/GateCheck' }
+        passed: { type: boolean }
+        resumed: { type: boolean }
+        write_state: { $ref: '#/components/schemas/WriteState' }

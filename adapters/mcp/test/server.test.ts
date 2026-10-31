@@ -249,3 +249,14 @@ test('notifications/cancelled aborts the in-flight call and suppresses its respo
   assert.equal(await pending, undefined);
   assert.equal(seenSignal?.aborted, true);
 });
+
+test('get_operation confirms success only for COMMITTED and explains every other execution value', async () => {
+  for (const [execution, confirmed] of [['COMMITTED', true], ['PENDING', false], ['UNRESOLVED', false], ['HELD', false], ['MISMATCH', false], ['FENCED', false]] as const) {
+    const { s } = await ready(() => ({ operation_id: 'op', execution }));
+    const res = (await call(s, 'steelmatter_get_operation', { operation_id: 'op' })).result as { isError: boolean; structuredContent: { result: Record<string, unknown> } };
+    assert.equal(res.isError, false);
+    assert.equal(res.structuredContent.result.execution, execution);
+    assert.equal(res.structuredContent.result.outcome_confirmed, confirmed, execution);
+    assert.equal(typeof res.structuredContent.result.outcome_note, confirmed ? 'undefined' : 'string', execution);
+  }
+});

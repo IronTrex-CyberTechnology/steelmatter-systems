@@ -4,6 +4,8 @@ import type {
   AdapterAssurance, AmendmentRequest, AmendmentResponse, Denied, ErrorCode, EvaluateRequest, EvidenceBundle,
   Identifier, InstructionCreateRequest, InstructionResponse, MandateCreateRequest, MandateResponse, OperationRequest,
   OperationResult, OperationStatus, PermitIssued, ReconcileResult, RevokeResponse, SimulationResult,
+  AdoptConflictRequest, AnchorRepairRequest, AnchorRepairResult, ConflictResolution, ApprovalRequest, ApprovalResult, DispatchResult, FindingRequest, FindingResult, GateReport, ReconcileReport,
+  RepairRequest, RepairResult, RestoreReport, ReviewRequest, WriteState,
 } from './types.ts';
 
 export interface RetryOptions {
@@ -88,7 +90,11 @@ const E_CREATE_MANDATE = [400, 401, 403, 422, 429, 500, 503] as const;
 const E_WRITE_404 = [400, 401, 403, 404, 429, 500, 503] as const; // revokeMandate, reconcileOperation
 const E_WRITE_409 = [400, 401, 403, 404, 409, 429, 500, 503] as const; // evaluateAction, simulateAction
 const E_WRITE_409_422 = [400, 401, 403, 404, 409, 422, 429, 500, 503] as const; // createInstruction, amendInstruction, admitOperation
-const E_READ = [401, 403, 404, 429, 500, 503] as const; // getOperation, getEvidence, getAdapterAssurance
+const E_READ = [401, 403, 404, 429, 500, 503] as const; // getOperation, getEvidence, getAdapterAssurance, getDispatch
+const E_READ_INSTRUCTION = [401, 403, 404, 429, 500, 503] as const; // getInstruction
+const E_READ_STATE = [401, 403, 429, 500, 503] as const; // getWriteState
+const E_RECOVERY_CHECK = [400, 401, 403, 429, 500, 503] as const; // checkRestore
+const E_RECOVERY = [400, 401, 403, 429, 500, 503] as const; // reconcileRestore, resumeWrites
 
 const DEFAULT_RETRY: RetryOptions = { maxAttempts: 3, baseDelayMs: 100, maxDelayMs: 2000, maxRetryAfterMs: 30_000 };
 const DEFAULT_TIMEOUT_MS = 65_000;
@@ -206,6 +212,14 @@ export class SteelmatterClient {
   }
 
   /**
+   * The trusted issuer or the assigned actor reads an instruction. status is
+   * OPEN, COMMITTED or SUPERSEDED (recovery replaced it with superseded_by).
+   */
+  async getInstruction(instructionId: Identifier, opts?: RequestOptions): Promise<ApiResponse<InstructionResponse>> {
+    return this.#call({ method: 'GET', path: `/v1/instructions/${segment(instructionId, 'instructionId')}`, expect: [200], errors: E_READ_INSTRUCTION, idempotency: 'idempotent' }, opts);
+  }
+
+  /**
    * Authorised issuer appends a revision before commit (201). An exact
    * amendment_id retry returns the recorded result (200). Re-evaluation is
    * required afterwards; no capacity is reserved automatically.
@@ -261,6 +275,91 @@ export class SteelmatterClient {
   /** Supported paths, limitations, version and test references of a destination adapter. */
   async getAdapterAssurance(adapterId: Identifier, opts?: RequestOptions): Promise<ApiResponse<AdapterAssurance>> {
     return this.#call({ method: 'GET', path: `/v1/adapters/${segment(adapterId, 'adapterId')}/assurance`, expect: [200], errors: E_READ, idempotency: 'idempotent' }, opts);
+  }
+
+  // ---- R1 dispatches and repairs ----
+
+  /**
+   * R1. Assigned actor dispatches the exact permitted action to the configured
+   * destination. 201 recorded (PENDING), 200 stored state for an identical
+   * repeat. The order is created by the settle worker; poll getDispatch.
+   */
+  async dispatchOperation(body: OperationRequest, opts?: RequestOptions): Promise<ApiResponse<DispatchResult>> {
+    return this.#call({ method: 'POST', path: '/v1/dispatches', body, expect: [201, 200], errors: E_WRITE_409_422, idempotency: 'idempotent' }, opts);
+  }
+
+  /** R1. Observer or operator reads a dispatched operation. */
+  async getDispatch(opRef: Identifier, opts?: RequestOptions): Promise<ApiResponse<DispatchResult>> {
+    return this.#call({ method: 'GET', path: `/v1/dispatches/${segment(opRef, 'opRef')}`, expect: [200], errors: E_READ, idempotency: 'idempotent' }, opts);
+  }
+
+  /** R1. Operator runs one settle step now (send or lookup, then fence). Safe to repeat. */
+  async settleDispatch(opRef: Identifier, opts?: RequestOptions): Promise<ApiResponse<DispatchResult>> {
+    return this.#call({ method: 'POST', path: `/v1/dispatches/${segment(opRef, 'opRef')}/settle`, expect: [200], errors: E_WRITE_404, idempotency: 'idempotent' }, opts);
+  }
+
+  /** R1. Operator records a HELD finding. Never moves budget. Each call appends a record. */
+  async recordHeldFinding(opRef: Identifier, body: FindingRequest, opts?: RequestOptions): Promise<ApiResponse<FindingResult>> {
+    return this.#call({ method: 'POST', path: `/v1/dispatches/${segment(opRef, 'opRef')}/findings`, body, expect: [201], errors: E_WRITE_409, idempotency: 'rate-limit-only' }, opts);
+  }
+
+  /**
+   * R1. Operator resolves a CONFLICT_SPENT source-record conflict while writes are off: the anchored
+   * operation is recorded again with its amount held and a SOURCE_CONFLICT_ADOPTED finding is recorded
+   * for every operation of the source record. Creates and cancels no order; releases no amount.
+   */
+  async adoptAnchoredOperation(opRef: Identifier, body: AdoptConflictRequest, opts?: RequestOptions): Promise<ApiResponse<ConflictResolution>> {
+    return this.#call({ method: 'POST', path: `/v1/recovery/conflicts/${segment(opRef, 'opRef')}/adopt`, body, expect: [200], errors: E_WRITE_409, idempotency: 'idempotent' }, opts);
+  }
+
+  /** R1. Operator prepares repair evidence (COMMIT or RELEASE). Nothing moves yet. */
+  async prepareRepair(opRef: Identifier, body: RepairRequest, opts?: RequestOptions): Promise<ApiResponse<RepairResult>> {
+    return this.#call({ method: 'POST', path: `/v1/dispatches/${segment(opRef, 'opRef')}/repairs`, body, expect: [201], errors: E_WRITE_409, idempotency: 'rate-limit-only' }, opts);
+  }
+
+  /** R1. A configured reviewer, not the preparer, approves or rejects repair evidence. */
+  async reviewRepair(opRef: Identifier, repairId: Identifier, body: ReviewRequest, opts?: RequestOptions): Promise<ApiResponse<RepairResult>> {
+    return this.#call({ method: 'POST', path: `/v1/dispatches/${segment(opRef, 'opRef')}/repairs/${segment(repairId, 'repairId')}/review`, body, expect: [200], errors: E_WRITE_409, idempotency: 'rate-limit-only' }, opts);
+  }
+
+  /** R1. A configured confirmer, distinct from preparer and reviewer, confirms; the only way a held amount moves. */
+  async confirmRepair(opRef: Identifier, repairId: Identifier, opts?: RequestOptions): Promise<ApiResponse<DispatchResult>> {
+    return this.#call({ method: 'POST', path: `/v1/dispatches/${segment(opRef, 'opRef')}/repairs/${segment(repairId, 'repairId')}/confirm`, expect: [200], errors: E_WRITE_409, idempotency: 'rate-limit-only' }, opts);
+  }
+
+  /**
+   * R1 (T17-T19). An entitled approver, never the issuer or actor, approves or rejects the exact current
+   * action revision. Each call records one decision, so it is retried only after 429.
+   */
+  async recordApproval(instructionId: Identifier, body: ApprovalRequest, opts?: RequestOptions): Promise<ApiResponse<ApprovalResult>> {
+    return this.#call({ method: 'POST', path: `/v1/instructions/${segment(instructionId, 'instructionId')}/approvals`, body, expect: [201], errors: E_WRITE_409, idempotency: 'rate-limit-only' }, opts);
+  }
+
+  // ---- R1 recovery (instance-wide) ----
+
+  /** R1. A configured confirmer repairs an anchor found behind the engine. */
+  async confirmAnchorRepair(opRef: Identifier, body: AnchorRepairRequest, opts?: RequestOptions): Promise<ApiResponse<AnchorRepairResult>> {
+    return this.#call({ method: 'POST', path: `/v1/dispatches/${segment(opRef, 'opRef')}/anchor-repair`, body, expect: [200], errors: E_WRITE_409, idempotency: 'rate-limit-only' }, opts);
+  }
+
+  /** R1. Observer or operator reads the write switch. */
+  async getWriteState(opts?: RequestOptions): Promise<ApiResponse<WriteState>> {
+    return this.#call({ method: 'GET', path: '/v1/recovery/write-state', expect: [200], errors: E_READ_STATE, idempotency: 'idempotent' }, opts);
+  }
+
+  /** R1. Operator runs the restore check; any signal turns writes off. */
+  async checkRestore(opts?: RequestOptions): Promise<ApiResponse<RestoreReport>> {
+    return this.#call({ method: 'POST', path: '/v1/recovery/check', expect: [200], errors: E_RECOVERY_CHECK, idempotency: 'idempotent' }, opts);
+  }
+
+  /** R1. Operator runs restore reconciliation while writes are off. Safe to repeat. */
+  async reconcileRestore(opts?: RequestOptions): Promise<ApiResponse<ReconcileReport>> {
+    return this.#call({ method: 'POST', path: '/v1/recovery/reconcile', expect: [200], errors: E_RECOVERY, idempotency: 'idempotent' }, opts);
+  }
+
+  /** R1. Operator runs the resume gate; a failed gate is 200 with passed false. */
+  async resumeWrites(opts?: RequestOptions): Promise<ApiResponse<GateReport>> {
+    return this.#call({ method: 'POST', path: '/v1/recovery/resume', expect: [200], errors: E_RECOVERY, idempotency: 'idempotent' }, opts);
   }
 
   // ---- transport ----

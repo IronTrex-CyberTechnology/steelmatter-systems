@@ -109,10 +109,14 @@ type Report struct {
 	Results              []CaseResult  `json:"results"`
 }
 
-// Outcome is the terminal state of one test in one phase.
+// Outcome is the terminal state of one test in one phase. A failure is
+// final: a later pass or skip for the same test never replaces it (T44).
+// Reports counts terminal results (pass, fail, skip); each test in a
+// phase must report exactly one.
 type Outcome struct {
-	Action string
-	Output []string
+	Action  string
+	Reports int
+	Output  []string
 }
 
 // PhaseResults holds parsed outcomes keyed by "package.Test".
@@ -158,7 +162,10 @@ func ParseGoTestJSON(r io.Reader) (*PhaseResults, error) {
 		}
 		switch ev.Action {
 		case "pass", "fail", "skip":
-			o.Action = ev.Action
+			o.Reports++
+			if o.Action != "fail" {
+				o.Action = ev.Action
+			}
 		case "output":
 			if len(o.Output) < 200 {
 				o.Output = append(o.Output, ev.Output)
@@ -220,6 +227,9 @@ func Evaluate(in Inputs) Report {
 			problem("phase %q: %s", p, f)
 		}
 		for _, k := range sortedKeys(pr.Tests) {
+			if n := pr.Tests[k].Reports; n > 1 {
+				problem("phase %q: %s reported %d results; each test must report exactly one", p, k, n)
+			}
 			switch pr.Tests[k].Action {
 			case "pass":
 			case "skip":
@@ -241,10 +251,10 @@ func Evaluate(in Inputs) Report {
 		switch {
 		case o == nil:
 			return NotRun
+		case o.Action == "fail", o.Reports > 1:
+			return Fail
 		case o.Action == "pass":
 			return Pass
-		case o.Action == "fail":
-			return Fail
 		default:
 			return NotRun
 		}

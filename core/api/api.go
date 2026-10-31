@@ -42,6 +42,7 @@ func RegisterWith(mux *http.ServeMux, e *engine.Engine, a *auth.Authenticator, o
 	mux.HandleFunc("POST /v1/mandates", h.wrap(h.createMandate))
 	mux.HandleFunc("POST /v1/mandates/{mandate_id}/revoke", h.wrap(h.revokeMandate))
 	mux.HandleFunc("POST /v1/instructions", h.wrap(h.createInstruction))
+	mux.HandleFunc("GET /v1/instructions/{instruction_id}", h.wrap(h.getInstruction))
 	mux.HandleFunc("POST /v1/instructions/{instruction_id}/revisions", h.wrap(h.amendInstruction))
 	mux.HandleFunc("POST /v1/actions/evaluate", h.wrap(h.evaluate))
 	mux.HandleFunc("POST /v1/actions/simulate", h.wrap(h.simulate))
@@ -50,6 +51,7 @@ func RegisterWith(mux *http.ServeMux, e *engine.Engine, a *auth.Authenticator, o
 	mux.HandleFunc("POST /v1/operations/{operation_id}/reconcile", h.wrap(h.reconcile))
 	mux.HandleFunc("GET /v1/operations/{operation_id}/evidence", h.wrap(h.evidence))
 	mux.HandleFunc("GET /v1/adapters/{adapter_id}/assurance", h.wrap(h.assurance))
+	h.registerR1(mux)
 }
 
 type handlers struct {
@@ -76,6 +78,13 @@ func (h *handlers) wrap(fn handlerFunc) http.HandlerFunc {
 			writeFault(w, r, &engine.Fault{Code: "SERVICE_UNAVAILABLE", Message: "authoritative database unavailable"})
 			return
 		}
+		// R1 decision 6: a deployment serves one tenant. Any other tenant's
+		// principal is refused here, before any endpoint reads or writes.
+		if err := h.e.ServesTenant(p.Tenant); err != nil {
+			f, _ := engine.AsFault(err)
+			writeFault(w, r, f)
+			return
+		}
 		if h.lim != nil {
 			if ok, wait := h.lim.Allow(p.ID); !ok {
 				w.Header().Set("Retry-After", strconv.FormatInt(int64((wait+time.Second-1)/time.Second), 10))
@@ -93,6 +102,11 @@ func (h *handlers) wrap(fn handlerFunc) http.HandlerFunc {
 		if err != nil {
 			if f, ok := engine.AsFault(err); ok {
 				writeFault(w, r, f)
+				return
+			}
+			if d, ok := engine.AsDependency(err); ok {
+				slog.Warn("dependency unavailable", "path", r.URL.Path, "request_id", httpapi.RequestID(r.Context()), "what", d.What, "err", d.Err)
+				writeFault(w, r, &engine.Fault{Code: "SERVICE_UNAVAILABLE", Message: d.What + " is unavailable; retry later"})
 				return
 			}
 			slog.Error("internal error", "path", r.URL.Path, "request_id", httpapi.RequestID(r.Context()), "err", err)
@@ -230,7 +244,7 @@ func proposed(o obj, key string) (engine.ProposedAction, error) {
 		return pa, bad("SCHEMA_VIOLATION", "%s must be an object", key)
 	}
 	path := key + "."
-	if err := closed(po, path, []string{"supplier_id", "delivery_id", "currency", "lines"}, nil); err != nil {
+	if err := closed(po, path, []string{"supplier_id", "delivery_id", "currency", "lines"}, []string{"tax_minor"}); err != nil {
 		return pa, err
 	}
 	var err error
@@ -254,7 +268,7 @@ func proposed(o obj, key string) (engine.ProposedAction, error) {
 		if !ok {
 			return pa, bad("SCHEMA_VIOLATION", "%s must be an object", lp)
 		}
-		if err := closed(lo, lp, []string{"item_id", "quantity", "unit_price_minor"}, nil); err != nil {
+		if err := closed(lo, lp, []string{"item_id", "quantity", "unit_price_minor"}, []string{"unit_id", "tax_ids"}); err != nil {
 			return pa, err
 		}
 		var line contract.Line
@@ -267,7 +281,32 @@ func proposed(o obj, key string) (engine.ProposedAction, error) {
 		if line.UnitPriceMinor, err = integer(lo, "unit_price_minor", lp, 0); err != nil {
 			return pa, err
 		}
+		if _, present := lo["unit_id"]; present {
+			if line.UnitID, err = ident(lo, "unit_id", lp); err != nil {
+				return pa, err
+			}
+		}
+		if _, present := lo["tax_ids"]; present {
+			arr, ok := lo["tax_ids"].([]any)
+			if !ok || len(arr) < 1 || len(arr) > 10 {
+				return pa, bad("SCHEMA_VIOLATION", "%stax_ids must be an array of 1..10 identifiers", lp)
+			}
+			for _, v := range arr {
+				t, ok := v.(string)
+				if !ok || len(t) > 128 || !identifier.MatchString(t) {
+					return pa, bad("SCHEMA_VIOLATION", "%stax_ids must contain identifiers", lp)
+				}
+				line.TaxIDs = append(line.TaxIDs, t)
+			}
+		}
 		pa.Lines = append(pa.Lines, line)
+	}
+	if _, present := po["tax_minor"]; present {
+		t, err := integer(po, "tax_minor", path, 0)
+		if err != nil {
+			return pa, err
+		}
+		pa.TaxMinor = &t
 	}
 	return pa, nil
 }
@@ -367,6 +406,18 @@ func (h *handlers) createInstruction(ctx context.Context, p auth.Principal, r *h
 		status = http.StatusCreated
 	}
 	return &response{status, v}, nil
+}
+
+func (h *handlers) getInstruction(ctx context.Context, p auth.Principal, r *http.Request) (*response, error) {
+	id := r.PathValue("instruction_id")
+	if !identifier.MatchString(id) {
+		return nil, bad("NOT_FOUND", "instruction not found")
+	}
+	v, err := h.e.GetInstruction(ctx, p, id)
+	if err != nil {
+		return nil, err
+	}
+	return &response{http.StatusOK, v}, nil
 }
 
 func (h *handlers) amendInstruction(ctx context.Context, p auth.Principal, r *http.Request) (*response, error) {

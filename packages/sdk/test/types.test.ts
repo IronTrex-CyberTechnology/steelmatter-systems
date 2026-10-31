@@ -3,7 +3,7 @@
 // is never called at runtime; the test below only proves the file loads.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SteelmatterClient, isPermitIssued, isDenied, type ErrorCode, type SteelmatterApiError } from '../src/index.ts';
+import { SteelmatterClient, isPermitIssued, isDenied, isExecutionConfirmed, type ErrorCode, type SteelmatterApiError } from '../src/index.ts';
 
 async function typeChecks(c: SteelmatterClient, err: SteelmatterApiError): Promise<void> {
   const proposal = { supplier_id: 's', delivery_id: 'd', currency: 'INR' as const, lines: [{ item_id: 'i', quantity: 1, unit_price_minor: 1 }] };
@@ -23,7 +23,7 @@ async function typeChecks(c: SteelmatterClient, err: SteelmatterApiError): Promi
     const jws: string = r.data.permit_jws;
     void jws;
   } else {
-    const reason: 'AUTHORITY_REVOKED' | 'CAPACITY_EXHAUSTED' | 'DELIVERY_NOT_PERMITTED' | 'MANDATE_EXPIRED' | 'SUPPLIER_NOT_PERMITTED' = r.data.reason;
+    const reason: 'APPROVAL_REQUIRED' | 'APPROVAL_STALE' | 'AUTHORITY_REVOKED' | 'CAPACITY_EXHAUSTED' | 'DELIVERY_NOT_PERMITTED' | 'MANDATE_EXPIRED' | 'SUPPLIER_NOT_PERMITTED' = r.data.reason;
     void reason;
   }
   if (isDenied(r)) void r.data.message;
@@ -36,4 +36,11 @@ async function typeChecks(c: SteelmatterClient, err: SteelmatterApiError): Promi
 
 test('type checks compile (enforced by tsc)', () => {
   assert.equal(typeof typeChecks, 'function');
+});
+
+test('isExecutionConfirmed is true only for COMMITTED', () => {
+  for (const e of ['NOT_ADMITTED', 'PENDING', 'UNRESOLVED', 'FENCED', 'MISMATCH', 'HELD', 'REJECTED'] as const) {
+    assert.equal(isExecutionConfirmed(e), false, e);
+  }
+  assert.equal(isExecutionConfirmed('COMMITTED'), true);
 });

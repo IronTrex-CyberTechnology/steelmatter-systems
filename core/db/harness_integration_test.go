@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
+	"sort"
 	"strings"
 	"testing"
 
@@ -169,7 +170,7 @@ func observerPrivileges(t *testing.T, ctx context.Context, admin *pgx.Conn, role
 		has_any_column_privilege($1, c.oid, 'INSERT') OR has_any_column_privilege($1, c.oid, 'UPDATE')
 		  OR has_table_privilege($1, c.oid, 'DELETE') OR has_table_privilege($1, c.oid, 'TRUNCATE')
 		FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-		WHERE c.relkind = 'r' AND n.nspname IN ('steelmatter', 'steelmatter_meta', 'target') ORDER BY 1`, role)
+		WHERE c.relkind IN ('r','v') AND n.nspname IN ('steelmatter', 'steelmatter_meta', 'target') ORDER BY 1`, role)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +191,7 @@ func observerPrivileges(t *testing.T, ctx context.Context, admin *pgx.Conn, role
 	return reads, writes
 }
 
-func requireExactObserverReadSet(t *testing.T, ctx context.Context, d *db.Database, observerURL string) {
+func requireExactObserverReadSet(t *testing.T, ctx context.Context, d *db.Database, observerURL string, r1 bool) {
 	t.Helper()
 	admin, err := pgx.Connect(ctx, d.AdminURL)
 	if err != nil {
@@ -198,8 +199,13 @@ func requireExactObserverReadSet(t *testing.T, ctx context.Context, d *db.Databa
 	}
 	defer admin.Close(ctx)
 	reads, writes := observerPrivileges(t, ctx, admin, d.ObserverRole)
-	if strings.Join(reads, ",") != strings.Join(approvedObserverReads, ",") {
-		t.Fatalf("observer read set\n got %v\nwant %v", reads, approvedObserverReads)
+	want := append([]string{}, approvedObserverReads...)
+	if r1 {
+		want = append(want, "steelmatter.dispatches", "steelmatter.r1_executions")
+		sort.Strings(want)
+	}
+	if strings.Join(reads, ",") != strings.Join(want, ",") {
+		t.Fatalf("observer read set\n got %v\nwant %v", reads, want)
 	}
 	if len(writes) != 0 {
 		t.Fatalf("observer can write %v", writes)
@@ -210,9 +216,35 @@ func requireExactObserverReadSet(t *testing.T, ctx context.Context, d *db.Databa
 		t.Fatal(err)
 	}
 	defer obs.Close(ctx)
-	for _, tb := range approvedObserverReads {
+	for _, tb := range want {
 		if _, err := obs.Exec(ctx, "SELECT 1 FROM "+tb+" LIMIT 1"); err != nil {
 			t.Fatalf("observer cannot read approved table %s: %v", tb, err)
+		}
+	}
+	if r1 {
+		rows, err := admin.Query(ctx, `SELECT a.attname FROM pg_attribute a WHERE a.attrelid='steelmatter.dispatches'::regclass
+			AND a.attnum>0 AND NOT a.attisdropped AND has_column_privilege($1,a.attrelid,a.attnum,'SELECT') ORDER BY a.attname`, d.ObserverRole)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var columns []string
+		for rows.Next() {
+			var name string
+			if err := rows.Scan(&name); err != nil {
+				t.Fatal(err)
+			}
+			columns = append(columns, name)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Join(columns, ",") != "action_canonical,company_ref,op_ref,permit_digest,tenant_id" {
+			t.Fatalf("observer dispatch columns: %v", columns)
+		}
+		for _, tb := range []string{"steelmatter.dispatches", "steelmatter.r1_observations", "steelmatter.evidence_operations", "steelmatter.evidence_observations"} {
+			_, err := obs.Exec(ctx, "SELECT * FROM "+tb+" LIMIT 1")
+			requireSQLState(t, err, insufficientPrivilege, "observer reads entire "+tb)
 		}
 	}
 	for _, tb := range []string{"steelmatter.schema_info", "steelmatter.event_receipts", "steelmatter.observations", "steelmatter.mandates", "steelmatter.principals"} {
@@ -225,7 +257,7 @@ func requireExactObserverReadSet(t *testing.T, ctx context.Context, d *db.Databa
 // approved tables and writes none.
 func TestObserverExactReadSetFreshDatabase(t *testing.T) {
 	h := dbtest.New(t)
-	requireExactObserverReadSet(t, context.Background(), h.DB, h.DB.ObserverURL)
+	requireExactObserverReadSet(t, context.Background(), h.DB, h.DB.ObserverURL, true)
 }
 
 // QA-D1-001 regression on an existing database migrated before the fix
@@ -262,5 +294,11 @@ func TestObserverExactReadSetAfterUpgrade(t *testing.T) {
 	if len(applied) != 1 || applied[0] != "0006_observer_read_set.sql" {
 		t.Fatalf("upgrade applied %v", applied)
 	}
-	requireExactObserverReadSet(t, ctx, d, d.ObserverURL)
+	requireExactObserverReadSet(t, ctx, d, d.ObserverURL, false)
+	// R1 grants only its immutable execution and the five dispatch columns
+	// needed for destination readback, on upgraded databases as well as fresh.
+	if _, err := db.Migrate(ctx, admin); err != nil {
+		t.Fatal(err)
+	}
+	requireExactObserverReadSet(t, ctx, d, d.ObserverURL, true)
 }

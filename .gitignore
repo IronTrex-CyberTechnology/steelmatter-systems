@@ -6,6 +6,8 @@
 *.pem
 
 # Build and test outputs
+__pycache__/
+*.pyc
 /.out/
 /dist/
 packages/verifier/dist/

@@ -90,6 +90,42 @@ func TestGateFailsWhenAnyTestFails(t *testing.T) {
 	requireGate(t, Evaluate(in), Fail, "example/pkg.TestB failed")
 }
 
+// T44: an earlier failure is never overwritten by a later result for the
+// same test, and a test that reports more than once fails the gate.
+func TestGateFailureIsNotOverwrittenByLaterPass(t *testing.T) {
+	in := baseInputs(t)
+	in.Phases["unit"] = phase(t, ev("run", "TestA"), ev("fail", "TestA"), ev("run", "TestA"), ev("pass", "TestA"),
+		ev("run", "TestB"), ev("pass", "TestB"))
+	rep := Evaluate(in)
+	requireGate(t, rep, Fail, "example/pkg.TestA failed")
+	requireGate(t, rep, Fail, "reported 2 results")
+	if s := rep.RequiredChecks[0].Status; s != Fail {
+		t.Fatalf("required check TestA = %s; want FAIL", s)
+	}
+}
+
+func TestGateFailsWhenPassIsFollowedByFail(t *testing.T) {
+	in := baseInputs(t)
+	in.Phases["unit"] = phase(t, ev("run", "TestA"), ev("pass", "TestA"), ev("fail", "TestA"), ev("run", "TestB"), ev("pass", "TestB"))
+	requireGate(t, Evaluate(in), Fail, "example/pkg.TestA failed")
+}
+
+func TestGateFailsWhenSkipIsFollowedByPass(t *testing.T) {
+	in := baseInputs(t)
+	in.Phases["unit"] = phase(t, ev("run", "TestA"), ev("pass", "TestA"), ev("run", "TestB"), ev("skip", "TestB"), ev("pass", "TestB"))
+	requireGate(t, Evaluate(in), Fail, "example/pkg.TestB reported 2 results")
+}
+
+func TestGateFailsWhenARequiredTestPassesTwice(t *testing.T) {
+	in := baseInputs(t)
+	in.Phases["unit"] = phase(t, ev("run", "TestA"), ev("pass", "TestA"), ev("pass", "TestA"), ev("run", "TestB"), ev("pass", "TestB"))
+	rep := Evaluate(in)
+	requireGate(t, rep, Fail, "example/pkg.TestA reported 2 results")
+	if s := rep.RequiredChecks[0].Status; s != Fail {
+		t.Fatalf("required check TestA = %s; want FAIL", s)
+	}
+}
+
 func TestGateFailsWhenTestDoesNotFinish(t *testing.T) {
 	in := baseInputs(t)
 	in.Phases["unit"] = phase(t, ev("run", "TestA"), ev("pass", "TestA"), ev("run", "TestB"))

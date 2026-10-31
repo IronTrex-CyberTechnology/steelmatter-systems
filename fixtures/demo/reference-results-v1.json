@@ -3,7 +3,7 @@
   "simulation": true,
   "synthetic": true,
   "note": "Simulation with synthetic data. Pinned demo outcomes; regenerate only through review.",
-  "generated_at_commit": "e688aef664e9e6ec3d9f5e62cccf94a2cd810528-dirty",
+  "generated_at_commit": "8c1ecd38fef55dbd19e8015f3f3f3c66a3f5bcd4",
   "generated_by": "STEELMATTER_UPDATE_DEMO_REFERENCE=1 go test -tags integration,failpoints -run '^TestT43DemoEvidenceConsistency$' ./tests/integration",
   "fixtures": {
     "fixtures/demo/supplier-message.txt": "04ef050190bd3e76748b6d3e05f7dac539f85bdec3a278fd7f66b4e16091001e"

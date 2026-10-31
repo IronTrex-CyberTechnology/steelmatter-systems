@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as node from '../../packages/verifier/src/index.ts';
 import { CARDS, STEP_NOTES, coverageProblems } from '../src/notes.ts';
-import { esc, evidenceView, inr, overview, page, parseLedger, parseRoute, quickstart, scenarioView, type Route } from '../src/render.ts';
+import { esc, evidenceView, inr, overview, page, parseLedger, parseRoute, provenanceNote, quickstart, scenarioView, type Route } from '../src/render.ts';
 import { data } from './helpers.ts';
 
 const ref = data.reference.data;
@@ -36,6 +36,10 @@ test('T43: a changed recording is detected', () => {
   const problems = coverageProblems(changed);
   assert.ok(problems.some((p) => p.includes('a step the page does not know')));
   assert.ok(problems.some((p) => p.includes('unexpected-scenario')));
+});
+
+test('T43: the pinned recording names a clean, full commit (not unknown, not a dirty working tree)', () => {
+  assert.match(ref.generated_at_commit, /^[0-9a-f]{40}$/);
 });
 
 test('T43: each scenario screen shows its case, every test ID, its fixtures, the recorded commit and simulated status', () => {
@@ -163,4 +167,13 @@ test('evidence screen states an impossible timeline explicitly (ADR-003)', async
   const okView = { ...view, evidence: { ...view.evidence, data: { ...view.evidence.data, cases: [{ ...ok, expect: {} }] } } };
   const ot = textOf(evidenceView(okView as never, ok.name, { status: 'ok', result: okResult }));
   assert.ok(ot.includes('CONSISTENT') && !ot.includes('impossible timeline'));
+});
+
+test('T43: the header says how the recorded commit relates to the commit the page was built from', () => {
+  const recorded = '4dd76219730281f311c17131f5b89d4d2cb78466', built = '8c1ecd3a6f0e4b1c2d3e4f5a6b7c8d9e0f1a2b3c';
+  const older = textOf(provenanceNote(recorded, built));
+  assert.ok(older.includes('recorded at 4dd7621') && older.includes('built from 8c1ecd3') && older.includes('fails if any outcome differs'), older);
+  assert.ok(textOf(provenanceNote(recorded, recorded)).includes('recorded at the commit this page was built from, 4dd7621'));
+  assert.ok(textOf(provenanceNote(recorded, 'unknown')).includes('not known'));
+  assert.ok(textOf(page(data, { screen: 'overview' }, { shown: 0 })).includes('The scenarios were recorded at'), 'every page carries the note');
 });

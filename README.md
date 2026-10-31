@@ -1,20 +1,20 @@
-# Steelmatter Systems R0
+# Steelmatter Systems R1 preview
 
-Steelmatter is an IronTrex CyberTechnology project. IronTrex builds action-trust technology for people, financial institutions and autonomous systems. This R0 source preview demonstrates bounded authority for a machine-initiated purchase order, exact-action admission and verifiable evidence in a local synthetic workflow. It is a developer reference, not a production deployment.
+Steelmatter is an IronTrex CyberTechnology project for bounded machine-action authority, exact-action admission and verifiable evidence. R1 extends the R0 synthetic procurement reference to an Odoo 18 sandbox, with recovery anchoring, outcome reconciliation and protected purchase details. This is a developer preview for evaluation, not a production deployment approval.
 
-Local procurement reference (R0). It checks an agent's exact purchase-order action, enforces one shared allowance, prevents duplicate orders and exports signed evidence. Synthetic data only, one organisation, INR integer paise.
+The local quickstart uses the R0 synthetic destination. R1 checks external purchase orders, preserves allowance reservations while outcomes are uncertain, and reconciles outcomes before settlement. Scope is one tenant, one Odoo company, one active backend and INR integer paise.
 
-Developer preview / reference implementation. The service is written in Go ([ADR-001](docs/adr/ADR-001-go-service.md)). This preview uses a simulated destination and is for local evaluation with synthetic data.
+The service is written in Go ([ADR-001](docs/adr/ADR-001-go-service.md)). Start with the synthetic [quickstart](docs/quickstart.md), then follow its R1 sandbox section. Read the [R1 decisions and limits](docs/r1-decisions.md) and [recovery procedures](docs/r1-recovery-operations.md) before evaluating external execution.
 
 ## Status
 - **Contracts:** [docs/contracts/I02-contract.md](docs/contracts/I02-contract.md) covers strict JSON input, payload validation, RFC 8785 digests, SM-JWS-ES256-1 signing, Go/TypeScript golden vectors, the closed OpenAPI spec and the PostgreSQL locking prototype.
 - **I03–I06 core transactions:** implemented and developer-tested; see [docs/engine.md](docs/engine.md). 40 integration scenarios cover T01–T16, T20, T22, T23, T27, T28 and T39–T41, including real process-crash tests.
 - **I07 evidence:** read-only observer, signed execution and observation records, evidence export and reconcile, and the standalone TypeScript verifier and CLI; see [docs/evidence.md](docs/evidence.md).
 - **I08 demo:** `scripts/demo` runs the flagship, stale-supplier, lost-response and agent-injection scenarios from a clean state; see [docs/quickstart.md](docs/quickstart.md). `scripts/ci` also writes the 31-case day-4 report to `.out/sprint-day4-report.md`.
-- **SDK:** `packages/sdk` is a zero-dependency typed client for all 11 endpoints with timeouts and contract-aware retries; see [packages/sdk/README.md](packages/sdk/README.md). 
+- **SDK:** `packages/sdk` is a typed client for the R0 and R1 HTTP APIs, with timeouts and contract-aware retries; see [packages/sdk/README.md](packages/sdk/README.md). 
 - **MCP adapter:** `adapters/mcp` is a thin stdio MCP server forwarding authenticated calls through the SDK; the service enforces assigned-actor execution and ADR-002 read access; see [adapters/mcp/README.md](adapters/mcp/README.md).
 - **Browser demo:** implemented as recorded playback with browser-side evidence verification; see [demo/README.md](demo/README.md).
-- **Acceptance reporting:** the active `full-R0` gate enforces all 35 reviewed R0 case mappings and retains all 340 required I08 checks across seven phases. Case-mapping checks covered the catalogue assertions, test implementations and recorded results; Sindhu's independent regression is documented separately. Nine later-release cases remain out of scope.
+- **Acceptance reporting:** the active `r1-engine` gate is defined in [ci/required.json](ci/required.json). It requires 527 test identities across seven phases. The separate real-Odoo gate runs external execution and recovery scenarios. Required identities, executed assertions and independent QA cases are different counts; report them separately.
 - **Distribution:** source preview only. npm packages remain `private: true`. See [RELEASE_NOTES.md](RELEASE_NOTES.md) for measured checks and limitations.
 
 ## Requirements
@@ -63,7 +63,8 @@ The admin URL needs `CREATEDB` and `CREATEROLE`. Each integration test creates i
 - **I07**: evidence.
 - **I08**: the 340-check implementation baseline.
 - **sprint-day4**: the 31-case checkpoint.
-- **full-R0**: the active stage; all 35 reviewed R0 cases plus the 340 I08 checks.
+- **full-R0**: the retained R0 acceptance stage.
+- **r1-engine**: the active stage, including R1 execution, recovery and demo provenance checks.
 
 The gate fails when a required phase is missing, any test fails, is skipped or doesn't finish, a required test is absent, or a required case is not PASS. Every one of the 44 catalogue cases appears in the report. A case is PASS only when its mapping is marked complete and every mapped test passed.
 

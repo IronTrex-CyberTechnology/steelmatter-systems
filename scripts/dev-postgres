@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Start a disposable pinned PostgreSQL container for local tests (needs Docker).
-# Prints the STEELMATTER_TEST_ADMIN_URL to export. Stop with: docker rm -f steelmatter-pg
+# Prints only the shell-safe export line on stdout (progress goes to stderr),
+# so this works:  eval "$(scripts/dev-postgres)"
+# Stop with: docker rm -f steelmatter-pg
 source "$(dirname "$0")/lib.sh"
 command -v docker >/dev/null || die "docker is not installed"
 docker info >/dev/null 2>&1 || die "docker daemon is not running"
@@ -16,5 +18,5 @@ if ! docker ps --format '{{.Names}}' | grep -qx steelmatter-pg; then
     -p "127.0.0.1:$PORT:5432" --tmpfs /var/lib/postgresql/data "$POSTGRES_IMAGE" >/dev/null
   for _ in $(seq 1 30); do docker exec steelmatter-pg pg_isready -U postgres >/dev/null 2>&1 && break; sleep 1; done
 fi
-log "PostgreSQL $POSTGRES_VERSION on 127.0.0.1:$PORT (data in tmpfs; lost on stop)"
+log "PostgreSQL $POSTGRES_VERSION on 127.0.0.1:$PORT (data in tmpfs; lost on stop)" >&2
 echo "export STEELMATTER_TEST_ADMIN_URL='postgres://postgres:${PGPASS}@127.0.0.1:${PORT}/postgres?sslmode=disable'"

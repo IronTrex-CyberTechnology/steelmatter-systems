@@ -84,6 +84,24 @@ func (e *Engine) Evaluate(ctx context.Context, p auth.Principal, instructionID s
 	if _, err := e.signer("SM-PERMIT+JWS"); err != nil {
 		return nil, err
 	}
+	// R1-DEF-03: authorise against the destination's current supplier revision.
+	if e.Connector != nil {
+		var supplier string
+		var canonical []byte
+		if err := e.Pool.QueryRow(ctx, `SELECT supplier_id, action_canonical FROM steelmatter.action_revisions WHERE tenant_id = $1 AND instruction_id = $2 AND action_revision = $3`,
+			p.Tenant, instructionID, revision).Scan(&supplier, &canonical); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, unavailable(err)
+		}
+		if err := e.syncSupplier(ctx, p.Tenant, supplier); err != nil {
+			return nil, err
+		}
+		// R1 decision 2 (R1-DEF-11): a delivery address changed since the
+		// action was built needs a fresh authorisation. Odoo checks it again
+		// inside the create.
+		if err := e.checkDeliveryRevision(ctx, canonical); err != nil {
+			return nil, err
+		}
+	}
 
 	// IDs are fixed before the transaction so retries reuse them.
 	newPermit := struct{ permit, reservation, operation string }{newID("permit"), newID("res"), newID("op")}
@@ -102,9 +120,22 @@ func (e *Engine) Evaluate(ctx context.Context, p auth.Principal, instructionID s
 		if err != nil {
 			return err
 		}
+		if err := e.guardMandateHistory(ctx, tx, p.Tenant, mandateID); err != nil {
+			return err
+		}
 		var current int64
-		if err := tx.QueryRow(ctx, `SELECT current_revision FROM steelmatter.instructions WHERE tenant_id = $1 AND instruction_id = $2 FOR UPDATE`,
-			p.Tenant, instructionID).Scan(&current); err != nil {
+		var sourceRecord, supersededBy string
+		if err := tx.QueryRow(ctx, `SELECT current_revision, source_record_id, COALESCE(superseded_by, '') FROM steelmatter.instructions
+			WHERE tenant_id = $1 AND instruction_id = $2 FOR UPDATE`,
+			p.Tenant, instructionID).Scan(&current, &sourceRecord, &supersededBy); err != nil {
+			return err
+		}
+		if supersededBy != "" {
+			return fault("REVISION_STALE", "INSTRUCTION_SUPERSEDED: recovery replaced this instruction with %s, the one the anchor shows was dispatched", supersededBy)
+		}
+		// NEW-RTFC79-01: no new permit while the anchor shows a dispatch of
+		// this source record or instruction that the engine lacks.
+		if err := e.guardSourceHistory(ctx, tx, p.Tenant, sourceSystem, sourceRecord, instructionID, ""); err != nil {
 			return err
 		}
 		if err := currentEntitlement(ctx, tx, p, sourceSystem, mandateID, m, actor); err != nil {
@@ -159,6 +190,14 @@ func (e *Engine) Evaluate(ctx context.Context, p auth.Principal, instructionID s
 		}
 		if liveSupplierRev != supplierRev || supplierStatus != "ACTIVE" {
 			return fault("SUPPLIER_REVISION_STALE", "protected supplier revision changed; amend and re-evaluate")
+		}
+		// T17-T19 (R1 decision 9): above the tenant's approval threshold the
+		// exact action needs a current approval by an entitled approver.
+		if reason, msg, err := approvalDenial(ctx, tx, p.Tenant, instructionID, revision, actionDigest, amount, liveSupplierRev, m, actor); err != nil {
+			return err
+		} else if reason != "" {
+			res = deny(reason, msg, instructionID, revision)
+			return nil
 		}
 
 		if live != nil {
@@ -398,4 +437,28 @@ func (e *Engine) RecoverUnsigned(ctx context.Context) (int, error) {
 		}
 	}
 	return n, nil
+}
+
+// checkDeliveryRevision compares the stored action's delivery_revision with
+// the destination's current one. Actions without one (pre-D1 v1.4, or a
+// destination without delivery revisions) are not checked.
+func (e *Engine) checkDeliveryRevision(ctx context.Context, canonical []byte) error {
+	if len(canonical) == 0 {
+		return nil
+	}
+	var a contract.Action
+	if err := json.Unmarshal(canonical, &a); err != nil {
+		return err
+	}
+	if err := e.requireDeliveryRevision(&a); err != nil {
+		return err
+	}
+	cur, err := e.deliveryRevision(ctx, a.DeliveryID)
+	if err != nil {
+		return err
+	}
+	if cur == nil || *cur != *a.DeliveryRevision {
+		return fault("DELIVERY_REVISION_STALE", "the protected delivery address changed after the action was built; amend and re-evaluate")
+	}
+	return nil
 }

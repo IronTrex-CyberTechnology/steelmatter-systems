@@ -28,9 +28,10 @@ const (
 var Kinds = []Kind{KindMandate, KindAction, KindPermit, KindExecution, KindObservation}
 
 const (
-	SchemaVersion = "1"
-	CryptoProfile = "SM-JWS-ES256-1"
-	Currency      = "INR"
+	SchemaVersion           = "1"
+	ExternalEvidenceVersion = "2"
+	CryptoProfile           = "SM-JWS-ES256-1"
+	Currency                = "INR"
 	// MaxPermitLifetime is the 5-minute permit limit (document 02).
 	MaxPermitLifetime = 5 * time.Minute
 	timestampLayout   = "2006-01-02T15:04:05Z"
@@ -60,7 +61,14 @@ type Mandate struct {
 type Line struct {
 	ItemID         string `json:"item_id"`
 	Quantity       int64  `json:"quantity"`
-	UnitPriceMinor int64  `json:"unit_price_minor"`
+	UnitPriceMinor int64  `json:"unit_price_minor"` // per UnitID, before tax
+	// UnitID is the authorised unit of Quantity (D1 v1.4, R1 decision 1).
+	// Absent means the product's base unit; the destination never converts.
+	UnitID string `json:"unit_id,omitempty"`
+	// TaxIDs are the authorised taxes on the line, sorted and unique (D1
+	// v1.4). Absent means no tax: a taxed product is then refused at the
+	// destination, never bought with the tax removed.
+	TaxIDs []string `json:"tax_ids,omitempty"`
 }
 
 // Action is the exact proposed purchase order. It is digested, not signed;
@@ -79,7 +87,19 @@ type Action struct {
 	DeliveryID       string `json:"delivery_id"`
 	Currency         string `json:"currency"`
 	Lines            []Line `json:"lines"`
-	AmountMinor      int64  `json:"amount_minor"`
+	// AmountMinor is the full total including tax: the amount held.
+	AmountMinor int64 `json:"amount_minor"`
+
+	// D1 v1.4 (R1 decisions 1 and 2), optional so every v1 action and test
+	// vector keeps its digest. AmountUntaxedMinor and TaxMinor come together:
+	// untaxed = Σ quantity × unit_price_minor and amount = untaxed + tax.
+	// Without them the action has no tax and no line may carry tax_ids.
+	AmountUntaxedMinor *int64 `json:"amount_untaxed_minor,omitempty"`
+	TaxMinor           *int64 `json:"tax_minor,omitempty"`
+	// DeliveryRevision is the destination's protected revision of the
+	// delivery address when the action was authorised; the destination
+	// refuses the create if it changed (R1 decision 2).
+	DeliveryRevision *int64 `json:"delivery_revision,omitempty"`
 }
 
 // Permit is the signed, time-limited permission for one action revision.
@@ -121,6 +141,8 @@ type Execution struct {
 	AmountMinor   int64  `json:"amount_minor"`
 	Status        string `json:"status"`
 	CommittedAt   string `json:"committed_at"`
+	AdmittedAt    string `json:"admitted_at,omitempty"`
+	CompanyRef    string `json:"company_ref,omitempty"`
 }
 
 // Observation is the observer's readback comparison.
@@ -138,13 +160,18 @@ type Observation struct {
 	TargetOrderID        string  `json:"target_order_id"`
 	Status               string  `json:"status"`
 	ObservedAt           string  `json:"observed_at"`
+	ExpectedCompanyRef   string  `json:"expected_company_ref,omitempty"`
+	ObservedCompanyRef   *string `json:"observed_company_ref,omitempty"`
+	ObservedState        *string `json:"observed_state,omitempty"`
+	ExpectedPermitDigest string  `json:"expected_permit_digest,omitempty"`
+	ObservedPermitDigest *string `json:"observed_permit_digest,omitempty"`
 }
 
 // Timestamp fields per kind, checked before schema validation.
 var timestampFields = map[Kind][]string{
 	KindMandate:     {"issued_at", "expires_at"},
 	KindPermit:      {"issued_at", "expires_at"},
-	KindExecution:   {"committed_at"},
+	KindExecution:   {"committed_at", "admitted_at"},
 	KindObservation: {"observed_at"},
 }
 
@@ -196,7 +223,7 @@ func schemaFor(k Kind) (*jsonschema.Schema, error) {
 
 // knownFields returns the closed property set for an object schema.
 var knownFields = map[Kind]map[string]bool{}
-var lineFields = map[string]bool{"item_id": true, "quantity": true, "unit_price_minor": true}
+var lineFields = map[string]bool{"item_id": true, "quantity": true, "unit_price_minor": true, "unit_id": true, "tax_ids": true}
 
 func init() {
 	for k, v := range map[Kind]any{KindMandate: Mandate{}, KindAction: Action{}, KindPermit: Permit{}, KindExecution: Execution{}, KindObservation: Observation{}} {
@@ -208,6 +235,17 @@ func init() {
 			knownFields[k][f] = true
 		}
 	}
+	// Optional v2 fields are omitted by zero-value marshaling above.
+	for _, f := range []string{"admitted_at", "company_ref"} {
+		knownFields[KindExecution][f] = true
+	}
+	for _, f := range []string{"amount_untaxed_minor", "tax_minor", "delivery_revision"} {
+		knownFields[KindAction][f] = true
+	}
+	for _, f := range []string{"expected_company_ref", "observed_company_ref", "observed_state", "expected_permit_digest", "observed_permit_digest"} {
+		knownFields[KindObservation][f] = true
+	}
+
 }
 
 // Validate parses raw strictly and validates it as kind, returning the typed
@@ -225,7 +263,7 @@ func Validate(kind Kind, raw []byte) (any, *Error) {
 	if !ok {
 		return nil, errf(CodeSchemaViolation, "", "payload must be a JSON object")
 	}
-	if v, ok := obj["schema_version"].(string); !ok || v != SchemaVersion {
+	if v, ok := obj["schema_version"].(string); !ok || (v != SchemaVersion && !(v == ExternalEvidenceVersion && (kind == KindExecution || kind == KindObservation))) {
 		return nil, errf(CodeUnsupportedVersion, "/schema_version", "schema_version must be %q", SchemaVersion)
 	}
 	if v, ok := obj["crypto_profile"].(string); !ok || v != CryptoProfile {
@@ -316,11 +354,19 @@ func ParseTimestamp(s string) (time.Time, error) {
 func checkSemantics(p any) *Error {
 	switch v := p.(type) {
 	case *Action:
-		return checkLines(v.Lines, v.AmountMinor)
+		return checkAction(v)
 	case *Mandate:
 		return checkRange(v.IssuedAt, v.ExpiresAt, 0)
 	case *Permit:
 		return checkRange(v.IssuedAt, v.ExpiresAt, MaxPermitLifetime)
+	case *Execution:
+		if v.SchemaVersion == ExternalEvidenceVersion {
+			a, _ := ParseTimestamp(v.AdmittedAt)
+			c, _ := ParseTimestamp(v.CommittedAt)
+			if a.After(c) {
+				return errf(CodeInvalidTimeRange, "/committed_at", "settlement precedes admission")
+			}
+		}
 	case *Observation:
 		return checkObservation(v)
 	}
@@ -350,6 +396,43 @@ func checkLines(lines []Line, amount int64) *Error {
 	}
 	if total != amount {
 		return errf(CodeAmountMismatch, "/amount_minor", "amount_minor %d does not equal line total %d", amount, total)
+	}
+	return nil
+}
+
+// checkAction adds the D1 v1.4 tax rules to checkLines: tax_ids sorted and
+// unique per line; amount_untaxed_minor and tax_minor together, with
+// untaxed = line total and amount = untaxed + tax; no tax_ids without them.
+func checkAction(a *Action) *Error {
+	taxed := false
+	for i, l := range a.Lines {
+		for j := 1; j < len(l.TaxIDs); j++ {
+			if l.TaxIDs[j-1] >= l.TaxIDs[j] {
+				return errf(CodeLinesNotCanonical, fmt.Sprintf("/lines/%d/tax_ids/%d", i, j), "tax_ids must be sorted and unique")
+			}
+		}
+		taxed = taxed || len(l.TaxIDs) > 0
+	}
+	if (a.AmountUntaxedMinor == nil) != (a.TaxMinor == nil) {
+		return errf(CodeSchemaViolation, "/tax_minor", "amount_untaxed_minor and tax_minor must be given together")
+	}
+	if a.AmountUntaxedMinor == nil {
+		if taxed {
+			return errf(CodeSchemaViolation, "/tax_minor", "lines with tax_ids require amount_untaxed_minor and tax_minor")
+		}
+		return checkLines(a.Lines, a.AmountMinor)
+	}
+	if err := checkLines(a.Lines, *a.AmountUntaxedMinor); err != nil {
+		if err.Code == CodeAmountMismatch {
+			err.Path = "/amount_untaxed_minor"
+		}
+		return err
+	}
+	if *a.TaxMinor > MaxSafeInteger-*a.AmountUntaxedMinor {
+		return errf(CodeArithmeticOverflow, "/amount_minor", "amount_untaxed_minor + tax_minor exceeds 2^53-1")
+	}
+	if *a.AmountUntaxedMinor+*a.TaxMinor != a.AmountMinor {
+		return errf(CodeAmountMismatch, "/amount_minor", "amount_minor %d does not equal amount_untaxed_minor %d + tax_minor %d", a.AmountMinor, *a.AmountUntaxedMinor, *a.TaxMinor)
 	}
 	return nil
 }
@@ -384,6 +467,18 @@ func NormaliseLines(lines []Line) ([]Line, *Error) {
 			return nil, errf(CodeDuplicateLineItem, fmt.Sprintf("/lines/%d/item_id", i), "item_id %q appears more than once", l.ItemID)
 		}
 		seen[l.ItemID] = true
+		if len(l.TaxIDs) > 0 {
+			taxes := append([]string(nil), l.TaxIDs...)
+			sort.Strings(taxes)
+			for j := 1; j < len(taxes); j++ {
+				if taxes[j-1] == taxes[j] {
+					return nil, errf(CodeSchemaViolation, fmt.Sprintf("/lines/%d/tax_ids", i), "tax %q appears more than once", taxes[j])
+				}
+			}
+			l.TaxIDs = taxes
+		} else {
+			l.TaxIDs = nil
+		}
 		out[i] = l
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ItemID < out[j].ItemID })
@@ -406,13 +501,18 @@ func checkRange(issued, expires string, maxLifetime time.Duration) *Error {
 // digest equal to the expected one; MISMATCH a different observed digest;
 // INSUFFICIENT_EVIDENCE no observed digest.
 func checkObservation(o *Observation) *Error {
+	matches := o.ObservedActionDigest != nil && *o.ObservedActionDigest == o.ExpectedActionDigest
+	if o.SchemaVersion == ExternalEvidenceVersion {
+		matches = matches && o.ObservedCompanyRef != nil && *o.ObservedCompanyRef == o.ExpectedCompanyRef &&
+			o.ObservedState != nil && *o.ObservedState == "purchase" && o.ObservedPermitDigest != nil && *o.ObservedPermitDigest == o.ExpectedPermitDigest
+	}
 	switch o.Status {
 	case "MATCH":
-		if o.ObservedActionDigest == nil || *o.ObservedActionDigest != o.ExpectedActionDigest {
+		if !matches {
 			return errf(CodeObservationInconsistent, "/status", "MATCH requires observed_action_digest equal to expected_action_digest")
 		}
 	case "MISMATCH":
-		if o.ObservedActionDigest == nil || *o.ObservedActionDigest == o.ExpectedActionDigest {
+		if o.ObservedActionDigest == nil || matches {
 			return errf(CodeObservationInconsistent, "/status", "MISMATCH requires a different observed_action_digest")
 		}
 	case "INSUFFICIENT_EVIDENCE":

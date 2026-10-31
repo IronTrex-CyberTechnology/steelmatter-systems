@@ -7,7 +7,11 @@
 //	mandates → instructions → action_revisions → issuances → target.suppliers
 //
 // and rechecks time with clock_timestamp() after the locks. No external call
-// (including signing) happens inside a mutation transaction.
+// (including signing) happens inside a mutation transaction, with one
+// deliberate exception for R1 (D5 v3): the append to the recovery anchor,
+// which must be durable before the engine commits a dispatch intent or a
+// destination outcome. The anchor never calls back into the engine, so its
+// stream-head lock cannot form a cycle with the engine's locks.
 package engine
 
 import (
@@ -21,12 +25,15 @@ import (
 	"math"
 	"net"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/anchor"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/connector"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/contract"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/keys"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/observer"
@@ -49,8 +56,38 @@ type Config struct {
 	// RecoveryAge is how old an unsigned issuance must be before the recovery
 	// worker signs it (avoids racing an in-flight evaluation).
 	RecoveryAge time.Duration
+	// RestoreGrace is how old an anchor record must be before the restore
+	// check compares it with the engine database, so a dispatch or outcome
+	// that is between its anchor append and its engine commit is never
+	// mistaken for a restore.
+	RestoreGrace time.Duration
 	// Version is the build version reported by the adapter assurance endpoint.
 	Version string
+	// CompanyRef is the destination company R1 dispatches order for (one
+	// company per deployment, D7). It is the engine's mapping key, not an
+	// Odoo ID; the connector maps it. Dispatch refuses when it is empty.
+	CompanyRef string
+	// RequireRecoveryAnchor refuses R1 writes when the independent anchor is
+	// missing. Real connector deployments enable this; unanchored stubs are
+	// permitted only for isolated mechanism tests.
+	RequireRecoveryAnchor bool
+	// Tenant is the one tenant an R1 deployment serves (R1 decision 6). When
+	// set, dispatch, settle, findings, repairs and the recovery endpoints
+	// refuse principals of any other tenant. R1 serve requires it.
+	Tenant string
+	// ObserveOnly runs an R1 deployment without purchasing (R1 decision 10):
+	// dispatch is refused and nothing is ever sent to the destination, while
+	// the observer, coverage reports, the restore check and the recovery
+	// endpoints keep running against it.
+	ObserveOnly bool
+}
+
+// ServesTenant refuses a tenant other than the one this deployment serves.
+func (e *Engine) ServesTenant(tenant string) error {
+	if e.Cfg.Tenant != "" && tenant != e.Cfg.Tenant {
+		return fault("FORBIDDEN", "this deployment serves one tenant; %s is not it", tenant)
+	}
+	return nil
 }
 
 // DefaultConfig returns the R0 defaults.
@@ -62,7 +99,9 @@ func DefaultConfig() Config {
 		MaxClockSkew: 2 * time.Second,
 		MaxAttempts:  3,
 		RecoveryAge:  10 * time.Second,
+		RestoreGrace: time.Minute,
 		Version:      "dev",
+		CompanyRef:   "synthetic-company",
 	}
 }
 
@@ -76,6 +115,20 @@ type Engine struct {
 	Now func() time.Time
 	// Observer performs read-only readback (nil disables observation).
 	Observer *observer.Observer
+	// Connector is the R1 destination connector (D1). Nil disables R1
+	// settlement in the workers and the readiness check before dispatch.
+	Connector connector.Connector
+	// Anchor is the recovery anchor (D5 v3); set it with UseAnchor. Nil keeps
+	// R1 working without restore protection (tests and local development).
+	Anchor *anchor.Client
+	// AnchorClock reads the recovery anchor's clock; nil uses Anchor.Now.
+	// Tests replace it to simulate a skewed anchor.
+	AnchorClock func(context.Context) (time.Time, error)
+	// anchorGen is the anchor write generation this engine dispatches under.
+	anchorGen atomic.Int64
+	// RepairReviewers and RepairConfirmers are the principal IDs allowed to
+	// review (Kaif) and confirm (Aakhil) HELD repairs (D5 decision).
+	RepairReviewers, RepairConfirmers []string
 }
 
 // New validates the configuration and returns an Engine.
@@ -109,6 +162,10 @@ type Fault struct {
 }
 
 func (f *Fault) Error() string { return f.Code + ": " + f.Message }
+
+// PublicMessage is the message a client may see (the readiness endpoint
+// reports it, NEW-QA-04).
+func (f *Fault) PublicMessage() string { return f.Message }
 
 func fault(code, format string, a ...any) *Fault {
 	return &Fault{Code: code, Message: fmt.Sprintf(format, a...)}
@@ -271,7 +328,36 @@ func (e *Engine) checkClock(ctx context.Context, q interface {
 // Ready reports whether the engine can admit work: the database answers and
 // the clocks agree (used by GET /v1/ready).
 func (e *Engine) Ready(ctx context.Context) error {
-	return e.checkClock(ctx, e.Pool)
+	if err := e.checkClock(ctx, e.Pool); err != nil {
+		return err
+	}
+	if e.Cfg.RequireRecoveryAnchor {
+		// Before the anchor clock, so an unreachable anchor is reported as
+		// unavailable rather than as a clock problem.
+		if err := e.readyWrites(ctx); err != nil {
+			return err
+		}
+	}
+	return e.checkAnchorClock(ctx)
+}
+
+// readyWrites names the reason the recovery anchor keeps this backend from
+// being ready (NEW-QA-04): the status stays 503, only the message differs.
+// The restore reason itself is not shown; /v1/ready is unauthenticated.
+func (e *Engine) readyWrites(ctx context.Context) error {
+	if e.Anchor == nil {
+		return fault("SERVICE_UNAVAILABLE", "recovery anchor not configured")
+	}
+	on, ws, err := e.writesOn(ctx)
+	switch {
+	case err != nil:
+		return fault("SERVICE_UNAVAILABLE", "recovery anchor unavailable")
+	case !on && !ws.Enabled:
+		return fault("SERVICE_UNAVAILABLE", "recovery in progress: writes disabled")
+	case !on:
+		return fault("SERVICE_UNAVAILABLE", "write generation is old: restart this process to adopt generation %d", ws.Generation)
+	}
+	return nil
 }
 
 func ts(t time.Time) string { return t.UTC().Format("2006-01-02T15:04:05Z") }
@@ -288,4 +374,31 @@ func (e *Engine) signer(typ string) (contract.Signer, error) {
 		return contract.Signer{}, fault("SERVICE_UNAVAILABLE", "no current signing key for %s", typ)
 	}
 	return s, nil
+}
+
+// DependencyError is a failure of an external dependency the engine relies
+// on (the recovery anchor or the destination), as opposed to a fault in the
+// engine itself. The API reports it as 503 SERVICE_UNAVAILABLE, retryable
+// (R1-DEF-15): the request changed nothing that a retry cannot repeat, and
+// held amounts stay held. A Fault already inside it wins.
+type DependencyError struct {
+	What string
+	Err  error
+}
+
+func (d *DependencyError) Error() string { return d.What + ": " + d.Err.Error() }
+func (d *DependencyError) Unwrap() error { return d.Err }
+
+func dependency(what string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return &DependencyError{What: what, Err: err}
+}
+
+// AsDependency returns the DependencyError in err, if any.
+func AsDependency(err error) (*DependencyError, bool) {
+	var d *DependencyError
+	ok := errors.As(err, &d)
+	return d, ok
 }

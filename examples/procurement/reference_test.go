@@ -129,8 +129,40 @@ func TestT43CheckDetectsOutcomeDrift(t *testing.T) {
 	}
 }
 
+// T43: the displayed trace must identify the exact code. A reference pinned
+// from a dirty working tree, an unknown commit or a short SHA is refused both
+// when it is built and when it is loaded.
+func TestT43ReferenceRecordsACleanCommit(t *testing.T) {
+	if err := checkCommit(committedReference(t).Commit); err != nil {
+		t.Fatal(err)
+	}
+	pass := []Result{{Scenario: "flagship", Status: "PASS"}}
+	const sha = "5e204694279a9deac3f69aa37a4a63258f588ad8"
+	if _, err := BuildReference(pass, repoRoot, sha); err != nil {
+		t.Fatalf("a clean commit must be accepted: %v", err)
+	}
+	for _, bad := range []string{sha + "-dirty", "unknown", "", "5e20469", strings.ToUpper(sha)} {
+		if _, err := BuildReference(pass, repoRoot, bad); err == nil {
+			t.Fatalf("BuildReference accepted commit %q", bad)
+		}
+	}
+	b, err := os.ReadFile(filepath.Join(repoRoot, ReferencePath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := committedReference(t)
+	dirty := strings.Replace(string(b), `"`+ref.Commit+`"`, `"`+sha+`-dirty"`, 1)
+	path := filepath.Join(t.TempDir(), "reference.json")
+	if err := os.WriteFile(path, []byte(dirty), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadReference(path); err == nil || !strings.Contains(err.Error(), "clean checkout") {
+		t.Fatalf("LoadReference accepted a dirty commit: %v", err)
+	}
+}
+
 func TestBuildReferenceRefusesFailedRun(t *testing.T) {
-	if _, err := BuildReference([]Result{{Scenario: "flagship", Status: "FAIL"}}, repoRoot, "c"); err == nil {
+	if _, err := BuildReference([]Result{{Scenario: "flagship", Status: "FAIL"}}, repoRoot, "5e204694279a9deac3f69aa37a4a63258f588ad8"); err == nil {
 		t.Fatal("a failing run was pinned")
 	}
 }

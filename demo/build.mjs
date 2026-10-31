@@ -12,7 +12,7 @@
 import { build } from 'esbuild';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -25,12 +25,33 @@ export const FIXTURES = {
   evidence: 'fixtures/vectors/evidence-v1.json',
 };
 
-function git(args) {
+function git(dir, args) {
   try {
-    return execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    return execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch {
     return '';
   }
+}
+
+/**
+ * The commit the page is built from (T43): HEAD of the checkout at dir, dirty
+ * when tracked files have uncommitted changes; in a release bundle, which has
+ * no .git, the commit scripts/release-bundle wrote to COMMIT; else unknown. A
+ * bundle unpacked inside another repository never takes that one's HEAD.
+ */
+export function sourceCommit(dir = root) {
+  const top = git(dir, ['rev-parse', '--show-toplevel']);
+  if (top && realpathSync(top) === realpathSync(dir)) {
+    const commit = git(dir, ['rev-parse', 'HEAD']);
+    if (commit) return { commit, dirty: git(dir, ['status', '--porcelain', '--untracked-files=no']) !== '' };
+  }
+  try {
+    const commit = readFileSync(join(dir, 'COMMIT'), 'utf8').trim();
+    if (/^[0-9a-f]{40}$/.test(commit)) return { commit, dirty: false };
+  } catch {
+    // no COMMIT file
+  }
+  return { commit: 'unknown', dirty: false };
 }
 
 /** The data the page embeds: pinned fixtures plus their digests and the build commit. */
@@ -39,12 +60,10 @@ export function demoData() {
     const raw = readFileSync(join(root, rel));
     return { file: rel, sha256: createHash('sha256').update(raw).digest('hex'), data: JSON.parse(raw.toString('utf8')) };
   };
-  const commit = git(['rev-parse', 'HEAD']);
-  const dirty = commit !== '' && git(['status', '--porcelain', '--untracked-files=no']) !== '';
   return {
     reference: load(FIXTURES.reference),
     evidence: load(FIXTURES.evidence),
-    build: { commit: commit || 'unknown', dirty },
+    build: sourceCommit(),
   };
 }
 

@@ -96,7 +96,24 @@ export function header(data: DemoData): string {
       <div><dt>Recording file</dt><dd>${code(data.reference.file)} <span class="dev">sha256 ${code(data.reference.sha256.slice(0, 12))}</span></dd></div>
       <div><dt>Page built from</dt><dd>${code(describeCommit(build.commit).short)}${build.dirty ? ' <span class="warn-text">(uncommitted changes)</span>' : ''}</dd></div>
     </dl>
+    ${provenanceNote(ref.generated_at_commit, build.commit)}
   </header>`;
+}
+
+/**
+ * T43: says how the recorded run relates to the build, so an older recording
+ * is not read as the release. The recording cannot name the commit that
+ * contains it, so after any later change the two differ.
+ */
+export function provenanceNote(recorded: string, built: string): string {
+  const r = describeCommit(recorded), b = describeCommit(built);
+  if (b.full === 'unknown') {
+    return `<p class="note">The commit this page was built from is not known. The scenarios were recorded at ${code(r.short)}.</p>`;
+  }
+  if (r.full === b.full) {
+    return `<p class="note">The scenarios were recorded at the commit this page was built from, ${code(r.short)}.</p>`;
+  }
+  return `<p class="note">The scenarios were recorded at ${code(r.short)}; this page was built from ${code(b.short)}. Continuous integration replays every scenario on each commit and fails if any outcome differs from this recording (T43), so the recording still matches ${code(b.short)} unless it was built with uncommitted changes.</p>`;
 }
 
 export function nav(route: Route): string {

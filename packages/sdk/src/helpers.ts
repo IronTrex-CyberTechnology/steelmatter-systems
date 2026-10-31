@@ -1,5 +1,5 @@
 import type { ApiResponse, EvaluateApiResponse } from './client.ts';
-import type { Denied, EvaluateResponse, Line, PermitIssued } from './types.ts';
+import type { Denied, EvaluateResponse, ExecutionStatus, Line, PermitIssued } from './types.ts';
 
 const MAX_SAFE = Number.MAX_SAFE_INTEGER; // 2^53-1, the API's integer bound
 
@@ -8,6 +8,15 @@ export function isPermitIssued(r: EvaluateApiResponse | ApiResponse<EvaluateResp
 export function isPermitIssued(r: EvaluateResponse): r is PermitIssued;
 export function isPermitIssued(r: EvaluateResponse | ApiResponse<EvaluateResponse>): boolean {
   return ('data' in r ? r.data : r).decision === 'PERMIT_ISSUED';
+}
+
+/**
+ * True only when the destination confirmed a matching order (execution
+ * COMMITTED). PENDING, UNRESOLVED, MISMATCH and HELD are not success: the
+ * outcome is unknown or held, and the operation must not be treated as done.
+ */
+export function isExecutionConfirmed(execution: ExecutionStatus): boolean {
+  return execution === 'COMMITTED';
 }
 
 /** True for a policy denial (HTTP 200 with a reason). Narrows `response.data` too. */

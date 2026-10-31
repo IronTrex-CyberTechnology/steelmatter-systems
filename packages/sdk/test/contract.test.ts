@@ -49,9 +49,18 @@ function enumOf(name: string): string[] {
 
 const ops = operations();
 
-test('the OpenAPI document declares the 11 documented operations', () => {
-  assert.equal(ops.length, 11);
+const isR1 = (o: Op) => o.path.startsWith('/v1/dispatches') || o.path.startsWith('/v1/recovery') || o.path.endsWith('/approvals');
+
+test('the OpenAPI document declares the 12 documented operations', () => {
+  assert.equal(ops.filter((o) => !isR1(o)).length, 12);
 });
+
+test('the OpenAPI document declares the 14 R1 dispatch, repair, recovery and approval operations', () => {
+  assert.equal(ops.filter(isR1).length, 14);
+});
+
+// POST operations that take no request body.
+const noBody = ['revokeMandate', 'reconcileOperation', 'settleDispatch', 'confirmRepair', 'checkRestore', 'reconcileRestore', 'resumeWrites'];
 
 test('every OpenAPI operationId is a client method, and nothing else is', () => {
   const methods = Object.getOwnPropertyNames(SteelmatterClient.prototype).filter((n) => n !== 'constructor').sort();
@@ -59,7 +68,7 @@ test('every OpenAPI operationId is a client method, and nothing else is', () => 
 });
 
 test('each method calls its operation with the documented method, path and success statuses', async () => {
-  const sample: Record<string, string> = { mandate_id: 'm-1', instruction_id: 'i-1', operation_id: 'o-1', adapter_id: 'a-1' };
+  const sample: Record<string, string> = { mandate_id: 'm-1', instruction_id: 'i-1', operation_id: 'o-1', adapter_id: 'a-1', op_ref: 'op-1', repair_id: 'rep-1' };
   for (const op of ops) {
     const seen: { method: string; path: string }[] = [];
     for (const status of op.success) {
@@ -73,7 +82,7 @@ test('each method calls its operation with the documented method, path and succe
       const params = [...op.path.matchAll(/\{(\w+)\}/g)].map((m) => sample[m[1]!]!);
       const fn = (client as unknown as Record<string, (...a: unknown[]) => Promise<{ status: number; created: boolean }>>)[op.id]!;
       const args: unknown[] = [...params];
-      if (!['revokeMandate', 'reconcileOperation'].includes(op.id) && op.method === 'POST') args.push({});
+      if (!noBody.includes(op.id) && op.method === 'POST') args.push({});
       const r = await fn.apply(client, args);
       assert.equal(r.status, status, `${op.id} must accept documented ${status}`);
       assert.equal(r.created, status === 201);
@@ -108,7 +117,7 @@ test('each operation types exactly its documented error statuses as SteelmatterA
     400: 'SCHEMA_VIOLATION', 401: 'UNAUTHENTICATED', 403: 'FORBIDDEN', 404: 'NOT_FOUND', 409: 'REVISION_STALE',
     422: 'UNSUPPORTED_VERSION', 429: 'RATE_LIMITED', 500: 'INTERNAL_ERROR', 503: 'SERVICE_UNAVAILABLE',
   };
-  const sample: Record<string, string> = { mandate_id: 'm-1', instruction_id: 'i-1', operation_id: 'o-1', adapter_id: 'a-1' };
+  const sample: Record<string, string> = { mandate_id: 'm-1', instruction_id: 'i-1', operation_id: 'o-1', adapter_id: 'a-1', op_ref: 'op-1', repair_id: 'rep-1' };
   for (const op of ops) {
     assert.ok(op.errors.length > 0, `${op.id} documents error statuses`);
     for (const [s, code] of Object.entries(codeFor)) {
@@ -120,7 +129,7 @@ test('each operation types exactly its documented error statuses as SteelmatterA
       });
       const params = [...op.path.matchAll(/\{(\w+)\}/g)].map((m) => sample[m[1]!]!);
       const args: unknown[] = [...params];
-      if (!['revokeMandate', 'reconcileOperation'].includes(op.id) && op.method === 'POST') args.push({});
+      if (!noBody.includes(op.id) && op.method === 'POST') args.push({});
       const fn = (client as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>)[op.id]!;
       const err = await fn.apply(client, args).then(() => undefined, (e: unknown) => e);
       if (op.errors.includes(status)) assert.ok(err instanceof SteelmatterApiError, `${op.id} ${status} ${code} documented: ApiError`);

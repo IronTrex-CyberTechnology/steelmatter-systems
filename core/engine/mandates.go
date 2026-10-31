@@ -48,6 +48,11 @@ type RevokeView struct {
 	ControlEpoch int64   `json:"control_epoch"`
 	RevokedAt    string  `json:"revoked_at"`
 	Buckets      Buckets `json:"buckets"`
+	// InFlight lists R1 operations dispatched before the revocation that are
+	// still PENDING or UNRESOLVED (D4). Revocation cannot stop them; each
+	// goes straight to lookup and fence, and its amount stays unresolved
+	// until the destination confirms the order or proves none.
+	InFlight []string `json:"in_flight"`
 }
 
 // CreateMandate creates a bounded mandate with revision 1 and control epoch 1,
@@ -176,6 +181,32 @@ func (e *Engine) RevokeMandate(ctx context.Context, p auth.Principal, mandateID 
 				return err
 			}
 		}
+		// In-flight R1 operations, after the mandate lock (D4). Their settle
+		// backoff is cleared so the worker retries them at once.
+		v.InFlight = []string{}
+		inflight, err := tx.Query(ctx, `SELECT op_ref FROM steelmatter.dispatches WHERE tenant_id = $1 AND mandate_id = $2
+			AND status IN ('PENDING', 'UNRESOLVED') ORDER BY op_ref`, p.Tenant, mandateID)
+		if err != nil {
+			return err
+		}
+		for inflight.Next() {
+			var op string
+			if err := inflight.Scan(&op); err != nil {
+				inflight.Close()
+				return err
+			}
+			v.InFlight = append(v.InFlight, op)
+		}
+		inflight.Close()
+		if err := inflight.Err(); err != nil {
+			return err
+		}
+		if len(v.InFlight) > 0 {
+			if _, err := tx.Exec(ctx, `UPDATE steelmatter.worker_backoff SET resolved_at = clock_timestamp()
+				WHERE worker = 'settle' AND tenant_id = $1 AND record_id = ANY($2) AND resolved_at IS NULL`, p.Tenant, v.InFlight); err != nil {
+				return err
+			}
+		}
 		var revokedAt time.Time
 		v.MandateID = mandateID
 		err = tx.QueryRow(ctx, `SELECT status, control_epoch, revoked_at, limit_minor, available_minor, reserved_minor, committed_minor, unresolved_minor
@@ -190,5 +221,6 @@ func (e *Engine) RevokeMandate(ctx context.Context, p auth.Principal, mandateID 
 	if err != nil {
 		return nil, err
 	}
+	e.settleNow(ctx, p.Tenant, v.InFlight)
 	return &v, nil
 }

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Print the coverage report of the running sandbox (enforced, observed,
+# unprotected, unknown) as Markdown. --json for the raw result, --out FILE to save.
+source "$(dirname "$0")/lib.sh"
+exec python3 -I "$SANDBOX/../tests/coverage_report.py" "$@"

@@ -81,6 +81,8 @@ var Catalogue = []CodeSpec{
 	{"SUPPLIER_NOT_PERMITTED", http.StatusOK, false, UseDeny, "Supplier outside the mandate."},
 	{"DELIVERY_NOT_PERMITTED", http.StatusOK, false, UseDeny, "Delivery point outside the mandate."},
 	{"CAPACITY_EXHAUSTED", http.StatusOK, false, UseDeny, "Shared allowance insufficient for the amount."},
+	{"APPROVAL_REQUIRED", http.StatusOK, false, UseDeny, "Above the tenant's approval threshold, the exact action needs an approval by an entitled approver (T17-T19)."},
+	{"APPROVAL_STALE", http.StatusOK, false, UseDeny, "The approval no longer matches the action, supplier or mandate, or its approver lost approval rights; a fresh decision is required (T17, T18)."},
 
 	// State conflicts.
 	{"SOURCE_CONFLICT", http.StatusConflict, false, UseError, "Trusted source record already exists with a different creation request."},
@@ -89,6 +91,7 @@ var Catalogue = []CodeSpec{
 	{"AMENDMENT_ID_CONFLICT", http.StatusConflict, false, UseError, "amendment_id reused with a different request."},
 	{"ALREADY_COMMITTED", http.StatusConflict, false, UseError, "Instruction has a committed operation; it cannot be amended."},
 	{"SUPPLIER_REVISION_STALE", http.StatusConflict, false, UseError, "Protected supplier revision changed after authorisation; re-evaluation required."},
+	{"DELIVERY_REVISION_STALE", http.StatusConflict, false, UseError, "Protected delivery address revision changed after the action was built; amend and re-evaluate."},
 	{"PERMIT_NOT_ACTIVE", http.StatusConflict, false, UseError, "Permit was released, invalidated or consumed by a different action."},
 }
 

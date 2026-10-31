@@ -64,7 +64,7 @@ func enum(t *testing.T, d doc, name string) []string {
 	return out
 }
 
-// Document 03 endpoint list, exactly.
+// Document 03 endpoint list plus the R1 additions, exactly.
 var wantOperations = map[string]string{
 	"POST /v1/mandates":                                "createMandate",
 	"POST /v1/mandates/{mandate_id}/revoke":            "revokeMandate",
@@ -77,6 +77,22 @@ var wantOperations = map[string]string{
 	"POST /v1/operations/{operation_id}/reconcile":     "reconcileOperation",
 	"GET /v1/operations/{operation_id}/evidence":       "getEvidence",
 	"GET /v1/adapters/{adapter_id}/assurance":          "getAdapterAssurance",
+	// R1 additions (dispatch to a real destination, repairs, recovery).
+	"POST /v1/dispatches":                                      "dispatchOperation",
+	"GET /v1/dispatches/{op_ref}":                              "getDispatch",
+	"GET /v1/instructions/{instruction_id}":                    "getInstruction",
+	"POST /v1/dispatches/{op_ref}/settle":                      "settleDispatch",
+	"POST /v1/dispatches/{op_ref}/findings":                    "recordHeldFinding",
+	"POST /v1/dispatches/{op_ref}/repairs":                     "prepareRepair",
+	"POST /v1/dispatches/{op_ref}/repairs/{repair_id}/review":  "reviewRepair",
+	"POST /v1/dispatches/{op_ref}/repairs/{repair_id}/confirm": "confirmRepair",
+	"POST /v1/dispatches/{op_ref}/anchor-repair":               "confirmAnchorRepair",
+	"POST /v1/recovery/conflicts/{op_ref}/adopt":               "adoptAnchoredOperation",
+	"GET /v1/recovery/write-state":                             "getWriteState",
+	"POST /v1/recovery/check":                                  "checkRestore",
+	"POST /v1/recovery/reconcile":                              "reconcileRestore",
+	"POST /v1/recovery/resume":                                 "resumeWrites",
+	"POST /v1/instructions/{instruction_id}/approvals":         "recordApproval",
 }
 
 var principalKinds = map[string]bool{"owner": true, "issuer": true, "actor": true, "observer": true, "operator": true}
@@ -256,7 +272,8 @@ func TestOpenAPILimitsMatchContract(t *testing.T) {
 func TestOpenAPIRequestsExcludeServerOwnedFields(t *testing.T) {
 	d := load(t)
 	forbidden := []string{"tenant_id", "actor_id", "issuer_id", "audience", "action_revision", "amount_minor", "supplier_revision", "target_url", "destination"}
-	for _, name := range []string{"MandateCreateRequest", "InstructionCreateRequest", "AmendmentRequest", "ProposedAction"} {
+	for _, name := range []string{"MandateCreateRequest", "InstructionCreateRequest", "AmendmentRequest", "ProposedAction",
+		"FindingRequest", "RepairRequest", "ReviewRequest", "AnchorRepairRequest", "EmptyRequest"} {
 		props := get(t, d, "components", "schemas", name, "properties").(doc)
 		for _, f := range forbidden {
 			if name == "MandateCreateRequest" && f == "audience" {

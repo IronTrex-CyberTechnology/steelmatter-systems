@@ -202,7 +202,7 @@ func CheckSeparation(ctx context.Context, observerPool, executorPool *pgxpool.Po
 	}
 	var writable []string
 	rows, err := observerPool.Query(ctx, `SELECT n.nspname || '.' || c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-		WHERE c.relkind = 'r' AND n.nspname IN ('steelmatter', 'steelmatter_meta', 'target')
+		WHERE c.relkind IN ('r','v') AND n.nspname IN ('steelmatter', 'steelmatter_meta', 'target')
 		  AND (has_table_privilege(current_user, c.oid, 'INSERT') OR has_table_privilege(current_user, c.oid, 'UPDATE')
 		    OR has_table_privilege(current_user, c.oid, 'DELETE') OR has_table_privilege(current_user, c.oid, 'TRUNCATE')
 		    OR EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attnum > 0

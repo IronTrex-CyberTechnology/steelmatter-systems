@@ -4,6 +4,7 @@
 //	smdemo setup -admin-url URL -tokens FILE      create synthetic principals, entitlements and suppliers
 //	smdemo run   -server URL -admin-url URL -tokens FILE [-scenario all|flagship|stale-supplier|lost-response|agent-injection]
 //	             [-out DIR] [-json FILE] [-commit SHA] [-reference FILE]
+//	                                               -commit defaults to the commit built in (T43)
 //	                                               exit 1 if any scenario fails or results drift from the
 //	                                               pinned reference (T43; "" skips the comparison)
 //	smdemo reset -admin-url URL                    return to the synthetic starting state (keeps principals)
@@ -18,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -34,6 +36,37 @@ var principals = []struct{ id, kind string }{
 	{"observer-a", auth.Observer}, {"operator-a", auth.Operator},
 }
 
+// buildCommit is the source commit, set at build time by scripts/demo
+// (-ldflags "-X main.buildCommit=...") from git or a release bundle's COMMIT.
+var buildCommit string
+
+// defaultCommit is the commit recorded when -commit is not given (T43): the
+// one set at build time, else the one Go recorded from git (-dirty when the
+// tree had changes), else "unknown".
+func defaultCommit(set string, info *debug.BuildInfo) string {
+	if set != "" {
+		return set
+	}
+	rev, dirty := "", false
+	if info != nil {
+		for _, s := range info.Settings {
+			switch s.Key {
+			case "vcs.revision":
+				rev = s.Value
+			case "vcs.modified":
+				dirty = s.Value == "true"
+			}
+		}
+	}
+	if rev == "" {
+		return "unknown"
+	}
+	if dirty {
+		rev += "-dirty"
+	}
+	return rev
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "usage: smdemo setup|run|reset [flags]")
@@ -46,7 +79,8 @@ func main() {
 	scenario := fs.String("scenario", "all", "scenario name or all")
 	outDir := fs.String("out", "", "directory for the flagship evidence bundle")
 	jsonOut := fs.String("json", "", "write scenario results as JSON")
-	commit := fs.String("commit", "unknown", "source commit recorded in the results trace")
+	info, _ := debug.ReadBuildInfo()
+	commit := fs.String("commit", defaultCommit(buildCommit, info), "source commit recorded in the results trace")
 	refPath := fs.String("reference", procurement.ReferencePath, "pinned demo reference to compare with (\"\" to skip)")
 	_ = fs.Parse(os.Args[2:])
 	if *adminURL == "" {
@@ -123,9 +157,14 @@ func setup(ctx context.Context, pool *pgxpool.Pool, tokensPath string) error {
 
 // reset returns scenario state to the synthetic starting point.
 func reset(ctx context.Context, pool *pgxpool.Pool) error {
+	// R1 tables (dispatches, R1 evidence, approvals, worker backoff) refer to
+	// the R0 rows, so they are truncated in the same statement
+	// (NEW-P6-SDET-01). Trusted configuration (principals, entitlements,
+	// approval policies) is kept.
 	_, err := pool.Exec(ctx, `TRUNCATE target.payment_requests, target.invoice_references, steelmatter.observations, steelmatter.operations, steelmatter.obligations, steelmatter.outbox,
 		steelmatter.event_receipts, steelmatter.amendments, steelmatter.issuances, steelmatter.action_revisions, steelmatter.instructions,
-		steelmatter.workflow_assignments, steelmatter.mandates, target.purchase_order_lines, target.purchase_orders;
+		steelmatter.workflow_assignments, steelmatter.mandates, target.purchase_order_lines, target.purchase_orders,
+		steelmatter.r1_observations, steelmatter.r1_executions, steelmatter.dispatches, steelmatter.approvals, steelmatter.worker_backoff;
 		UPDATE target.suppliers SET revision = 1, status = 'ACTIVE'`)
 	if err == nil {
 		fmt.Println("demo state reset to the synthetic starting point")
