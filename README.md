@@ -1,4 +1,4 @@
-# Steelmatter Systems R1 preview
+# IronTrex Steelmatter Systems
 
 Steelmatter is an IronTrex CyberTechnology project for bounded machine-action authority, exact-action admission and verifiable evidence. R1 extends the R0 synthetic procurement reference to an Odoo 18 sandbox, with recovery anchoring, outcome reconciliation and protected purchase details. This is a developer preview for evaluation, not a production deployment approval.
 
