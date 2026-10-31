@@ -200,6 +200,7 @@ docs/r1-recovery-operations.md
 docs/r1-recovery-timeout.md
 docs/r1-release-hardening.md
 docs/r1-sdet-defect-fixes.md
+docs/validation.md
 examples/procurement/accounting.go
 examples/procurement/client.go
 examples/procurement/reference.go

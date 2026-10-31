@@ -1,21 +1,43 @@
-# Steelmatter Systems R1 preview
+# IronTrex Steelmatter Systems
 
-Steelmatter is an IronTrex CyberTechnology project for bounded machine-action authority, exact-action admission and verifiable evidence. R1 extends the R0 synthetic procurement reference to an Odoo 18 sandbox, with recovery anchoring, outcome reconciliation and protected purchase details. This is a developer preview for evaluation, not a production deployment approval.
+**Open-source execution authority for AI agents.**
 
-The local quickstart uses the R0 synthetic destination. R1 checks external purchase orders, preserves allowance reservations while outcomes are uncertain, and reconciles outcomes before settlement. Scope is one tenant, one Odoo company, one active backend and INR integer paise.
+Steelmatter binds machine actions to explicit mandates, exact-action permits and shared spending allowances. R1 implements protected purchase-order execution for Odoo 18: authorise the precise purchase, preserve its budget while the outcome is uncertain, and reconcile destination evidence before settlement.
+
+The execution path protects supplier, delivery, quantity, unit and tax details; rejects stale approvals and changed actions; and uses stable operation references to prevent duplicate purchases within the supported Odoo integration. Recovery anchoring detects restored state and keeps new writes fenced until reconciliation passes. Signed execution and observation records can be verified offline.
+
+## Verified results
+
+The [31 October 2026 main-branch CI run](https://github.com/IronTrex-CyberTechnology/steelmatter-systems/actions/runs/41196339479) passed on source commit `f8b6ebe26c845c4990959b7abbeec8ae58345dd9`:
+
+| Evidence | Result |
+|---|---|
+| Required test identities | **527 passed** across seven phases |
+| Executed test records in those phases, including subtests | **1,194 passed; zero failed or skipped** |
+| Mapped acceptance cases | **41 passed; three R2 cases outside the active scope** |
+| Separate real-Odoo execution and recovery suite | **22 passed test records** |
+| Public source export | **Independent build and Go tests passed** |
+
+Coverage includes concurrent budget contention, replay and tampering, process crashes, lost responses, approval drift, destination changes and restore recovery. These are correctness and recovery results. See [validation evidence and measurement scope](docs/validation.md) for the test breakdown, reproducible entry points and performance limits.
+
+## Deployment scope
+
+R1 supports controlled evaluation with synthetic data and isolated infrastructure: one tenant, one Odoo company, one active backend and INR integer paise. Start external integration evaluation in observe-only mode. General production readiness has not been established; the deployment limits and remaining security work are documented in [R1 decisions](docs/r1-decisions.md) and [release notes](RELEASE_NOTES.md).
+
+The local quickstart uses the R0 synthetic destination. The R1 sandbox exercises external Odoo execution separately. MCP purchase creation remains outside R1 scope.
 
 The service is written in Go ([ADR-001](docs/adr/ADR-001-go-service.md)). Start with the synthetic [quickstart](docs/quickstart.md), then follow its R1 sandbox section. Read the [R1 decisions and limits](docs/r1-decisions.md) and [recovery procedures](docs/r1-recovery-operations.md) before evaluating external execution.
 
 ## Status
 - **Contracts:** [docs/contracts/I02-contract.md](docs/contracts/I02-contract.md) covers strict JSON input, payload validation, RFC 8785 digests, SM-JWS-ES256-1 signing, Go/TypeScript golden vectors, the closed OpenAPI spec and the PostgreSQL locking prototype.
-- **I03–I06 core transactions:** implemented and developer-tested; see [docs/engine.md](docs/engine.md). 40 integration scenarios cover T01–T16, T20, T22, T23, T27, T28 and T39–T41, including real process-crash tests.
+- **I03–I06 core transactions:** transactional budget accounting, exact-action admission and crash recovery; see [docs/engine.md](docs/engine.md). The R0 baseline includes 40 integration scenarios covering T01–T16, T20, T22, T23, T27, T28 and T39–T41, including real process-crash tests. The active R1 gate extends this baseline.
 - **I07 evidence:** read-only observer, signed execution and observation records, evidence export and reconcile, and the standalone TypeScript verifier and CLI; see [docs/evidence.md](docs/evidence.md).
 - **I08 demo:** `scripts/demo` runs the flagship, stale-supplier, lost-response and agent-injection scenarios from a clean state; see [docs/quickstart.md](docs/quickstart.md). `scripts/ci` also writes the 31-case day-4 report to `.out/sprint-day4-report.md`.
 - **SDK:** `packages/sdk` is a typed client for the R0 and R1 HTTP APIs, with timeouts and contract-aware retries; see [packages/sdk/README.md](packages/sdk/README.md). 
 - **MCP adapter:** `adapters/mcp` is a thin stdio MCP server forwarding authenticated calls through the SDK; the service enforces assigned-actor execution and ADR-002 read access; see [adapters/mcp/README.md](adapters/mcp/README.md).
 - **Browser demo:** implemented as recorded playback with browser-side evidence verification; see [demo/README.md](demo/README.md).
 - **Acceptance reporting:** the active `r1-engine` gate is defined in [ci/required.json](ci/required.json). It requires 527 test identities across seven phases. The separate real-Odoo gate runs external execution and recovery scenarios. Required identities, executed assertions and independent QA cases are different counts; report them separately.
-- **Distribution:** source preview only. npm packages remain `private: true`. See [RELEASE_NOTES.md](RELEASE_NOTES.md) for measured checks and limitations.
+- **Distribution:** Apache-2.0 source. TypeScript packages are included in the repository and remain `private: true` rather than published npm packages. See [RELEASE_NOTES.md](RELEASE_NOTES.md) for the supported scope.
 
 ## Requirements
 Pinned in [versions.env](versions.env): Go 1.27.3, PostgreSQL 17.10, Node 26.11.0. Library pins are in `go.mod` and `packages/verifier/package-lock.json`.
@@ -88,4 +110,4 @@ docs/                public technical docs, ADRs and contracts
 ```
 
 ## Licence
-This source preview is distributed under the unmodified [Apache License 2.0](LICENSE), [NOTICE](NOTICE) and [third-party notices](THIRD_PARTY_NOTICES.md). Names and marks are governed by Apache-2.0 section 6.
+Steelmatter is distributed under the unmodified [Apache License 2.0](LICENSE), [NOTICE](NOTICE) and [third-party notices](THIRD_PARTY_NOTICES.md). Names and marks are governed by Apache-2.0 section 6.
