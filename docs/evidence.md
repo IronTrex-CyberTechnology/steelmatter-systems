@@ -1,6 +1,6 @@
 # Evidence, observer and verifier (I07)
 
-Status: **implemented and developer-tested; awaiting review and QA reproduction.** The observer shares host and database administrators with the executor, so an observation is a separated readback, **not** independent third-party attestation (document 02).
+The observer, signed evidence export and standalone verifier are implemented and exercised by the active R1 CI gate; see [validation evidence](validation.md). The observer shares host and database administrators with the executor, so an observation is a separated readback, **not** independent third-party attestation (document 02).
 
 ## Observer
 `core/observer` connects with the **observer database role**. The R0 read set is `target.suppliers`, `target.purchase_orders`, `target.purchase_order_lines`, `steelmatter.action_revisions`, `steelmatter.operations` and `steelmatter.obligations`. R1 migration 0014 adds `steelmatter.r1_executions` and exactly five columns of `steelmatter.dispatches`: `tenant_id`, `op_ref`, `action_canonical`, `company_ref`, `permit_digest`. It has no other reads (not the ledger, principals, observations, evidence views, event receipts or schema metadata) and no writes. Migration 0006 revoked three extra reads granted earlier (QA-D1-001). `TestObserverExactReadSetFreshDatabase` and `TestObserverExactReadSetAfterUpgrade` pin the exact tables, views and R1 columns. It signs with a key whose only purpose is `SM-OBSERVATION+JWS`.

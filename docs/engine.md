@@ -1,6 +1,6 @@
 # R0 engine (I03–I06)
 
-Status: **implemented, developer-tested; awaiting review and independent QA reproduction.** No acceptance case is marked PASS until QA confirms each mapping in `ci/required.json` (`complete: true`).
+The R0 transaction engine is implemented and exercised by the active R1 CI gate. See [validation evidence](validation.md) for the verified source, test totals and deployment scope. Acceptance cases are PASS only when their mappings in `ci/required.json` are marked complete and every mapped test passes; CI results and independent QA approval remain separate records.
 
 ## Endpoints implemented
 | Endpoint | Principal | Notes |
