@@ -170,6 +170,16 @@ func (e *Engine) verifyLiveAdmission(ctx context.Context, tx pgx.Tx, p auth.Prin
 		return fault("SUPPLIER_REVISION_STALE", "protected supplier revision changed; amend and re-evaluate")
 	}
 
+	// RecordApproval shares the mandate and instruction locks. Once their
+	// latest decision is visible here, withdrawal cannot overtake this commit.
+	reason, message, err := approvalDenial(ctx, tx, p.Tenant, permit.InstructionID, permit.ActionRevision,
+		actionDigest, is.Amount, liveSupplierRev, m, p.ID)
+	if err != nil {
+		return err
+	}
+	if reason != "" {
+		return fault(reason, "%s", message)
+	}
 	a.issuance = is
 	return nil
 }

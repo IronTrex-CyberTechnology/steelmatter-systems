@@ -10,7 +10,7 @@ company.write({
     "currency_id": inr.id,
     "sm_ref": os.environ["STEELMATTER_DESTINATION"],
     # Sandbox only: Odoo's two-step purchase approval off; Steelmatter's
-    # approval rules remain (Aakhil, 28 Oct 2026).
+    # approval rules remain.
     "po_double_validation": "one_step",
     "po_lock": "edit",
 })

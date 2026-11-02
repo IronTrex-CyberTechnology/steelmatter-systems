@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/auth"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/failpoint"
 )
 
 // Exact-action human approval (T17-T19, R1 decision 9, migration 0017).
@@ -81,7 +82,7 @@ func (e *Engine) RecordApproval(ctx context.Context, p auth.Principal, r Approva
 		var actor, issuer string
 		var current int64
 		if err := tx.QueryRow(ctx, `SELECT actor_id, issuer_principal, current_revision FROM steelmatter.instructions
-			WHERE tenant_id = $1 AND instruction_id = $2 FOR SHARE`, p.Tenant, r.InstructionID).Scan(&actor, &issuer, &current); err != nil {
+			WHERE tenant_id = $1 AND instruction_id = $2 FOR UPDATE`, p.Tenant, r.InstructionID).Scan(&actor, &issuer, &current); err != nil {
 			return err
 		}
 		entitled, err := approverEntitled(ctx, tx, p.Tenant, p.ID)
@@ -132,7 +133,10 @@ func (e *Engine) RecordApproval(ctx context.Context, p auth.Principal, r Approva
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, clock_timestamp())`,
 			view.ApprovalID, p.Tenant, r.InstructionID, r.ActionRevision, digest, supplierRev, mandateID, m.Revision, m.Epoch, amount,
 			p.ID, decision, note)
-		return err
+		if err != nil {
+			return err
+		}
+		return failpoint.Inject(ctx, failpoint.ApprovalBeforeCommit)
 	})
 	if err != nil {
 		return nil, err
@@ -153,7 +157,7 @@ func approverEntitled(ctx context.Context, tx pgx.Tx, tenant, principal string) 
 
 // approvalDenial returns the deny reason and message when the tenant's
 // policy requires an approval for this action and no current one exists, or
-// "" when the action may proceed. Called by Evaluate under the mandate,
+// "" when the action may proceed. Called by evaluation and admission under the mandate,
 // instruction and action revision locks.
 func approvalDenial(ctx context.Context, tx pgx.Tx, tenant, instructionID string, revision int64, actionDigest string,
 	amount, liveSupplierRev int64, m *mandateRow, actor string) (reason, msg string, err error) {

@@ -14,9 +14,8 @@ import (
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/auth"
 )
 
-// Operator resolution of a source-record conflict (Aakhil, 30 Oct 2026: an
-// instruction that was dispatched, spent or uncertain stops for operator
-// review and its held or committed amount is preserved).
+// A dispatched, spent or uncertain instruction requires operator review.
+// Recovery preserves its held or committed amount.
 //
 // Recovery supersedes an instruction made after a restore only if the anchor
 // proves it never spent (releaseUnspent). If it did spend, reconciliation

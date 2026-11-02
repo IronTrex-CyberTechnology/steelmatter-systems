@@ -15,11 +15,9 @@ import (
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/failpoint"
 )
 
-// HELD findings and repairs (D5 decision, Aakhil, 28 Oct 2026): Uday
-// records HELD findings and prepares repair evidence, Kaif reviews it, and
-// Aakhil confirms repairs after the recovery checks pass. An operator note
-// alone cannot release budget: only ConfirmRepair moves a HELD or MISMATCH
-// amount, and only after all three steps are in the anchor.
+// A repair requires separate evidence preparation, review and confirmation.
+// Only ConfirmRepair moves a HELD or MISMATCH amount, after all three steps
+// have been recorded in the anchor and recovery checks pass.
 
 // Repair outcomes.
 const (
@@ -142,7 +140,7 @@ func (e *Engine) heldOp(ctx context.Context, tenant, opRef string) (engineOp, er
 	return o, nil
 }
 
-// RecordHeldFinding records a HELD finding (Uday). It never moves budget.
+// RecordHeldFinding records a HELD finding. It never moves budget.
 func (e *Engine) RecordHeldFinding(ctx context.Context, p auth.Principal, opRef, finding, evidenceRef string) (int64, error) {
 	if err := e.needAnchor(); err != nil {
 		return 0, err
@@ -164,7 +162,7 @@ func (e *Engine) RecordHeldFinding(ctx context.Context, p auth.Principal, opRef,
 		FindingRecord{Finding: finding, EvidenceRef: evidenceRef, RecordedBy: p.ID, Status: o.status}, 0)
 }
 
-// PrepareRepair records the repair evidence (Uday) for a HELD or MISMATCH
+// PrepareRepair records the repair evidence for a HELD or MISMATCH
 // operation with a recorded finding, proposing COMMIT or RELEASE. It returns
 // the repair ID. Nothing moves yet.
 func (e *Engine) PrepareRepair(ctx context.Context, p auth.Principal, opRef, outcome, evidenceRef, summary string) (string, error) {
@@ -254,7 +252,7 @@ func (e *Engine) repairState(ctx context.Context, tenant, opRef, repairID string
 	return st, nil
 }
 
-// ReviewRepair records Kaif's review. The reviewer must be a configured
+// ReviewRepair records the independent review. The reviewer must be a configured
 // repair reviewer and must not have prepared the evidence.
 func (e *Engine) ReviewRepair(ctx context.Context, p auth.Principal, opRef, repairID string, approve bool, note string) error {
 	if err := e.needAnchor(); err != nil {
@@ -451,7 +449,7 @@ func (e *Engine) replayConfirmedRepairs(ctx context.Context) ([]string, error) {
 	return problems, nil
 }
 
-// prepareAnchorRepair records Uday's evidence that an anchor found behind
+// prepareAnchorRepair records the operator's evidence that an anchor found behind
 // the engine database may be repaired for opRef: the engine has the
 // dispatch, the anchor has no DISPATCH_INTENT for it.
 func (e *Engine) prepareAnchorRepair(ctx context.Context, p auth.Principal, opRef, evidenceRef, summary string) (string, error) {
@@ -477,9 +475,8 @@ func (e *Engine) prepareAnchorRepair(ctx context.Context, p auth.Principal, opRe
 	return id, nil
 }
 
-// ConfirmAnchorRepair is Aakhil's confirmation (R1 decision 4) of an
-// ANCHOR_REPAIR that Uday prepared and Kaif approved: three different
-// people, as for budget repairs. The DISPATCH_INTENT is re-appended from the
+// ConfirmAnchorRepair requires a confirmer distinct from the evidence preparer
+// and reviewer. It re-appends the missing DISPATCH_INTENT from the
 // stored dispatch, then a REPAIR_CONFIRMED record names the three people and
 // the evidence. A repeat is idempotent. It moves no budget; the resume gate
 // still has to pass before writes resume.

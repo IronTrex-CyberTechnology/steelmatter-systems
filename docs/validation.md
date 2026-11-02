@@ -2,7 +2,11 @@
 
 Steelmatter R1 implements bounded execution authority for the supported Odoo 18 purchase-order path. Its validation covers authorisation, budget conservation, destination execution, recovery and signed evidence. This page separates those exercised behaviours from deployment qualification and performance measurements.
 
-## Verified source
+## R1 purchasing correction
+
+The integration suite exercises both orderings of withdrawal versus dispatch and loss of approver rights. The real Odoo gate checks the destination directly for zero orders after a successful withdrawal and one settled order after a committed dispatch. The installation suite tests normal purchasing in a coverage-only database and the separation between manual and protected orders in an enforced database. Source `8240c95` passed the [Odoo and engine tests](https://github.com/IronTrex-CyberTechnology/steelmatter-systems/actions/runs/41380213055) and the [clean-install and release-bundle checks](https://github.com/IronTrex-CyberTechnology/steelmatter-systems/actions/runs/41380307758) on 2 November 2026.
+
+## Earlier verified source
 
 - Source commit: [`f8b6ebe26c845c4990959b7abbeec8ae58345dd9`](https://github.com/IronTrex-CyberTechnology/steelmatter-systems/commit/f8b6ebe26c845c4990959b7abbeec8ae58345dd9).
 - Source tree: `12a78b209d3318cb49f84b56e8c1a0a5f232a0b0`.

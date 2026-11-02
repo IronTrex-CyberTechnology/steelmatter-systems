@@ -127,7 +127,7 @@ type Engine struct {
 	// anchorGen is the anchor write generation this engine dispatches under.
 	anchorGen atomic.Int64
 	// RepairReviewers and RepairConfirmers are the principal IDs allowed to
-	// review (Kaif) and confirm (Aakhil) HELD repairs (D5 decision).
+	// review and confirm HELD repairs (D5 decision).
 	RepairReviewers, RepairConfirmers []string
 }
 

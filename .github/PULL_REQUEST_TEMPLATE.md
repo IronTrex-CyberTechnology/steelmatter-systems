@@ -1,19 +1,11 @@
-## Problem and change
-Issue ID:
-Why this change is needed:
-Observable behaviour after change:
+## Change
 
-## Contract and evidence
-Invariant / acceptance case IDs:
-Exact candidate commit:
-Commands, observed results and sanitised evidence links:
-Tests NOT_RUN / BLOCKED and reason:
-Migration, recovery or dependency impact:
-Contract/ADR updates if any:
+<!-- Link the issue or invariant. Describe what a caller or operator will observe. -->
 
-## Human review
-Implementation review:
-Acceptance reproduction on candidate commit:
-Author cannot approve own PR. New commits invalidate prior acceptance as configured.
-No credentials, customer data, private correspondence or internal-only records included.
-Keep the public summary focused on scope, impact and verification rather than internal process notes.
+## Verification
+
+<!-- Give the tested commit, commands and results. Link sanitised evidence. Identify any skipped or blocked acceptance cases and explain why. -->
+
+## Deployment and review
+
+<!-- Record any migration, recovery, dependency or contract impact. Link the independent review and acceptance results when available. Keep credentials and customer data out of the record. -->

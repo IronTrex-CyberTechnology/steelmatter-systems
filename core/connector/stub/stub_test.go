@@ -160,7 +160,7 @@ func TestFreshFenceProvesNoOrder(t *testing.T) {
 
 func is(b *bool, want bool) bool { return b != nil && *b == want }
 
-// Kaif's must-fix (case E retry): Odoo restored, CREATE_INTENT present, no
+// Case E retry after restore: Odoo restored, CREATE_INTENT present, no
 // row. A retry with the same op_ref is refused (REFUSED_PRIOR_ATTEMPT), a
 // BLOCK is written and no second order is created.
 func TestCaseERetryRefusedPriorAttempt(t *testing.T) {

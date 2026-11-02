@@ -22,13 +22,13 @@ import (
 )
 
 // Engine plus real Odoo (R1 completion check: T33, T34, T35 traced to
-// evidence). Runs only against Kaif's sandbox, through
+// evidence). Runs only against the Odoo sandbox, through
 // destinations/odoo/sandbox/test-engine, on a FRESH sandbox
 // (sandbox/reset then sandbox/up): the sandbox's anchor is shared with the
 // Odoo module, so records from an earlier run would look like a restore.
 //
 // The engine database is a disposable test database restored at database
-// level; Odoo is restored with Kaif's sandbox helpers (a template copy of
+// level; Odoo is restored with the Odoo sandbox helpers (a template copy of
 // Odoo's database); the anchor is never restored.
 
 const odooCompany = "acme-in" // the sandbox company's sm_ref and the module's STEELMATTER_DESTINATION
@@ -116,7 +116,7 @@ func requireEnvVar(t *testing.T, name string) string {
 	return v
 }
 
-// sandboxOdoo runs one of Kaif's sandbox helpers (snapshot_odoo,
+// sandboxOdoo runs an Odoo sandbox helper (snapshot_odoo,
 // restore_odoo) from destinations/odoo/tests/sandbox_client.py.
 func sandboxOdoo(t *testing.T, fn string) {
 	t.Helper()
@@ -288,7 +288,7 @@ func (r *odooRun) evidence(t *testing.T, op string) {
 }
 
 // odooOrders counts Odoo purchase orders carrying op_ref, read straight
-// from Odoo's database through Kaif's sandbox helper (not through the
+// from Odoo's database through the Odoo sandbox helper (not through the
 // connector under test).
 func odooOrders(t *testing.T, op string) int {
 	t.Helper()
@@ -307,7 +307,7 @@ func odooOrders(t *testing.T, op string) int {
 	return n
 }
 
-// outcome checks the two records Aakhil asked for at the end of each
+// outcome checks the two independent records at the end of each
 // scenario: the Odoo orders for the operation and the mandate's budget
 // buckets (ledger() also checks available + reserved + committed +
 // unresolved = limit). base is the mandate's buckets before the scenario's
@@ -709,5 +709,44 @@ func TestR1OdooEndToEnd(t *testing.T) {
 		changeDeliveryAddress(t)
 		st, body := r.e.evaluate("agent-a", id, 1)
 		requireStatus(t, "evaluate", st, body, 409, "DELIVERY_REVISION_STALE")
+	})
+
+	t.Run("withdrawal after permit creates zero Odoo orders", func(t *testing.T) {
+		r.e.approvalPolicy()
+		r.e.admin(`UPDATE steelmatter.approval_policies SET approval_above_minor = 0 WHERE tenant_id = $1`, tenant)
+		id := r.instructionOf(t, map[string]any{"supplier_id": "sup-chairs", "delivery_id": "wh-chennai", "currency": "INR",
+			"lines": []map[string]any{line("chair-ergo", 1, 600000)}})
+		var digest string
+		if err := r.e.h.Admin.QueryRow(ctx, `SELECT action_digest FROM steelmatter.action_revisions
+			WHERE tenant_id = $1 AND instruction_id = $2 AND action_revision = 1`, tenant, id).Scan(&digest); err != nil {
+			t.Fatal(err)
+		}
+		st, body := r.e.approve("approver-a", id, 1, digest, true)
+		requireStatus(t, "approve", st, body, 201, "")
+		st, body = r.e.evaluate("agent-a", id, 1)
+		requireStatus(t, "issue permit", st, body, 201, "")
+		p := permitted{action: body["action"].(map[string]any), jws: body["permit_jws"].(string)}
+		op := body["permit"].(map[string]any)["operation_id"].(string)
+		reserved := r.e.buckets(r.mandate)
+		st, body = r.e.approve("approver-a", id, 1, digest, false)
+		requireStatus(t, "withdraw", st, body, 201, "")
+		st, body = r.e.call("POST", "/v1/dispatches", "agent-a", dispatchBody(p))
+		requireStatus(t, "dispatch refused", st, body, 403, engine.DenyApprovalRequired)
+		if n := odooOrders(t, op); n != 0 || r.e.count(`SELECT count(*) FROM steelmatter.dispatches WHERE op_ref = $1`, op) != 0 {
+			t.Fatalf("withdrawal left a dispatch or purchase order for %s (orders %d)", op, n)
+		}
+		requireBuckets(t, "withdrawn permit", r.e.buckets(r.mandate), reserved)
+
+		st, body = r.e.approve("approver-a", id, 1, digest, true)
+		requireStatus(t, "approve again", st, body, 201, "")
+		st, body = r.e.call("POST", "/v1/dispatches", "agent-a", dispatchBody(p))
+		requireStatus(t, "dispatch commits", st, body, 201, "")
+		st, body = r.e.approve("approver-a", id, 1, digest, false)
+		requireStatus(t, "too late to withdraw", st, body, 409, "ALREADY_COMMITTED")
+		requireExecution(t, "settled once", r.settle(t, op), engine.DispatchCommitted)
+		if n := odooOrders(t, op); n != 1 {
+			t.Fatalf("committed operation %s has %d orders", op, n)
+		}
+		r.evidence(t, op)
 	})
 }

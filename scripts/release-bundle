@@ -9,31 +9,21 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 ALLOWLIST=ci/public-export-files.txt
-EXCLUDE=(internal CLAUDE.md AGENTS.md)
 
 [[ -z "$(git status --porcelain)" ]] || { echo "ERROR: working tree is not clean; commit first" >&2; exit 1; }
 commit="$(git rev-parse HEAD)"; short="${commit:0:12}"
 name="steelmatter-$short"
 [[ -f "$ALLOWLIST" ]] || { echo "ERROR: missing public export allowlist" >&2; exit 1; }
+python3 tools/check-export-paths.py
 paths=(); pathspec=()
 while IFS= read -r p || [[ -n "$p" ]]; do
   [[ -z "$p" || "$p" == \#* ]] && continue
-  if [[ ! "$p" =~ ^[A-Za-z0-9._/-]+$ || "$p" == /* || "$p" == *..* || "$p" == */ ]]; then
-    echo "ERROR: unsafe allowlist path: $p" >&2; exit 1
-  fi
-  case "$p" in
-    internal/*|internal|CLAUDE.md|AGENTS.md|*/CLAUDE.md|*/AGENTS.md)
-      echo "ERROR: private instructions or records in allowlist: $p" >&2; exit 1 ;;
-  esac
   entry="$(git ls-tree "$commit" -- "$p")"
   [[ "$entry" == 100644\ blob\ * || "$entry" == 100755\ blob\ * ]] || {
     echo "ERROR: allowlist entry is not a committed regular file: $p" >&2; exit 1;
   }
   paths+=("$p"); pathspec+=(":(literal)$p")
 done < "$ALLOWLIST"
-[[ ${#paths[@]} -gt 0 ]] || { echo "ERROR: empty public export allowlist" >&2; exit 1; }
-duplicates="$(printf '%s\n' "${paths[@]}" | sort | uniq -d)"
-[[ -z "$duplicates" ]] || { echo "ERROR: duplicate allowlist paths: $duplicates" >&2; exit 1; }
 out="$ROOT/dist/release"; rm -rf "$out"; mkdir -p "$out"
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 
@@ -47,7 +37,7 @@ fail=0; audit="$out/AUDIT.txt"
   echo "Steelmatter release bundle audit"
   echo "commit:    $commit"
   echo "generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  echo "excluded:  ${EXCLUDE[*]}"
+  echo "path policy: reviewed files only; internal directories and unrecognised project metadata excluded"
   echo "allowlist: $ALLOWLIST (exact files; additions need review)"
   echo "files:     $(find "$work/$name" -type f | wc -l)"
   echo
@@ -58,9 +48,6 @@ fail=0; audit="$out/AUDIT.txt"
   else
     echo "FAIL export differs from reviewed allowlist"; fail=1
   fi
-  for p in "${EXCLUDE[@]}"; do
-    if [[ -e "$work/$name/$p" ]]; then echo "FAIL excluded path present: $p"; fail=1; else echo "ok   excluded path absent: $p"; fi
-  done
   for f in LICENSE NOTICE THIRD_PARTY_NOTICES.md README.md RELEASE_NOTES.md; do
     if [[ -f "$work/$name/$f" ]]; then echo "ok   present: $f"; else echo "FAIL missing: $f"; fail=1; fi
   done

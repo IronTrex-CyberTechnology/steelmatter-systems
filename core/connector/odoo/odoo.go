@@ -51,7 +51,7 @@ type Config struct {
 	Database string
 	Executor Credentials
 	Observer Credentials
-	// ReadOnly builds an observe-only connector (C-07, Aakhil 30 Oct 2026):
+	// ReadOnly builds an observe-only connector (C-07):
 	// it holds no executor credentials, and Execute, Fence and Readiness are
 	// refused before anything is sent to Odoo. Executor must be empty.
 	ReadOnly bool

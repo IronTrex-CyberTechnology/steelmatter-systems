@@ -1,12 +1,6 @@
 # R1 recovery: state transitions and operator procedures
 
-This page is the supported procedure for a restored engine database, for the
-changes an issuer makes around it, and for the cases that need an operator. It
-applies the decisions of 30 Oct 2026 (Aakhil), in particular rule 6 (no create or
-amend during recovery) and rule 7 (automatic superseding only when the change is
-proven never dispatched or executed). Behaviour is tested by the tests named
-below; see also [r1-decisions.md](r1-decisions.md) and
-[r1-sdet-defect-fixes.md](r1-sdet-defect-fixes.md).
+Use this procedure after an engine database restore. While recovery is active, issuers cannot create or amend instructions. Recovery can supersede an instruction automatically only when the records prove it was never dispatched or executed. [Recovery rules](r1-decisions.md) · [Regression tests](r1-sdet-defect-fixes.md)
 
 ## 1. States
 
@@ -21,8 +15,8 @@ work; nothing is sent to Odoo except lookups and fences (never in OBSERVE_ONLY).
 Held and committed amounts are never released without proof.
 
 Standard path: `check` (writes go off if a signal is found) → `reconcile`
-(rebuild from the anchor, settle by lookup, never create an order) → fix whatever
-`problems` lists → `resume` (the gate checks run; writes come back only if all
+(rebuild from the anchor, settle by lookup, never create an order) → resolve each entry in
+`problems` using section 4 → `resume` (the gate checks run; writes come back only if all
 pass).
 
 ## 2. The window before detection
@@ -118,14 +112,7 @@ a revision number the anchor shows was dispatched. Current builds refuse that
 amendment before the number is used (section 2), so this is reachable only for
 state made by an older build.
 
-What the engine does: nothing. Revisions are append-only and keyed by number, so
-the anchored revision cannot be placed beside the clashing one, and nothing is
-renumbered, overwritten or restored. The anchored operation's amount is not in
-the engine's buckets while this stands, and the gate stays closed. There is **no
-supported in-product resolution yet**; it needs a decision from Aakhil (open item
-in the R1 handoff): either a schema change that lets recovery retire a
-never-spent revision, or an approved administrator procedure. Until then, keep
-writes off, record a finding with the evidence, and escalate.
+The revision number already identifies another immutable action. The engine cannot rebuild the anchored operation, so its amount is absent from the engine’s balance and the resume gate stays closed. R1 has no supported repair for this historical conflict. Keep writes disabled, preserve the conflicting revision and anchor evidence, record an operator finding and escalate to the deployment owner.
 
 ### D. Other named causes
 
@@ -153,11 +140,8 @@ confirmed by lookup before any amount moves out of held.
 | `GET /v1/instructions/{id}` | `status` is `OPEN`, `COMMITTED` or `SUPERSEDED`; `superseded_by` names the instruction recovery kept. |
 | `POST /v1/actions/evaluate`, `POST /v1/dispatches` | 503 while writes are off or `RESTORE_SUSPECTED`; 409 `INSTRUCTION_SUPERSEDED`. |
 
-## 7. Open items
+## 7. Recovery limits
 
-- Odoo-side check: the module deduplicates by `op_ref` only. A per-source-record
-  check in the module (Kaif, if Aakhil wants it) would add a second barrier; the
-  engine's check does not depend on it.
+- The engine checks the source record. The Odoo module deduplicates by `op_ref`.
 - `REVISION_NUMBER_TAKEN` resolution (section 4, C).
-- The anchor query by source key scans the intent records; add an index on the
-  source fields when the anchor grows.
+- The anchor query by source key scans the intent records. Its cost grows with the history retained.

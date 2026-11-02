@@ -95,7 +95,7 @@ func (e *Engine) requireNoRecovery(ctx context.Context) error {
 }
 
 // The 2-second clock limit also applies between this engine and the
-// recovery anchor (Aakhil, 30 Oct 2026). Restore detection compares
+// recovery anchor. Restore detection compares
 // timestamps written by both, so a larger difference can hide a restore.
 
 // anchorClockSkew returns |engine clock - anchor clock|.
@@ -477,8 +477,7 @@ func (e *Engine) deliveryRevision(ctx context.Context, delivery string) (*int64,
 }
 
 // requireDeliveryRevision refuses an action without a delivery address
-// revision whenever a destination connector is configured (Aakhil, 29 Oct
-// 2026: the delivery check must not be optional). Such an action was built
+// revision whenever a destination connector is configured. Such an action was built
 // before the check existed or without a destination; amending it builds a
 // new one with the revision.
 func (e *Engine) requireDeliveryRevision(a *contract.Action) error {

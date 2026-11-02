@@ -42,7 +42,7 @@ func requireBuckets(t *testing.T, what string, got, want buckets) {
 
 // newR1Env is an engine with a destination connector configured from the
 // start, as R1 serve runs: every action is built with the delivery address
-// revision the destination requires (Aakhil, 29 Oct 2026). Tests of an
+// revision the destination requires. Tests of an
 // unconfigured engine set Connector to nil.
 func newR1Env(t *testing.T) *env {
 	e := newEnv(t)
@@ -372,7 +372,7 @@ func TestR1ConcurrentSettleMovesAmountOnce(t *testing.T) {
 	}
 }
 
-// D5 v3 case 1 (Aakhil, 28 Oct 2026): the order is created, its reply is lost,
+// D5 v3 case 1: the order is created, its reply is lost,
 // and an old destination backup then erases it. The fence blocks the op_ref,
 // but the destination's restore-proof journal shows the earlier create, so the
 // earlier outcome is not established: the amount stays held.
@@ -422,9 +422,9 @@ func TestR1DelayedRequestAfterRestoreIsRefused(t *testing.T) {
 }
 
 // A refusal counts as FENCED only when the permanent block committed and no
-// earlier purchase occurred (Aakhil, 28 Oct 2026). Here an earlier create was
+// earlier purchase occurred. Here an earlier create was
 // erased by a restore, so the destination refuses the retry as a prior
-// attempt (Kaif's case E fix) and the amount stays held.
+// attempt and the amount stays held.
 func TestR1RefusalAfterEarlierCreateIsHeld(t *testing.T) {
 	e := newR1Env(t)
 	p := e.permitted()

@@ -35,7 +35,7 @@ Every `STEELMATTER_WORKER_INTERVAL_MS` (default 1000):
 - Serialization failures and deadlocks are retried up to 3 attempts in total with the same business IDs, then the call returns `RETRIES_EXHAUSTED` with the `operation_id`.
 - Lost connectivity returns 503 `SERVICE_UNAVAILABLE`; nothing is allowed from a cache.
 - An app-vs-database clock skew above 2 s returns 503 `CLOCK_UNHEALTHY`.
-- **Quota.** An authenticated principal over its quota gets 429 `RATE_LIMITED` (retryable, with `Retry-After`) before the body is read, so the request has no effect. The limiter is in-process (R0 is one instance). The default numbers are local placeholders; the packet does not specify a quota. Test: `TestQuotaReturns429WithoutEffect`.
+- **Quota.** An authenticated principal over its quota gets 429 `RATE_LIMITED` (retryable, with `Retry-After`) before the body is read, so the request has no effect. The limiter is in-process (R0 is one instance). Defaults are 1,200 requests per minute per principal with a burst of 200. Configure `STEELMATTER_RATE_LIMIT_PER_MINUTE` and `STEELMATTER_RATE_LIMIT_BURST` to set deployment limits. Test: `TestQuotaReturns429WithoutEffect`.
 - Mutation transactions set a 30 s statement and idle timeout.
 
 ## Failpoints

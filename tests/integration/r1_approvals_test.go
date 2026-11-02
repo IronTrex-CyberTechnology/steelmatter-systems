@@ -10,6 +10,7 @@ import (
 
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/auth"
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/engine"
+	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/failpoint"
 )
 
 // T17-T19: exact-action human approval (R1 decision 9, migration 0017).
@@ -225,4 +226,54 @@ func TestT17SimulationNeedsApprovalToo(t *testing.T) {
 	if st != 200 || body["decision"] != "PERMIT_WOULD_ISSUE" {
 		t.Fatalf("simulate approved: %d %v", st, body)
 	}
+}
+
+// Both calls use the public API. Pause dispatch while it owns the admission
+// locks so a concurrent withdrawal really waits on the same instruction.
+func TestR1ApprovalAtDispatch(t *testing.T) {
+	e := newR1Env(t)
+	e.approvalPolicy()
+	m, id, digest := e.openInstruction("po-withdraw-after-permit")
+	st, body := e.approve("approver-a", id, 1, digest, true)
+	requireStatus(t, "approve", st, body, 201, "")
+	st, body = e.evaluate("agent-a", id, 1)
+	requireStatus(t, "issue permit", st, body, 201, "")
+	permit := body["permit"].(map[string]any)
+	p := permitted{mandate: m, instruction: id, action: body["action"].(map[string]any), jws: body["permit_jws"].(string),
+		permitID: permit["permit_id"].(string), operation: permit["operation_id"].(string)}
+
+	recorded, commitWithdrawal := pauseAt(t, failpoint.ApprovalBeforeCommit)
+	reject := async(func() (int, map[string]any) { return e.approve("approver-a", id, 1, digest, false) })
+	wait(t, recorded)
+	attempt := async(func() (int, map[string]any) {
+		return e.call("POST", "/v1/dispatches", "agent-a", dispatchBody(p))
+	})
+	e.waitLockWaiter()
+	commitWithdrawal()
+	rejected, refused := <-reject, <-attempt
+	requireStatus(t, "withdraw", rejected.status, rejected.body, 201, "")
+	requireStatus(t, "withdrawal wins", refused.status, refused.body, 403, engine.DenyApprovalRequired)
+	if e.count(`SELECT count(*) FROM steelmatter.dispatches`) != 0 {
+		t.Fatal("withdrawn approval produced a dispatch")
+	}
+	requireBuckets(t, "permit still reserved", e.buckets(m), r1Reserved)
+	st, body = e.approve("approver-a", id, 1, digest, true)
+	requireStatus(t, "fresh approval", st, body, 201, "")
+	e.admin(`UPDATE steelmatter.approver_entitlements SET enabled = false WHERE approver_principal = 'approver-a'`)
+	st, body = e.call("POST", "/v1/dispatches", "agent-a", dispatchBody(p))
+	requireStatus(t, "approver lost rights", st, body, 403, engine.DenyApprovalStale)
+	e.admin(`UPDATE steelmatter.approver_entitlements SET enabled = true WHERE approver_principal = 'approver-a'`)
+
+	held, release := pauseAt(t, failpoint.AdmissionAfterLocks)
+	dispatch := async(func() (int, map[string]any) {
+		return e.call("POST", "/v1/dispatches", "agent-a", dispatchBody(p))
+	})
+	wait(t, held)
+	withdraw := async(func() (int, map[string]any) { return e.approve("approver-a", id, 1, digest, false) })
+	e.waitLockWaiter()
+	release()
+	d, w := <-dispatch, <-withdraw
+	requireStatus(t, "dispatch wins", d.status, d.body, 201, "")
+	requireStatus(t, "late withdrawal", w.status, w.body, 409, "ALREADY_COMMITTED")
+	requireBuckets(t, "in-flight exposure", e.buckets(m), r1Unresolved)
 }
