@@ -86,7 +86,7 @@ func requireFault(t *testing.T, what string, err error, code, contains string) {
 }
 
 // Decision 3 (R1-DEF-08): a HELD operation whose anchor records a create
-// attempt is never released, even with a finding, a review and Aakhil's
+// attempt is never released, even with a finding, a review and independent
 // confirmation. The repair is refused at preparation; COMMIT stays possible.
 func TestR1HeldWithCreateAttemptIsNeverReleased(t *testing.T) {
 	e := newR1Env(t)
@@ -166,8 +166,7 @@ func TestR1ReleaseBlocksReferencePermanently(t *testing.T) {
 	}
 }
 
-// anchorRepair runs the three-person anchor repair (decision 4): Uday
-// prepares, Kaif reviews, Aakhil confirms.
+// anchorRepair runs the three-person anchor repair using distinct preparer, reviewer and confirmer identities.
 func (e *env) anchorRepair(op, evidence string) error {
 	ctx := context.Background()
 	id, err := e.eng.PrepareRepair(ctx, uday, op, engine.RepairAnchor, evidence, "anchor behind the engine")
@@ -529,7 +528,7 @@ func TestR1ObserveOnlyNeverPurchases(t *testing.T) {
 		t.Fatal("observe-only recorded a dispatch")
 	}
 	// Observe-only never writes to the destination, not even a fence
-	// (Aakhil, 30 Oct 2026): the earlier operation is only looked up and
+	//: the earlier operation is only looked up and
 	// stays held.
 	requireExecution(t, "earlier dispatch", e.settle(earlier.operation, a.s), engine.DispatchPending)
 	if a.s.Creates() != 0 || a.s.StateOf(earlier.operation) != stub.Absent {
@@ -547,7 +546,7 @@ func TestR1ObserveOnlyNeverPurchases(t *testing.T) {
 	}
 }
 
-// Aakhil, 29 Oct 2026: the delivery check must not be optional. With a
+// The delivery check must not be optional. With a
 // destination configured, an action without a delivery address revision is
 // refused at evaluation and at dispatch, before anything is consumed; an
 // amendment builds it again with the revision. A delivery address the

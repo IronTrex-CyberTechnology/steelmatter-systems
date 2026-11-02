@@ -1,6 +1,6 @@
 ## Scope and interpretation
 
-The generated tables report the commit, environment, mapped tests and outcomes of this run. Automated test results and reviewed acceptance-case completion are separate: a case remains NOT_RUN until its mapping is reviewed and marked complete. The active full-R0 stage enforces the 35 reviewed R0 mappings and all 340 retained I08 checks across seven phases. The case mappings were checked against catalogue assertions, test implementations and recorded results; independent QA is attributed separately in the release notes.
+The generated tables report the commit, environment, mapped tests and outcomes of this run. Automated test results and reviewed acceptance-case completion are separate: a case remains NOT_RUN until its mapping is reviewed and marked complete. The historical full-R0 stage enforces the 35 reviewed R0 mappings and all 340 retained I08 checks across seven phases. The case mappings were checked against catalogue assertions, test implementations and recorded results; independent QA is attributed separately in the release notes.
 
 ## Reproduction
 
@@ -12,4 +12,4 @@ The reference uses one organisation, INR integer paise and a simulated purchase-
 
 See `RELEASE_NOTES.md` for the tested source baseline and source-preview scope. The full-R0 profile contains 35 cases; the sprint-day4 report covers 31 of them.
 
-Standalone aggregation does not establish fresh-run provenance and may retain the last terminal result from concatenated runs. For release evidence use a fresh checkout and `scripts/ci`, then match its commit to the audited source archive.
+Duplicate terminal results fail the aggregate check. Use fresh phase outputs from the same commit. For release evidence use a fresh checkout and `scripts/ci`, then match its commit to the audited source archive.

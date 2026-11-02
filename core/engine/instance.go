@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// One active backend per deployment (R1, Aakhil 30 Oct 2026, NEW-SDET-01).
+// One active backend per deployment (R1, NEW-SDET-01).
 //
 // serve takes a session-level advisory lock in the engine database and in
 // the recovery anchor before it touches the anchor's write switch. A second
@@ -104,7 +104,7 @@ func (in *Instance) Close() {
 
 // CheckNotOwner refuses a database connection whose role is a superuser or
 // owns (directly or through membership) the given schemas or any table in
-// them (decision 7, Aakhil 30 Oct 2026): the running backend never uses
+// them (decision 7): the running backend never uses
 // owner credentials, so database-owner changes stay an administrator action.
 func CheckNotOwner(ctx context.Context, pool *pgxpool.Pool, what string, schemas ...string) error {
 	var role string

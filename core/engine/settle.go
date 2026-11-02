@@ -27,7 +27,7 @@ import (
 //     order whose details match the approved action (CREATED, EXISTS, FOUND);
 //   - unresolved -> available only when the destination proves no order:
 //     FENCED or a structured module refusal, with the permanent block
-//     committed and no earlier create attempt (Aakhil, 28 Oct 2026);
+//     committed and no earlier create attempt;
 //   - a block over an earlier create attempt is HELD: the earlier outcome is
 //     not established (an old backup may have erased a real order), so
 //     blocking future attempts alone cannot release it (D5 v3 case 1);
@@ -84,7 +84,7 @@ func (e *Engine) settle(ctx context.Context, tenant, opRef string, c connector.C
 	// and fence only. Nothing new is ever created after a revoke.
 	var res connector.Result
 	// Never send an action without its delivery address revision: the
-	// destination could not check the address (Aakhil, 29 Oct 2026).
+	// destination could not check the address.
 	if d.status == DispatchPending && writes && d.mandateLive && !e.Cfg.ObserveOnly && d.action.DeliveryRevision != nil {
 		res, err = c.Execute(ctx, d.connectorAction())
 	} else {
@@ -92,7 +92,7 @@ func (e *Engine) settle(ctx context.Context, tenant, opRef string, c connector.C
 		if err == nil && res.Outcome == connector.NotFoundNow {
 			if e.Cfg.ObserveOnly {
 				// Observe-only never writes to the destination, not even a
-				// fence (Aakhil, 30 Oct 2026): the amount stays held until a
+				// fence: the amount stays held until a
 				// deployment with write authority fences it.
 				r, gerr := e.GetDispatch(ctx, tenant, opRef)
 				return r, false, gerr
@@ -206,8 +206,7 @@ func connectorLines(in []contract.Line) []connector.Line {
 }
 
 // matches reports whether a destination order is a confirmed order with
-// exactly the approved details (Aakhil's D1 decision: success only when the
-// destination confirms the order and its details match).
+// the exact approved purchase details.
 func (d *dispatchRow) matches(o *connector.Order) bool {
 	if o == nil || o.State != connector.StateConfirmed || o.CompanyRef != d.companyRef || o.DeliveryRef != d.action.DeliveryID ||
 		o.AmountMinor != d.action.AmountMinor || o.SupplierRevision != d.action.SupplierRevision ||

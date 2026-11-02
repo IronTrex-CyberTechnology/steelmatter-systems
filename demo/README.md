@@ -1,7 +1,6 @@
 # Steelmatter browser demo
 
-A small scenario demonstrator for the R0 reference (document 13). Simulation
-with synthetic data only. No login, real ERP, payment or approval button.
+Replay four recorded R0 purchasing scenarios and verify signed evidence in the browser. The recordings use synthetic data. Playback runs locally and does not submit purchases.
 
 ## Build and open
 ```bash
@@ -25,7 +24,7 @@ Open `demo/dist/index.html` in a browser. No server and no network are needed.
 
 ## How the verifier runs in the browser
 `build.mjs` bundles `packages/verifier/src` unchanged with esbuild. Its Node
-calls are served by small stand-ins in `src/shims`:
+calls are handled by browser implementations in `src/shims`:
 - `node:crypto` sha256 through `@noble/hashes` (no custom cryptography;
   signatures use jose with WebCrypto);
 - `node:fs` schema reads from the same schema files, bundled;

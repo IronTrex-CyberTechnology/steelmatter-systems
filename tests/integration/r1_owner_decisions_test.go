@@ -20,8 +20,6 @@ import (
 	"github.com/IronTrex-CyberTechnology/steelmatter-systems/core/server"
 )
 
-// Aakhil's decisions of 30 Oct 2026 on the five SDET points (engine side).
-
 // NEW-SDET-01: one active backend per deployment. A second backend for the
 // same database refuses to start and changes nothing; the first keeps
 // serving. Once the first stops, a backend can start again.

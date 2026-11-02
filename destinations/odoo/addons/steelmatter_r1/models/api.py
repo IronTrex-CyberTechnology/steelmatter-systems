@@ -20,7 +20,7 @@ SELECT ... FOR UPDATE on that row, so they serialise on one lock and recheck
 durable state under it. Anchor I/O happens before the journal head lock, so it
 does not serialise creates for different op_refs.
 
-Order of sm_create (agreed with Uday, D5 v3):
+Order of sm_create:
   1. restore gate: head behind expected_min_seq -> REFUSED_RESTORE_SUSPECTED, nothing written
   2. lock the operation row
   3. read the anchor (unreadable -> UNAVAILABLE, nothing written)
@@ -66,9 +66,7 @@ def reported_state(po):
 # Structured refusal for an action outside the configured scope (mapping
 # missing, other currency, approval not one step, amount not the sum of the
 # lines). Decided before CREATE_INTENT and written with a BLOCK, so it can
-# release (block_committed, no prior create). Not yet in the Go
-# connector.Outcome list: the engine holds it as unrecognised until the next
-# fence returns FENCED. To agree with Uday (D1 v1.3).
+# release the hold when the anchor proves a permanent block and no prior create.
 REFUSED_OUT_OF_SCOPE = "REFUSED_OUT_OF_SCOPE"
 
 

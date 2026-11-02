@@ -1,5 +1,5 @@
 // Package lossproxy is a fault-injecting HTTP proxy for the Odoo JSON-RPC
-// path (R1 lost-reply tests and Sindhu's QA). It sits between the connector
+// path during R1 lost-reply tests. It sits between the connector
 // and Odoo and, on command, loses traffic on the network rather than inside
 // the connector:
 //

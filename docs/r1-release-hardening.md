@@ -1,7 +1,6 @@
 # R1 release hardening
 
-Baseline: private `uday-r1` at `af7d1a3b07eaeb2704a0678fc7bdda85f87caf8c`.
-This change is a review candidate, not a release or customer-write approval.
+The R1 recovery and evidence changes extend baseline `af7d1a3b07eaeb2704a0678fc7bdda85f87caf8c`.
 
 ## Recovery and repair changes
 
@@ -27,10 +26,10 @@ This change is a review candidate, not a release or customer-write approval.
 
 The active aggregate CI stage is `r1-engine`. Real Odoo recovery tests and a build of the exact export allowlist are additional steps in the required `steelmatter-ci` job. Skipped or missing real-Odoo results fail that step.
 
-Developer checks and independent SDET verification remain separate. Sindhu should receive the final fixed commit, test results, contract changes and setup instructions after development checks complete.
+Independent QA verifies the candidate commit against its test results, interface contracts and installation procedure.
 
 ## Release decisions (settled 29 Oct 2026)
 
 - T17–T19 (exact-action human approval) stay in R1 and are implemented; see [r1-decisions.md](r1-decisions.md), decision 9.
 - HELD money is released only with anchor proof that no purchase occurred and that the reference is permanently blocked; a three-person repair alone cannot release it (decision 3). Automated recovery never uses a human note as proof of no purchase.
-- This is a proposed version 2 contract addition. Both developers must include it in their shared interface review before merging; existing external verifiers must be upgraded to verify version 2 records.
+- External verifiers must support version 2 execution and observation payloads to verify R1 records.

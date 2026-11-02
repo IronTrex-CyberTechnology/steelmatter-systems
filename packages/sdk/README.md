@@ -1,11 +1,8 @@
 # @irontrex/steelmatter-sdk
 
-Typed TypeScript client for the Steelmatter R0 procurement reference API
-([`api/openapi.yaml`](../../api/openapi.yaml)). It has no runtime
-dependencies and uses the platform `fetch`. Private package; not published.
+Typed TypeScript client for the [Steelmatter HTTP API](../../api/openapi.yaml). It uses the platform `fetch` with no runtime dependencies. Build the package from this repository.
 
-Simulation with synthetic data only. The SDK adds no behaviour of its own:
-every decision (identity, allowance, permits, admission) is the server's.
+Use `admitOperation` for the synthetic R0 destination and `dispatchOperation` for a protected R1 purchase in the Odoo sandbox. The server enforces identity, spending limits, approvals and admission.
 
 ## Install (local)
 ```bash

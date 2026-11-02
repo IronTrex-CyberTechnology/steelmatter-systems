@@ -1,17 +1,9 @@
 # @irontrex/steelmatter-mcp
 
-Thin MCP (Model Context Protocol) adapter for the Steelmatter R0 procurement
-reference. It lets an agent act as **one assigned actor** over stdio, calling
-the API through [`@irontrex/steelmatter-sdk`](../../packages/sdk). Private
-package; not published. Simulation with synthetic data only.
-
-The adapter adds no policy. The service's deterministic gate makes every
-decision; the model never sits on the admission path.
+The Model Context Protocol adapter gives one assigned actor access to the R0 purchasing API over stdio. It uses the [TypeScript SDK](../../packages/sdk) and builds from source. The server enforces the actor’s permissions and checks every admission. Odoo dispatch uses the R1 HTTP API or SDK.
 
 ## Tools
-The tool set is what the bound actor may do through the API (document 03). In
-the R0 threat model the agent is the actor and may be compromised (document 04,
-T32), and it must never hold owner, issuer or ledger credentials (document 02, I7).
+The service evaluates the token on every call. Give the adapter only its assigned actor’s token. Keep owner, issuer and ledger credentials outside the agent process.
 
 | Tool | API operation | Notes |
 |---|---|---|
@@ -76,9 +68,4 @@ go test -tags integration,failpoints -run '^TestMCPAgentEndToEnd$' ./tests/integ
 JSON-RPC 2.0, newline-delimited over stdio. Methods: `initialize` (negotiates MCP 2025-11-25, 2025-06-18 or
 2025-03-26), `ping`, `tools/list`, `tools/call`, notifications `initialized` and `cancelled` (aborts the
 in-flight call; no response is sent). Batches are accepted. Only the `tools` capability is offered.
-Implemented without a third-party MCP library (the repository requires human review before adding one).
-
-## Not decided by the packet
-Open decisions, tracked in the team's review record: tool sets for other principal kinds, network transports,
-publication and packaging with the SDK. The adapter accepts any principal's token and relies on the service to
-enforce what that principal may do; configure only an actor token (see Configure).
+The adapter implements this protocol directly. Configure an actor token for the stdio process. The server evaluates the permissions of the supplied principal.

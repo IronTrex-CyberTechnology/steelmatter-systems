@@ -258,7 +258,7 @@ func TestRT0EESEC02BackupBeforeAmendmentIsReconciled(t *testing.T) {
 	}
 }
 
-// Operator review (Aakhil, 30 Oct 2026): an issuer change that was
+// Operator review: an issuer change that was
 // dispatched, spent or has an uncertain outcome is never superseded.
 // Recovery stops with CONFLICT_SPENT, keeps the gate closed, leaves the
 // conflicting operation and its amount as they are and sends nothing. The

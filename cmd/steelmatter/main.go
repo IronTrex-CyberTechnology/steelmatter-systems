@@ -61,8 +61,7 @@ var version = "dev"
 
 const baseline = "0.6"
 
-// Default per-principal quota. The packet specifies 429 but no number; these
-// are local R0 defaults, generous for the demo and tests, pending a team decision.
+// Default per-principal request rate and burst capacity.
 const (
 	defaultRatePerMinute = 1200
 	defaultRateBurst     = 200

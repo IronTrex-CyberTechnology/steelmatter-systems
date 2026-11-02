@@ -20,13 +20,13 @@ node_modules/
 .vscode/
 *.swp
 
-# Handoff packet (0.6.2) copied to the repo root: reference only, not tracked
+# Local development and review material
 /01_PRODUCT_CONTRACT.txt
 /02_ARCHITECTURE_AND_INVARIANTS.txt
 /03_PROTOCOL_AND_API.txt
 /04_THREAT_MODEL_AND_TESTS.txt
 /05_BUILD_BACKLOG.txt
-/06_CLAUDE_CODE_SETUP.txt
+/06_*_SETUP.txt
 /07_GLOSSARY.txt
 /08_FLOW_AND_STATES.html
 /09_DEVELOPER_GUIDE.txt
@@ -51,7 +51,7 @@ node_modules/
 /README.txt
 /RELEASE_TEST_REPORT.txt
 /REVIEWER.txt
-/SINDHU_TESTER.txt
+/*_TESTER.txt
 /START_HERE.txt
 /Team_Checklist.pdf
 /acceptance-cases.json

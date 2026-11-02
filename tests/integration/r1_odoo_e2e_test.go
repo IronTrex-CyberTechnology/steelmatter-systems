@@ -22,13 +22,13 @@ import (
 )
 
 // Engine plus real Odoo (R1 completion check: T33, T34, T35 traced to
-// evidence). Runs only against Kaif's sandbox, through
+// evidence). Runs only against the Odoo sandbox, through
 // destinations/odoo/sandbox/test-engine, on a FRESH sandbox
 // (sandbox/reset then sandbox/up): the sandbox's anchor is shared with the
 // Odoo module, so records from an earlier run would look like a restore.
 //
 // The engine database is a disposable test database restored at database
-// level; Odoo is restored with Kaif's sandbox helpers (a template copy of
+// level; Odoo is restored with the Odoo sandbox helpers (a template copy of
 // Odoo's database); the anchor is never restored.
 
 const odooCompany = "acme-in" // the sandbox company's sm_ref and the module's STEELMATTER_DESTINATION
@@ -116,7 +116,7 @@ func requireEnvVar(t *testing.T, name string) string {
 	return v
 }
 
-// sandboxOdoo runs one of Kaif's sandbox helpers (snapshot_odoo,
+// sandboxOdoo runs an Odoo sandbox helper (snapshot_odoo,
 // restore_odoo) from destinations/odoo/tests/sandbox_client.py.
 func sandboxOdoo(t *testing.T, fn string) {
 	t.Helper()
@@ -288,7 +288,7 @@ func (r *odooRun) evidence(t *testing.T, op string) {
 }
 
 // odooOrders counts Odoo purchase orders carrying op_ref, read straight
-// from Odoo's database through Kaif's sandbox helper (not through the
+// from Odoo's database through the Odoo sandbox helper (not through the
 // connector under test).
 func odooOrders(t *testing.T, op string) int {
 	t.Helper()
@@ -307,7 +307,7 @@ func odooOrders(t *testing.T, op string) int {
 	return n
 }
 
-// outcome checks the two records Aakhil asked for at the end of each
+// outcome checks the two independent records at the end of each
 // scenario: the Odoo orders for the operation and the mandate's budget
 // buckets (ledger() also checks available + reserved + committed +
 // unresolved = limit). base is the mandate's buckets before the scenario's

@@ -2,7 +2,7 @@
 # Start the Steelmatter R1 Odoo sandbox (needs Docker and Go):
 #   1. generate local secrets (.local/odoo-sandbox.env, mode 0600, never committed)
 #   2. start Odoo's PostgreSQL and the separate anchor PostgreSQL
-#   3. provision the recovery anchor with `steelmatter anchor-init` (Uday's schema and roles)
+#   3. provision the recovery anchor with `steelmatter anchor-init`
 #   4. create the Odoo database, install steelmatter_r1 and seed synthetic data
 #   5. start Odoo on 127.0.0.1:$ODOO_PORT
 # Safe to re-run: existing secrets, anchor and database are kept.

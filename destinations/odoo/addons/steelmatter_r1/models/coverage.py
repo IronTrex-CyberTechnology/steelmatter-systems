@@ -1,4 +1,4 @@
-"""Coverage posture inputs (build guide step 5) for Uday's coverage view.
+"""Purchasing access and bypass routes reported by the Odoo module.
 
 sm_coverage reports, for each known route to a purchase order in this Odoo
 database, whether Steelmatter enforces it, only observes it, leaves it

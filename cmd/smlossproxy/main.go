@@ -1,5 +1,5 @@
 // Command smlossproxy runs the lost-reply proxy (tools/lossproxy) in front of
-// the Odoo sandbox, for Sindhu's QA and manual failure tests. Both addresses
+// the Odoo sandbox for controlled failure tests. Both addresses
 // must be loopback; it is for the synthetic sandbox only.
 //
 //	smlossproxy -target http://127.0.0.1:18069 -listen 127.0.0.1:18070 -control 127.0.0.1:18071

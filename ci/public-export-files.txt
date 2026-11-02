@@ -343,6 +343,7 @@ tests/integration/simulate_parity_test.go
 tests/integration/simulate_test.go
 tests/integration/temporal_test.go
 tests/integration/workers_test.go
+tools/check-export-paths.py
 tools/check-odoo-results.py
 tools/ciagg/ciagg.go
 tools/ciagg/ciagg_test.go

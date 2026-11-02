@@ -14,7 +14,7 @@ Covers:
   - anchor down: create and fence are UNAVAILABLE and change nothing
   - the anchor is untouched by the Odoo restore
 
-The engine-side decision is checked with the same rules as Uday's Go code
+The engine-side decision is checked with the same rules as the Go engine
 (connector.Result.ProvesNoOrder and BlockedOverPriorCreate, and settle's
 CREATE_DONE path).
 """

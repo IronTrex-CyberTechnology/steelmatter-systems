@@ -6,7 +6,7 @@
 //	STEELMATTER_ODOO_URL, STEELMATTER_ODOO_DB,
 //	STEELMATTER_ODOO_EXECUTOR_PASSWORD, STEELMATTER_ODOO_OBSERVER_PASSWORD
 //
-// The same scenarios run through Uday's stub connector and the real Odoo
+// The same scenarios run through the stub connector and the real Odoo
 // connector, and must give the same outcomes and proof flags: the engine can
 // swap one for the other.
 package odoo_test

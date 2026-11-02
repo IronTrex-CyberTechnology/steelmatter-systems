@@ -1,45 +1,34 @@
-# IronTrex Steelmatter Systems R1
+# Steelmatter R1 for Odoo 18 purchasing
 
-R1 delivers exact-action purchase-order admission, conserved spending allowances and destination-outcome reconciliation for Odoo 18. It extends the R0 transactional engine with external execution, recovery anchoring and verifiable outcome evidence.
+## Approval withdrawal at dispatch
 
-The supported deployment scope is controlled evaluation with synthetic data and isolated infrastructure. General production readiness has not been established.
+Earlier R1 revisions could accept a purchase after an approver withdrew approval. A permit issued before withdrawal was sufficient to reach dispatch. This revision rechecks approval inside the transaction that commits dispatch.
 
-## R1 purchasing correction
+| Which transaction commits first? | Result |
+|---|---|
+| Withdrawal | Dispatch returns HTTP 403. Odoo creates zero orders. An outstanding reservation follows its normal expiry and release rules. |
+| Dispatch | A later withdrawal returns HTTP 409. Steelmatter tracks the admitted operation through settlement or recovery. In the tested successful purchase, Odoo recorded exactly one order. |
 
-Earlier R1 preview source could accept a dispatch after its exact-action approval was withdrawn. The engine now checks the latest decision inside the transaction that commits dispatch. If withdrawal commits first, dispatch returns HTTP 403 and creates no purchase order. If dispatch commits first, a later withdrawal returns HTTP 409 and the admitted operation can be reconciled. Existing reservations follow their normal expiry and release rules.
+For an evaluation that relies on withdrawal, use the corrected engine and repeat both cases on the target installation before enabling the protected route. The [2 November Odoo CI run](https://github.com/IronTrex-CyberTechnology/steelmatter-systems/actions/runs/41380213055) covers the correction on source `8240c95`. Its [clean-install and bundle checks](https://github.com/IronTrex-CyberTechnology/steelmatter-systems/actions/runs/41380307758) cover the same revision. Each release archive identifies its own source commit and file checksums.
 
-The optional coverage-only Odoo add-on lets a team inventory purchasing routes before installing enforcement. On an enforced installation, an explicitly designated buyer can handle ordinary purchases outside Steelmatter’s controls. See the [Odoo installation and coverage guide](docs/odoo-purchasing-coverage.md).
+## Purchasing access
 
-## Included behaviour
+Install `steelmatter_coverage` on a clone to inventory purchasing routes, rights and known bypasses. It takes a configuration snapshot on request and installs no purchase-write hooks. On a separate enforcement installation, a designated manual buyer can create, edit and confirm ordinary orders. The guard prevents that buyer from changing a protected order or moving its lines. [Installation and coverage guide](docs/odoo-purchasing-coverage.md)
 
-- Owner-issued mandates, shared INR allowances, versioned instructions and exact-action permits.
-- Odoo 18 integration with protected supplier, delivery, quantity, unit and tax details.
-- Retry-safe operation references and held budget for uncertain outcomes; settlement after destination verification.
-- Recovery anchoring, restore detection, reconciliation and gated resumption of writes.
-- Human approval separation, tenant isolation, restricted runtime database credentials and one active backend.
-- Signed execution and observation evidence with offline verification, a typed HTTP SDK and recorded browser playback.
+## Execution and recovery
 
-The R0 quickstart remains a synthetic workflow. The browser demo replays pinned R0 scenarios; it is not a live demonstration of Odoo purchases. MCP purchase creation is outside the R1 rollout scope.
+R1 binds approval to the purchase terms, including supplier and delivery revisions, quantities, units and taxes. An operation reference links dispatch, Odoo’s purchase order and the ledger. If Odoo’s response is lost, the amount stays held until destination evidence resolves the outcome. Restore detection fences new writes while the engine reconciles against its independent recovery anchor. Operators can export signed execution and observation records for offline verification. [Recovery procedures](docs/r1-recovery-operations.md) · [Evidence](docs/evidence.md)
 
-## Verification boundary
+## Evaluation scope
 
-The functional baseline independently retested by QA is `9514149aa13e86a20f07e3d57b12947859448a6e`. Demo and packaging changes are based on `69b8c34377096a63e9fc3fe8ae7a9c5749934b03`.
+- Use isolated infrastructure and synthetic data. Qualification covers one tenant, one Odoo company, one active backend and INR integer paise. Start with the coverage inventory or an observe-only engine. Enable writes only on a separately authorised test installation.
+- Use the HTTP API or TypeScript SDK for R1 purchases. The local quickstart, recorded browser scenarios and MCP admission exercise the R0 synthetic destination.
+- Database owners and privileged administrators remain trusted. Odoo.sh enforcement and production deployment require separate qualification.
+- An observer database outage can delay readback. QA observed about 80 seconds from reconnection to `MATCH` in one test. The maximum delay is unmeasured.
+- Fresh-install qualification excludes historical `REVISION_NUMBER_TAKEN` conflicts. Keep writes fenced and follow the [operator procedure](docs/r1-recovery-operations.md) for affected restores.
 
-The public R1 main-branch source at `f8b6ebe26c845c4990959b7abbeec8ae58345dd9` passed [CI on 31 October 2026](https://github.com/IronTrex-CyberTechnology/steelmatter-systems/actions/runs/41196339479): 527 required identities, 1,194 passing test records across seven phases, 41 passing mapped acceptance cases, and 22 passing records in the separate real-Odoo suite. The source-export build and Go tests also passed. [Validation evidence](docs/validation.md) gives the breakdown and measurement limits. These numbers describe that exact source; use each subsequent commit's own workflow results and source manifest when publishing it.
+## Verification and distribution
 
-`scripts/ci` runs the active `r1-engine` gate: 527 required test identities across seven phases. Real-Odoo integration is a separate gate in the CI workflow. Required test identities, executed assertions and QA acceptance cases must not be described as interchangeable totals.
+Independent QA retested the functional baseline `9514149aa13e86a20f07e3d57b12947859448a6e`. The demo and packaging baseline is `69b8c34377096a63e9fc3fe8ae7a9c5749934b03`. The [validation record](docs/validation.md) distinguishes earlier results, the withdrawal regression and deployment-specific limits. Independent release approval applies to the candidate reviewed.
 
-The release bundle includes a `COMMIT` file, `MANIFEST.sha256`, `SHA256SUMS` and `AUDIT.txt`. The demo reports the source commit and identifies the recording commit separately. Only the reviewed files in `ci/public-export-files.txt` enter the source bundle.
-
-## Supported evaluation scope and accepted limits
-
-- One tenant, one Odoo company, one active backend; INR integer paise.
-- Start deployment evaluation in observe-only mode. Enabling external purchases requires an explicit rollout decision and the documented configuration.
-- Database owners and privileged administrators remain trusted. Runtime role restrictions do not claim protection from a compromised database administrator.
-- Observer-only database outages can delay observation after reconnection. QA reproduced approximately 80 seconds before eventual MATCH in one test; this is an accepted operational delay, not a fixed defect or a guaranteed maximum.
-- Recovery from historical pre-fix anchored revision conflicts is not covered by the fresh-deployment qualification. Read the recovery procedures before restoring existing data.
-- Apache-2.0 source distribution; npm packages remain private.
-
-The old R0-only descriptions and accepted aggregator limitations are superseded for this candidate. Current aggregator regression checks cover stale, duplicate, missing, skipped and failed results. Do not reuse or concatenate old phase outputs as release evidence.
-
-Follow [the quickstart](docs/quickstart.md), [R1 decisions](docs/r1-decisions.md), and [recovery operations](docs/r1-recovery-operations.md). QA-owner approval and release-owner approval remain separate records tied to the final candidate.
+The source archive includes `COMMIT`. The release build also produces `MANIFEST.sha256`, `SHA256SUMS` and `AUDIT.txt`. The [export manifest](ci/public-export-files.txt) identifies the reviewed source files. Build the TypeScript packages from source. See the [R0 release](https://github.com/IronTrex-CyberTechnology/steelmatter-systems/releases/tag/r0-source-preview.1) for the earlier synthetic workflow.

@@ -714,7 +714,7 @@ func (e *Engine) recreateDispatchOpt(ctx context.Context, ir anchor.IntentRecord
 // otherwise nothing is rebuilt and an operator takes over. The rebuilt
 // operation is UNRESOLVED with its amount held; settling then verifies the
 // order (COMMITTED if it matches, MISMATCH if not). Its missing anchor
-// intent keeps the resume gate closed until Aakhil confirms the anchor
+// intent keeps the resume gate closed until an authorised confirmer completes the anchor
 // repair (ConfirmAnchorRepair).
 func (e *Engine) recreateFromDestination(ctx context.Context, row connector.ListRow) (bool, error) {
 	rows, err := e.Pool.Query(ctx, `SELECT i.tenant_id, i.permit_id, i.mandate_id, i.instruction_id, i.action_revision, i.control_epoch,
@@ -903,7 +903,7 @@ func (e *Engine) TryResume(ctx context.Context, c connector.Connector) (*GateRep
 			}
 		}
 		if _, ok := v.intents[k]; !ok {
-			anchorBehind = append(anchorBehind, k[1]+": the anchor lacks this operation; Aakhil must confirm the anchor repair")
+			anchorBehind = append(anchorBehind, k[1]+": operation missing from the recovery anchor. Confirmation by an authorised repair operator is required")
 		}
 	}
 	add("NONE_PENDING_OR_UNRESOLVED", unsettled)
@@ -1220,9 +1220,8 @@ func (s instructionSource) apply(ir *anchor.IntentRecord) {
 }
 
 // releaseUnspent prepares instruction instID for recovery to replace its
-// live state with the anchored action (Aakhil, 30 Oct 2026: automatic only
-// when the change is proven never dispatched or executed): every open (UNSIGNED or ACTIVE)
-// permit other than the anchored one is released with RECOVERED_UNUSED and
+// live state with the anchored action only if it never reached dispatch or execution.
+// Each open permit (UNSIGNED or ACTIVE) other than the anchored one is released with RECOVERED_UNUSED and
 // its amount returned to available, and every CURRENT revision other than
 // keepRevision (0: all) is superseded. It refuses, writing nothing, if the
 // instruction ever spent or may have spent outside the anchored permit: a
@@ -1243,8 +1242,7 @@ func (e *Engine) releaseUnspent(ctx context.Context, tx pgx.Tx, ir anchor.Intent
 	}
 	if spent == "" {
 		// The anchor is the proof of "never dispatched": any other dispatch
-		// intent for this instruction means an order may exist (Aakhil,
-		// 30 Oct 2026: dispatched, spent or uncertain stops for review).
+		// intent for this instruction requires operator review because an order may exist.
 		ops, aerr := e.Anchor.IntentOpsForInstruction(ctx, ir.Tenant, instID)
 		if aerr != nil {
 			return "", dependency("recovery anchor", aerr)

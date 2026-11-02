@@ -117,7 +117,7 @@ func New() *Stub {
 
 // NewWithProof returns an empty stub destination whose restore-proof record
 // is p, for example the real anchor's destination stream (anchor.DestStream),
-// as Kaif's Odoo module will use it.
+// as used by the Odoo module.
 func NewWithProof(p connector.RestoreProof) *Stub {
 	return &Stub{ops: map[string]*record{}, supplierRev: map[string]int64{}, deliveryRev: map[string]int64{}, unmapped: map[string]bool{}, taxBP: map[string]int64{},
 		itemTaxes: map[string]string{}, dropReply: map[string]int{}, unreachable: map[string]int{},
@@ -435,7 +435,7 @@ func (s *Stub) create(ctx context.Context, a connector.Action) connector.Result 
 	}
 	// A create intent with no destination row means an earlier attempt was
 	// erased by a restore (or its commit failed). Never create again for this
-	// op_ref: block it and refuse (Kaif's case E fix).
+	// op_ref: block it and refuse.
 	if p.CreateIntent {
 		if err := s.proof.RecordBlock(ctx, a.OpRef, "prior attempt"); err != nil {
 			return unavailable(a.OpRef, "execute", "ANCHOR_UNAVAILABLE", s.seq)
@@ -659,7 +659,7 @@ func (s *Stub) CancelOrder(opRef string) bool {
 }
 
 // SetOutOfScope makes the module refuse opRef as out of its configured scope
-// with reason (for example CURRENCY_OUT_OF_SCOPE), as Kaif's module does
+// with reason (for example CURRENCY_OUT_OF_SCOPE), as the Odoo module does
 // before writing CREATE_INTENT.
 func (s *Stub) SetOutOfScope(opRef, reason string) {
 	s.mu.Lock()

@@ -1,5 +1,4 @@
-"""Anchor latency baseline for the module (D5 v3, "Kaif measures p50/p95";
-the anchor timeout is a contract value to agree with Uday).
+"""Measure recovery-anchor and Odoo latency on the local purchasing sandbox.
 
 Measures, on the local sandbox:
   inside the Odoo container, with the module's own anchor.py (exactly as

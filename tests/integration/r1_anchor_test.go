@@ -413,8 +413,8 @@ func TestD5EngineRestoredBeforeUnsentDispatch(t *testing.T) {
 
 // Case G with the HELD rule: the engine and Odoo are both restored after a
 // lost-reply create whose CREATE_DONE was lost. The operation is rebuilt and
-// ends HELD; writes stay off until Uday records the finding, then resume
-// while it stays held. Only Kaif's review plus Aakhil's confirmation, after
+// ends HELD; writes stay off until an operator records the finding, then resume
+// while it stays held. Only independent review and confirmation, after
 // the recovery checks pass, moves the amount.
 func TestD5BothRestoredHeldRuleAndRepair(t *testing.T) {
 	e := newR1Env(t)
@@ -499,7 +499,7 @@ func TestD5BothRestoredHeldRuleAndRepair(t *testing.T) {
 }
 
 // A repair that releases: an unreviewed or rejected repair never moves
-// budget; an approved one confirmed by Aakhil releases the held amount, and
+// budget; an approved one confirmed by a separate authorised operator releases the held amount, and
 // only because the anchor proves no create was attempted (decision 3).
 func TestD5RepairReleaseNeedsApprovedReview(t *testing.T) {
 	e := newR1Env(t)
@@ -539,7 +539,7 @@ func TestD5RepairReleaseNeedsApprovedReview(t *testing.T) {
 
 // Case E: Odoo alone is restored and a committed order disappears. Writes
 // stop; the operation gets a BLOCK and a flag but stays committed (no
-// refund); writes resume once Uday records the finding; a retry can never
+// refund); writes resume once an operator records the finding; a retry can never
 // create a second order.
 func TestD5OdooRestoredCommittedOrderMissing(t *testing.T) {
 	e := newR1Env(t)
@@ -611,7 +611,7 @@ func TestD5OdooRestoredAfterFenceDelayedRequestRefused(t *testing.T) {
 }
 
 // The anchor behind the engine database: writes stop, and the gate fails
-// until Aakhil confirms the anchor repair.
+// until an authorised confirmer completes the anchor repair.
 func TestD5AnchorBehindNeedsConfirmedRepair(t *testing.T) {
 	e := newR1Env(t)
 	p := e.permitted()
@@ -625,7 +625,7 @@ func TestD5AnchorBehindNeedsConfirmedRepair(t *testing.T) {
 	if g := a.gate(); g.Passed || gateCheck(g, "ANCHOR_NOT_BEHIND").Passed {
 		t.Fatalf("gate %+v", g)
 	}
-	// Decision 4: Uday prepares, Kaif reviews, Aakhil confirms.
+	// Decision 4: Preparation, review and confirmation use distinct principals.
 	ctx := context.Background()
 	id, err := e.eng.PrepareRepair(ctx, uday, p.operation, engine.RepairAnchor, "engine-db-export-2026-10-28", "anchor behind")
 	if err != nil {
@@ -920,7 +920,7 @@ func (e *env) destActionForPermit(p permitted) connector.Action {
 // Case C: Odoo holds an order that neither the anchor nor the engine knows
 // (both lost it). It is rebuilt from the engine's own permit for that
 // op_ref, verified against the order and committed; writes stay off until
-// Aakhil confirms the anchor repair, then resume.
+// an authorised confirmer completes the anchor repair, then resume.
 func TestD5CaseCOrderOnlyOdooKnowsIsRebuilt(t *testing.T) {
 	e := newR1Env(t)
 	a := withAnchor(t, e)
@@ -981,7 +981,7 @@ func TestD5CaseCUnattributableOrdersKeepTheGateClosed(t *testing.T) {
 // Both restored after a committed order whose CREATE_DONE survived: one
 // reconciliation pass rebuilds the operation, commits it from CREATE_DONE,
 // and, because the order is gone from Odoo, writes its BLOCK and flags it
-// (case E). The gate stays closed until Uday records the finding.
+// (case E). The gate stays closed until an operator records the finding.
 func TestD5BothRestoredAfterCommitWithCreateDone(t *testing.T) {
 	e := newR1Env(t)
 	a := withAnchor(t, e)

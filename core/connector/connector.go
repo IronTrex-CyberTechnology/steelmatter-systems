@@ -1,7 +1,6 @@
-// Package connector defines the engine-connector interface agreed as D1
-// (Uday and Kaif, 28 Oct 2026; v1.3 adds REFUSED_OUT_OF_SCOPE). The engine owns operation state and every
-// allowance move; a connector only reports destination facts and never
-// writes to Steelmatter's ledger.
+// Package connector defines the interface between the engine and a destination.
+// The engine owns operation state and all allowance changes. A connector reports
+// destination facts and never writes to the ledger.
 //
 // The rule every implementation must keep: a timeout, lost reply, ambiguous
 // error or plain "not found" is never proof that no order exists. Only a
@@ -64,7 +63,7 @@ const (
 // Tombstones reports whether o is a structured module refusal that blocks
 // the op_ref permanently. Like FENCED, it releases an amount only when the
 // result also shows the block committed durably and no earlier create
-// occurred (Result.ProvesNoOrder; Aakhil, 28 Oct 2026).
+// occurred (Result.ProvesNoOrder).
 func (o Outcome) Tombstones() bool {
 	return o == RefusedFenced || o == RefusedSupplierStale || o == RefusedPriorAttempt || o == RefusedOutOfScope
 }
@@ -75,7 +74,7 @@ type Line struct {
 	Quantity       int64  `json:"quantity"`
 	UnitPriceMinor int64  `json:"unit_price_minor"` // per UnitRef, before tax
 	// UnitRef is the authorised unit of Quantity, mapped like ItemRef (D1
-	// v1.4, Aakhil's decision 1). Empty means the product's base unit. The
+	// v1.4). Empty means the product's base unit. The
 	// destination never converts it or substitutes a purchase unit.
 	UnitRef string `json:"unit_ref,omitempty"`
 	// TaxRefs are the authorised taxes on the line, sorted, mapped like
@@ -121,7 +120,7 @@ type Action struct {
 	PermitDigest   string `json:"permit_digest"`
 	ExpectedMinSeq int64  `json:"expected_min_seq"`
 
-	// D1 v1.4 (Aakhil's decisions 1 and 2). Nil means not sent by an engine
+	// D1 v1.4. Nil means not sent by an engine
 	// older than v1.4: the destination then requires an untaxed order whose
 	// lines sum to AmountMinor, and cannot check the delivery address.
 	AmountUntaxedMinor *int64 `json:"amount_untaxed_minor,omitempty"` // sum of quantity x unit price
@@ -292,7 +291,7 @@ type Proof struct {
 }
 
 // RestoreProof is the destination module's access to its restore-proof
-// record. Kaif's Odoo module writes it with the steelmatter-dest-writer
+// record. The Odoo module writes it with the steelmatter-dest-writer
 // identity; the stub connector uses the same interface. A read or write
 // error means the record is unavailable: the module must fail closed.
 type RestoreProof interface {
