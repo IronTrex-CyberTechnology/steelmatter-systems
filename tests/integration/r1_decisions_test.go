@@ -527,9 +527,8 @@ func TestR1ObserveOnlyNeverPurchases(t *testing.T) {
 	if e.count(`SELECT count(*) FROM steelmatter.dispatches WHERE op_ref = $1`, p.operation) != 0 {
 		t.Fatal("observe-only recorded a dispatch")
 	}
-	// Observe-only never writes to the destination, not even a fence
-	//: the earlier operation is only looked up and
-	// stays held.
+	// Observe-only settlement looks up the earlier dispatch and keeps its amount
+	// held. It cannot create an order or fence the operation at the destination.
 	requireExecution(t, "earlier dispatch", e.settle(earlier.operation, a.s), engine.DispatchPending)
 	if a.s.Creates() != 0 || a.s.StateOf(earlier.operation) != stub.Absent {
 		t.Fatalf("observe-only wrote to the destination: creates %d, state %q", a.s.Creates(), a.s.StateOf(earlier.operation))
