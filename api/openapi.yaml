@@ -206,6 +206,10 @@ paths:
         supplier revision, mandate revision and control epoch, and its approver still holds approval rights.
         Otherwise evaluation returns DENY APPROVAL_REQUIRED or APPROVAL_STALE. The issuer and actor of an action
         can never approve it (403). An approval reserves nothing; capacity is checked when the permit is issued.
+        Admission checks the latest approval again under the same locks. Withdrawal before admission
+        refuses dispatch with HTTP 403 and keeps the permit reservation until normal release or expiry.
+        After dispatch commits, a withdrawal returns HTTP 409 ALREADY_COMMITTED and the operation
+        follows its existing settlement and reconciliation path.
         Each call records one decision; approvals are never changed or deleted.
       x-steelmatter-principals: [operator, owner]
       parameters:
@@ -947,6 +951,8 @@ components:
         - ALREADY_COMMITTED
         - AMENDMENT_ID_CONFLICT
         - AMOUNT_MISMATCH
+        - APPROVAL_REQUIRED
+        - APPROVAL_STALE
         - ARITHMETIC_OVERFLOW
         - AUDIENCE_MISMATCH
         - AUTHORITY_REVOKED

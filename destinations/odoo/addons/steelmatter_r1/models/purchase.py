@@ -1,7 +1,7 @@
 """op_ref on purchase orders, the purchase-write guard, and journal rows for
 changes made in Odoo.
 
-Only Steelmatter writes purchase orders (R1 decision 6, R1-DEF-10): creating,
+By default only Steelmatter writes purchase orders (R1 decision 6, R1-DEF-10): creating,
 editing or deleting an order or its lines is refused for every Odoo user except
 the module's own execution path (superuser, reached only through
 steelmatter.api) and Odoo administrators. Administrators keep that ability so
@@ -38,14 +38,42 @@ def internal(env):
     return env.su and env.context.get("steelmatter_create")
 
 
-def guard(records, vals=None):
+def manual_buyer(user):
+    return (user.has_group("steelmatter_r1.group_manual_buyer")
+            and not user.has_group("steelmatter_r1.group_executor")
+            and not user.has_group("steelmatter_r1.group_observer"))
+
+
+def guard(records, vals=None, creating=False):
     env = records.env
     if env.su or env.user.has_group("base.group_system"):
         return
-    if vals is not None and set(vals) <= CHATTER_FIELDS:
+    if not creating and vals and set(vals) <= CHATTER_FIELDS:
         return
-    raise AccessError(_("Purchase orders in this company are created and changed only by Steelmatter. "
-                        "Ask an administrator if an order must be changed."))
+    if not manual_buyer(env.user):
+        raise AccessError(_("This purchasing route requires Steelmatter."))
+    vals = vals or {}
+    if any(k.startswith("sm_") for k in vals) or (creating and any(
+            k.startswith("default_sm_") for k in env.context)):
+        raise AccessError(_("Steelmatter references can only be set by the execution service."))
+
+    if records._name == "purchase.order.line":
+        orders = records.order_id
+        target = vals.get("order_id") or (env.context.get("default_order_id") if creating else None)
+        if target:
+            orders |= env["purchase.order"].browse(target)
+    else:
+        orders = records
+        commands = vals.get("order_line", env.context.get("default_order_line", []) if creating else [])
+        if commands:
+            own_lines = set(records.order_line.ids)
+            for cmd in commands:
+                if cmd[0] == 4 or (cmd[0] == 6 and not set(cmd[2]) <= own_lines):
+                    raise AccessError(_("Manual orders cannot take lines from another order."))
+                if cmd[0] in (1, 2, 3) and cmd[1] not in own_lines:
+                    raise AccessError(_("Only this order's lines can be changed."))
+    if orders.filtered("sm_op_ref"):
+        raise AccessError(_("A Steelmatter order can only be changed through its protected route."))
 
 
 class PurchaseOrder(models.Model):
@@ -65,8 +93,11 @@ class PurchaseOrder(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        guard(self)
+        for vals in vals_list:
+            guard(self, vals, creating=True)
         orders = super().create(vals_list)
+        if not self.env.su and not self.env.user.has_group("base.group_system") and orders.filtered("sm_op_ref"):
+            raise AccessError(_("Manual purchasing cannot create a protected order."))
         for o in orders.filtered(lambda o: not o.sm_op_ref):
             append_journal(self.env.cr, "foreign_created", po_name=o.name, currency=o.currency_id.name,
                            amount_minor=minor(o.amount_total, o.currency_id))
@@ -112,8 +143,11 @@ class PurchaseOrderLine(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        guard(self)
+        for vals in vals_list:
+            guard(self, vals, creating=True)
         lines = super().create(vals_list)
+        if not self.env.su and not self.env.user.has_group("base.group_system") and lines.order_id.filtered("sm_op_ref"):
+            raise AccessError(_("Manual purchasing cannot add lines to a protected order."))
         self._sm_journal(lines.order_id, "line added")
         return lines
 

@@ -4,6 +4,12 @@ R1 delivers exact-action purchase-order admission, conserved spending allowances
 
 The supported deployment scope is controlled evaluation with synthetic data and isolated infrastructure. General production readiness has not been established.
 
+## R1 purchasing correction
+
+Earlier R1 preview source could accept a dispatch after its exact-action approval was withdrawn. The engine now checks the latest decision inside the transaction that commits dispatch. If withdrawal commits first, dispatch returns HTTP 403 and creates no purchase order. If dispatch commits first, a later withdrawal returns HTTP 409 and the admitted operation can be reconciled. Existing reservations follow their normal expiry and release rules.
+
+The optional coverage-only Odoo add-on lets a team inventory purchasing routes before installing enforcement. On an enforced installation, an explicitly designated buyer can handle ordinary purchases outside Steelmatter’s controls. See the [Odoo installation and coverage guide](docs/odoo-purchasing-coverage.md).
+
 ## Included behaviour
 
 - Owner-issued mandates, shared INR allowances, versioned instructions and exact-action permits.

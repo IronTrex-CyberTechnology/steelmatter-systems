@@ -28,6 +28,7 @@ from odoo import SUPERUSER_ID, api, models, release
 from . import anchor
 from .api import EXECUTOR, MODULE_VERSION, OBSERVER, SUPPORTED_SERIES
 from .operation import head
+from .purchase import manual_buyer
 
 ENFORCED, OBSERVED, UNPROTECTED, UNKNOWN = "enforced", "observed", "unprotected", "unknown"
 
@@ -110,20 +111,24 @@ class SteelmatterApiCoverage(models.AbstractModel):
         # The module refuses purchase-order writes from everyone but its own
         # execution path and administrators (R1 decision 6, R1-DEF-10). Users
         # whose Odoo groups would otherwise allow it are listed as blocked;
-        # administrators keep the ability and are the unprotected route.
+        # administrators and designated manual buyers retain explicit direct routes.
         direct, blocked = [], []
         for u in users - steelmatter_users:
             c, w = can(u, "purchase.order", "create"), can(u, "purchase.order", "write")
             if c or w:
                 entry = {"login": u.login, "name": u.name, "create": c, "confirm_or_edit": w,
                          "groups": sorted(g.full_name for g in u.groups_id if g.full_name.startswith(("Purchase", "Administration", "Inventory")))}
-                (direct if u.has_group("base.group_system") else blocked).append(entry)
+                if u.has_group("base.group_system") or manual_buyer(u):
+                    entry["scope"] = "all orders" if u.has_group("base.group_system") else "unprotected orders only"
+                    direct.append(entry)
+                else:
+                    blocked.append(entry)
         direct.sort(key=lambda s: s["login"])
         blocked.sort(key=lambda s: s["login"])
         routes.append(_route(
             "direct_users", "Odoo users who can create or confirm purchase orders without Steelmatter",
             UNPROTECTED if direct else ENFORCED,
-            ("administrators only; %d other users with purchase rights are refused by the module" % len(blocked)) if direct
+            ("administrators and explicitly assigned manual buyers; %d other users with purchase rights are refused by the module" % len(blocked)) if direct
             else "no one: %d users with purchase rights are refused by the module" % len(blocked),
             subjects=direct, count=len(direct)))
         routes[-1]["blocked_by_module"] = blocked
@@ -131,9 +136,9 @@ class SteelmatterApiCoverage(models.AbstractModel):
         keyed = []
         for u in users - steelmatter_users:
             n = env["res.users.apikeys"].search_count([("user_id", "=", u.id)])
-            if n and u.has_group("base.group_system"):
+            if n and (u.has_group("base.group_system") or manual_buyer(u)) and (can(u, "purchase.order", "create") or can(u, "purchase.order", "write")):
                 keyed.append({"login": u.login, "api_keys": n})
-        routes.append(_route("api_keys", "API keys of administrators (the only users who can write purchase orders)",
+        routes.append(_route("api_keys", "API keys of users with a direct purchasing route",
                              UNPROTECTED if keyed else ENFORCED,
                              "an integration holding one of these keys writes orders without Steelmatter" if keyed
                              else "none found", subjects=keyed, count=len(keyed)))

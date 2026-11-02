@@ -89,6 +89,44 @@ class Bypasses(unittest.TestCase):
         finally:
             ADMIN.call("res.users", "write", [uid], {"active": False})
 
+    def test_manual_buyer_and_protected_orders_coexist(self):
+        login, pw = "manual-" + RUN, uuid.uuid4().hex
+        groups = [xmlid("purchase", "group_purchase_user"), xmlid("steelmatter_r1", "group_manual_buyer")]
+        uid = ADMIN.call("res.users", "create", {"login": login, "name": login, "password": pw,
+                         "groups_id": [(6, 0, groups)]}, context={"no_reset_password": True})
+        try:
+            buyer = Identity(login, pw)
+            supplier = ADMIN.call("res.partner", "search", [("sm_ref", "=", "sup-desks")])[0]
+            product = ADMIN.call("product.product", "search", [("sm_ref", "=", "desk-std")])[0]
+            line_vals = {"product_id": product, "product_qty": 1, "price_unit": 100.0}
+            manual = buyer.call("purchase.order", "create", {"partner_id": supplier, "order_line": [(0, 0, line_vals)]})
+            buyer.call("purchase.order", "write", [manual], {"partner_ref": "manual-rfq"})
+            normal_line = buyer.call("purchase.order.line", "search", [("order_id", "=", manual)])[0]
+            buyer.call("purchase.order.line", "write", [normal_line], {"product_qty": 2})
+            buyer.call("purchase.order", "button_confirm", [manual])
+            self.assertIn(login, [u["login"] for u in route(coverage(), "direct_users")["subjects"]
+                                  if u["scope"] == "unprotected orders only"])
+
+            op = "cov-" + RUN + "-coexist"
+            self.assertEqual(EXECUTOR.api("sm_create", action(op))["outcome"], "CREATED")
+            protected = ADMIN.call("purchase.order", "search", [("sm_op_ref", "=", op)])[0]
+            line = ADMIN.call("purchase.order.line", "search", [("order_id", "=", protected)])[0]
+            with self.assertRaises(RPCError):
+                buyer.call("purchase.order", "create", {"partner_id": supplier}, context={"default_sm_op_ref": "forged"})
+            with self.assertRaises(RPCError):
+                buyer.call("purchase.order", "write", [manual], {"sm_op_ref": "forged"})
+            with self.assertRaises(RPCError):
+                buyer.call("purchase.order", "write", [protected], {"partner_ref": "tampered"})
+            with self.assertRaises(RPCError):
+                buyer.call("purchase.order.line", "write", [line], {"order_id": manual})
+            with self.assertRaises(RPCError):
+                buyer.call("purchase.order.line", "write", [normal_line], {"order_id": protected})
+            with self.assertRaises(RPCError):
+                buyer.call("purchase.order", "write", [manual], {"order_line": [(4, line)]})
+            self.assertEqual(ADMIN.call("purchase.order.line", "read", [line], fields=["order_id"])[0]["order_id"][0], protected)
+        finally:
+            ADMIN.call("res.users", "write", [uid], {"active": False})
+
     def test_executor_with_purchase_rights_is_flagged(self):
         uid, gid = user_id("sm_executor"), xmlid("purchase", "group_purchase_user")
         ADMIN.call("res.users", "write", [uid], {"groups_id": [(4, gid)]})

@@ -6,7 +6,9 @@ Steelmatter binds machine actions to explicit mandates, exact-action permits and
 
 The execution path protects supplier, delivery, quantity, unit and tax details; rejects stale approvals and changed actions; and uses stable operation references to prevent duplicate purchases within the supported Odoo integration. Recovery anchoring detects restored state and keeps new writes fenced until reconciliation passes. Signed execution and observation records can be verified offline.
 
-## Verified results
+**R1 preview update.** Earlier revisions could admit a purchase after approval withdrawal. This revision checks approval again when dispatch commits. For deployment scope, upgrade details and the coverage-only Odoo install, see the [release notes](RELEASE_NOTES.md) and [purchasing guide](docs/odoo-purchasing-coverage.md).
+
+## Historical verification results
 
 The [31 October 2026 main-branch CI run](https://github.com/IronTrex-CyberTechnology/steelmatter-systems/actions/runs/41196339479) passed on source commit `f8b6ebe26c845c4990959b7abbeec8ae58345dd9`:
 

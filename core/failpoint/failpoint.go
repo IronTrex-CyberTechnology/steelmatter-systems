@@ -14,6 +14,7 @@ const (
 	EvaluateBeforeReserveCommit = "evaluate.before_reserve_commit" // reservation written, transaction not committed
 	EvaluateAfterReserve        = "evaluate.after_reserve"         // reservation committed, permit not yet signed
 	EvaluateBeforePersist       = "evaluate.before_persist"        // signed outside the transaction, not yet persisted
+	ApprovalBeforeCommit        = "approval.before_commit"         // decision recorded under lock, transaction not committed
 	AdmissionAfterLocks         = "admission.after_locks"          // all admission locks held, before rechecks
 	AdmissionAfterTargetInsert  = "admission.after_target_insert"  // order row inserted, transaction not committed
 	AdmissionAfterCommit        = "admission.after_commit"         // committed, response not yet sent
