@@ -1,5 +1,5 @@
-// Package api maps the document 03 endpoints (api/openapi.yaml) onto the
-// engine. Order of checks per request: authentication (401), per-principal
+// Package api implements the engine HTTP endpoints specified in api/openapi.yaml.
+// Order of checks per request: authentication (401), per-principal
 // quota (429, when configured), strict closed
 // body parsing (400/422), then engine authorisation and state checks.
 package api
