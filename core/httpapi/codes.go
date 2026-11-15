@@ -17,8 +17,8 @@ const (
 	UseBoth Use = "both"
 )
 
-// CodeSpec maps one condition to one stable code (I02 checklist item 2,
-// document 03 Errors). api/openapi.yaml enumerates exactly these codes.
+// CodeSpec describes an OpenAPI code, its HTTP status and retryability,
+// and whether it can appear in an error response or a policy denial.
 type CodeSpec struct {
 	Code      string
 	Status    int

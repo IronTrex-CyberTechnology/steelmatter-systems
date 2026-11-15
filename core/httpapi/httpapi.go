@@ -1,5 +1,5 @@
-// Package httpapi holds transport conventions shared by every endpoint:
-// the error envelope and request correlation IDs (document 03, Errors).
+// Package httpapi defines the JSON error envelope and server-generated request IDs
+// shared by the engine's HTTP endpoints.
 package httpapi
 
 import (
@@ -10,7 +10,7 @@ import (
 	"net/http"
 )
 
-// Error is the document 03 error envelope.
+// Error is the JSON error envelope returned by HTTP handlers.
 type Error struct {
 	ErrorCode   string `json:"error_code"`
 	Message     string `json:"message"`
@@ -19,7 +19,7 @@ type Error struct {
 	OperationID string `json:"operation_id,omitempty"`
 }
 
-// Stable error codes defined so far. I02 maps every condition to one code.
+// Common handler error codes. See Catalogue for the complete set.
 const (
 	CodeServiceUnavailable = "SERVICE_UNAVAILABLE"
 	CodeNotFound           = "NOT_FOUND"
