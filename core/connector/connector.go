@@ -1,5 +1,5 @@
-// Package connector defines the engine-connector interface agreed as D1
-// (Uday and Kaif, 28 Oct 2026; v1.3 adds REFUSED_OUT_OF_SCOPE). The engine owns operation state and every
+// Package connector defines how destination adapters execute, locate and fence operations.
+// The engine owns operation state and every
 // allowance move; a connector only reports destination facts and never
 // writes to Steelmatter's ledger.
 //

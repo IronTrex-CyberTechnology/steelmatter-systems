@@ -1,12 +1,9 @@
-// Package anchor is the Steelmatter recovery anchor (D5 v3, decided 28 Oct
-// 2026, option 1): a separate PostgreSQL database, outside the rollback
-// domain of both the engine database and Odoo, holding append-only,
-// hash-chained records from which the authorised request, the budget move and
-// the outcome of every R1 operation can be recovered.
+// Package anchor stores append-only, hash-chained recovery records in PostgreSQL.
+// Each record preserves evidence needed to reconcile an authorised request,
+// its budget movement and the destination outcome.
 //
-// It runs locally for now (no paid hosting). Its backups must never be
-// restored together with the engine's or Odoo's: restoring Steelmatter or
-// Odoo leaves the anchor's purchase history untouched.
+// Keep the anchor in a separate rollback domain. Restoring the engine or Odoo
+// must leave the anchor’s purchase history intact.
 package anchor
 
 import (
