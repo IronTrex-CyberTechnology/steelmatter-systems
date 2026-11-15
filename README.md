@@ -6,6 +6,10 @@ Steelmatter binds machine actions to explicit mandates, exact-action permits and
 
 The execution path protects supplier, delivery, quantity, unit and tax details; rejects stale approvals and changed actions; and uses stable operation references to prevent duplicate purchases within the supported Odoo integration. Recovery anchoring detects restored state and keeps new writes fenced until reconciliation passes. Signed execution and observation records can be verified offline.
 
+## Module 1
+
+Steelmatter Module 1 brings the R0 foundation, R1 protected execution and the work previously grouped under R2 into one open-source module. IronTrex plans to publish Module 1 on **20 November 2026**. The R1 release below shows this authority model in action: an agent can place an Odoo purchase order only on approved terms, within its spending allowance, with signed evidence of the outcome.
+
 ## Verified results
 
 The [31 October 2026 main-branch CI run](https://github.com/IronTrex-CyberTechnology/steelmatter-systems/actions/runs/41196339479) passed on source commit `f8b6ebe26c845c4990959b7abbeec8ae58345dd9`:
@@ -14,7 +18,7 @@ The [31 October 2026 main-branch CI run](https://github.com/IronTrex-CyberTechno
 |---|---|
 | Required test identities | **527 passed** across seven phases |
 | Executed test records in those phases, including subtests | **1,194 passed; zero failed or skipped** |
-| Mapped acceptance cases | **41 passed; three R2 cases outside the active scope** |
+| Mapped acceptance cases | **41 passed; three cases outside the R1 gate** |
 | Separate real-Odoo execution and recovery suite | **22 passed test records** |
 | Public source export | **Independent build and Go tests passed** |
 

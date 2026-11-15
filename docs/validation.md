@@ -25,7 +25,7 @@ These results are a dated snapshot of that exact source. Later documentation or 
 | **Seven-phase total** | **1,194** | **0** | **0** |
 | Separate real-Odoo execution and recovery gate | 22 | 0 | 0 |
 
-The aggregate gate required **527 test identities** across the seven phases. Its acceptance report recorded **41 PASS, zero FAIL, zero BLOCKED and three NOT_RUN**. The three excluded cases are T36 (external risk signal outage), T37 (delegation narrowing) and T38 (multiple customer tenants); each belongs to R2. The source-export build and Go tests also passed.
+The aggregate gate required **527 test identities** across the seven phases. Its acceptance report recorded **41 PASS, zero FAIL, zero BLOCKED and three NOT_RUN**. The three excluded cases are T36 (external risk signal outage), T37 (delegation narrowing) and T38 (multiple customer tenants). These cases were catalogued under the former R2 workstream, now part of Module 1. Their recorded R1 result is NOT_RUN. The source-export build and Go tests also passed.
 
 Executed records include subtests. Required identities are the gate's selected tests. Acceptance cases group those tests by behaviour. These counts measure different things and must not be added together or presented as independent security audits.
 
