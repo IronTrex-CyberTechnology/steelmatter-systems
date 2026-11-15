@@ -1,5 +1,5 @@
-// Package stub is an in-memory connector.Connector that follows the agreed
-// Odoo module semantics (D1 v1, D3, D5 v3): one record per op_ref, create and
+// Package stub models the Odoo connector in memory for execution and recovery tests.
+// It maintains one record per op_ref, with create and
 // fence serialised on it, permanent tombstones, a commit-ordered sequence and
 // the expected_min_seq restore gate. It also models the destination's
 // restore-proof record (the "journal outside Odoo's rollback"): a create
