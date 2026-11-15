@@ -57,6 +57,6 @@ R1's documented scope is one tenant, one Odoo company, one active backend and IN
 
 The [documented security work](r1-decisions.md) includes secret management and credential rotation, separate API/worker database roles, database/anchor mTLS, anchor-write alerting and HSM/KMS signing-key integration. Database owners and privileged administrators remain trusted. The application defaults to a loopback HTTP listener; any external deployment must define its authenticated network boundary and transport security.
 
-Production qualification is specific to the deployment. Evidence to collect beyond the published R1 results includes sustained load and soak tests against service objectives, independent penetration testing, and verification of access and key management, transport controls, monitoring and backup recovery in the target environment.
+The published results cover execution correctness and recovery. For enterprise deployments, define service objectives, sustained-load tests, independent security testing and operational acceptance criteria against the target environment.
 
 An observer database outage can delay readback after reconnection. QA observed about 80 seconds before eventual MATCH in one case; this is neither a latency target nor a maximum-delay guarantee. Historical pre-fix anchored-revision conflicts remain outside fresh-deployment qualification. See [release notes](../RELEASE_NOTES.md) for accepted limits.
