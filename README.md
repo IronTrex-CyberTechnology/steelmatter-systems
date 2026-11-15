@@ -26,20 +26,20 @@ The Apache-2.0 R1 engine authorises Odoo 18 purchase orders, enforces spending l
 
 The R1 sandbox uses synthetic data on isolated infrastructure with one tenant, one Odoo company and one active backend. Amounts are recorded in integer paise (INR). Start external integration evaluation in observe-only mode. See [R1 configuration and security controls](docs/r1-decisions.md) and [release notes](RELEASE_NOTES.md).
 
-The local quickstart uses the R0 synthetic destination. The R1 sandbox exercises external Odoo execution separately. MCP purchase creation remains outside R1 scope.
+The local quickstart uses the R0 synthetic destination. The R1 sandbox exercises external Odoo execution separately. Use the R1 sandbox for purchase creation. The [MCP adapter](adapters/mcp/README.md) exposes action evaluation and operation admission.
 
-The service is written in Go ([ADR-001](docs/adr/ADR-001-go-service.md)). Start with the synthetic [quickstart](docs/quickstart.md), then follow its R1 sandbox section. Read the [R1 decisions and limits](docs/r1-decisions.md) and [recovery procedures](docs/r1-recovery-operations.md) before evaluating external execution.
+The service is written in Go ([ADR-001](docs/adr/ADR-001-go-service.md)). Start with the synthetic [quickstart](docs/quickstart.md), then follow its R1 sandbox section. Review the [R1 architecture and deployment scope](docs/r1-decisions.md) and [recovery procedures](docs/r1-recovery-operations.md) before configuring an external destination.
 
 ## Status
 - **Contracts:** [docs/contracts/I02-contract.md](docs/contracts/I02-contract.md) covers strict JSON input, payload validation, RFC 8785 digests, SM-JWS-ES256-1 signing, Go/TypeScript golden vectors, the closed OpenAPI spec and the PostgreSQL locking prototype.
 - **I03–I06 core transactions:** transactional budget accounting, exact-action admission and crash recovery; see [docs/engine.md](docs/engine.md). The R0 baseline includes 40 integration scenarios covering T01–T16, T20, T22, T23, T27, T28 and T39–T41, including real process-crash tests. The active R1 gate extends this baseline.
 - **I07 evidence:** read-only observer, signed execution and observation records, evidence export and reconcile, and the standalone TypeScript verifier and CLI; see [docs/evidence.md](docs/evidence.md).
-- **I08 demo:** `scripts/demo` runs the flagship, stale-supplier, lost-response and agent-injection scenarios from a clean state; see [docs/quickstart.md](docs/quickstart.md). `scripts/ci` also writes the 31-case day-4 report to `.out/sprint-day4-report.md`.
+- **I08 demo:** `scripts/demo` runs the flagship, stale-supplier, lost-response and agent-injection scenarios from a clean state; see [docs/quickstart.md](docs/quickstart.md). `scripts/ci` also writes the 31-case regression report to `.out/sprint-day4-report.md`.
 - **SDK:** `packages/sdk` is a typed client for the R0 and R1 HTTP APIs, with timeouts and contract-aware retries; see [packages/sdk/README.md](packages/sdk/README.md). 
 - **MCP adapter:** `adapters/mcp` is a thin stdio MCP server forwarding authenticated calls through the SDK; the service enforces assigned-actor execution and ADR-002 read access; see [adapters/mcp/README.md](adapters/mcp/README.md).
-- **Browser demo:** implemented as recorded playback with browser-side evidence verification; see [demo/README.md](demo/README.md).
+- **Evidence replay:** replay a recorded execution trace and verify its signed evidence in your browser; see [demo/README.md](demo/README.md).
 - **Acceptance reporting:** the active `r1-engine` gate is defined in [ci/required.json](ci/required.json). It requires 527 test identities across seven phases. The separate real-Odoo gate runs external execution and recovery scenarios. Required identities, executed assertions and independent QA cases are different counts; report them separately.
-- **Distribution:** Apache-2.0 source. TypeScript packages are included in the repository and remain `private: true` rather than published npm packages. See [RELEASE_NOTES.md](RELEASE_NOTES.md) for the supported scope.
+- **Distribution:** Apache-2.0 source. The TypeScript SDK, verifier and MCP adapter ship as source for local workspace builds. See [RELEASE_NOTES.md](RELEASE_NOTES.md) for the supported scope.
 
 ## Requirements
 Pinned in [versions.env](versions.env): Go 1.27.3, PostgreSQL 17.10, Node 26.11.0. Library pins are in `go.mod` and `packages/verifier/package-lock.json`.
@@ -86,7 +86,7 @@ The admin URL needs `CREATEDB` and `CREATEROLE`. Each integration test creates i
 - **I03-I06**: core transactions.
 - **I07**: evidence.
 - **I08**: the 340-check implementation baseline.
-- **sprint-day4**: the 31-case checkpoint.
+- **31-case regression checkpoint** (`sprint-day4`).
 - **full-R0**: the retained R0 acceptance stage.
 - **r1-engine**: the active stage, including R1 execution, recovery and demo provenance checks.
 
