@@ -2,6 +2,12 @@
 
 R1 delivers exact-action purchase-order admission, conserved spending allowances and destination-outcome reconciliation for Odoo 18. It extends the R0 transactional engine with external execution, recovery anchoring and verifiable outcome evidence.
 
+## Release direction
+
+Steelmatter Module 1 brings the R0 foundation, R1 protected execution and the work previously grouped under R2 into one open-source module. IronTrex plans to publish Module 1 on **20 November 2026**.
+
+## R1 deployment
+
 The R1 sandbox runs on isolated infrastructure with synthetic data. For production integration, deployment architecture and support options, contact [IronTrex Commercial](https://www.irontrex.com/contact).
 
 ## Included behaviour
