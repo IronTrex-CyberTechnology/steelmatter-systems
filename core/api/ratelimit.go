@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Limiter is a per-principal token bucket (document 03: 429 quota). Each
+// Limiter is a per-principal token bucket for HTTP request quotas. Each
 // authenticated principal may make Burst requests at once, refilled at
 // PerMinute requests per minute. Quota is checked after authentication and
 // before body parsing, so a rejected request has no effect. State is

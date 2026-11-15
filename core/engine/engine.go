@@ -1,4 +1,4 @@
-// Package engine implements the R0 transactions (I03-I06): mandates,
+// Package engine implements the engine's transactional operations: mandates,
 // trusted instructions, amendments, reservations, signed permits, atomic
 // admission, cleanup, recovery and the outbox.
 //
@@ -8,7 +8,7 @@
 //
 // and rechecks time with clock_timestamp() after the locks. No external call
 // (including signing) happens inside a mutation transaction, with one
-// deliberate exception for R1 (D5 v3): the append to the recovery anchor,
+// deliberate exception for R1 recovery: the append to the recovery anchor,
 // which must be durable before the engine commits a dispatch intent or a
 // destination outcome. The anchor never calls back into the engine, so its
 // stream-head lock cannot form a cycle with the engine's locks.
@@ -189,12 +189,12 @@ func newID(prefix string) string {
 
 // RetryBackoff is the wait before attempt 2 and attempt 3 of a transaction
 // that failed with a serialization failure (40001) or deadlock (40P01).
-// Specified in I02 §8; pinned by TestRetryBackoffSpecification.
+// See docs/contracts/I02-contract.md §8 and TestRetryBackoffSpecification.
 var RetryBackoff = []time.Duration{10 * time.Millisecond, 50 * time.Millisecond}
 
 // TxBudget bounds one inTx call including retries, so the whole request
 // stays under the HTTP write timeout. Each attempt is also bounded to 30 s
-// by PostgreSQL's transaction_timeout (document 02 limits).
+// by PostgreSQL's transaction_timeout.
 const TxBudget = 30 * time.Second
 
 // inTx runs fn in a READ COMMITTED transaction. Serialization failures and
@@ -363,7 +363,7 @@ func (e *Engine) readyWrites(ctx context.Context) error {
 func ts(t time.Time) string { return t.UTC().Format("2006-01-02T15:04:05Z") }
 
 // signer returns the signing key for typ, refusing a key that has been
-// retired since startup (I02 checklist item 5).
+// retired since startup.
 func (e *Engine) signer(typ string) (contract.Signer, error) {
 	s, ok := e.Signers[typ]
 	if !ok {

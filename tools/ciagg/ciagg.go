@@ -1,4 +1,4 @@
-// Package ciagg is the steelmatter-ci aggregate gate (documents 04 and 12, T44).
+// Package ciagg aggregates Go test results for the steelmatter-ci acceptance gate.
 //
 // It reads `go test -json` output for each phase of the active stage and
 // fails when a required phase is missing, any test fails, is skipped or does

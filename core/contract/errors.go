@@ -1,4 +1,4 @@
-// Package contract implements the I02 payload contract: strict JSON input,
+// Package contract implements the canonical payload contract: strict JSON input,
 // payload validation, RFC 8785 canonical bytes, digests and the SM-JWS-ES256-1
 // signing profile. The rules and their check order are specified in
 // docs/contracts/I02-contract.md and mirrored by packages/verifier.

@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// StageReport is a checkpoint report for one stage (e.g. sprint-day4) in the
-// results-template.json shape plus totals.
+// StageReport summarises one acceptance stage using the results-template.json
+// format and includes aggregate totals.
 type StageReport struct {
 	Baseline             string `json:"baseline"`
 	ReportPhase          string `json:"report_phase"`
