@@ -1,6 +1,6 @@
 // Package db owns PostgreSQL bootstrap, roles and schema migrations.
 //
-// Privilege model (document 02, invariants I7 and I9):
+// Database privileges (invariants I7 and I9):
 //   - GroupExecutor: the service's write role. It receives explicit per-table
 //     grants in migrations and never owns objects, so it cannot run DDL.
 //   - GroupObserver: read-only. It receives SELECT on the target projection only.
