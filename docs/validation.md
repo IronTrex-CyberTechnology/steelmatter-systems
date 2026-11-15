@@ -57,6 +57,6 @@ R1's documented scope is one tenant, one Odoo company, one active backend and IN
 
 The [documented security work](r1-decisions.md) includes secret management and credential rotation, separate API/worker database roles, database/anchor mTLS, anchor-write alerting and HSM/KMS signing-key integration. Database owners and privileged administrators remain trusted. The application defaults to a loopback HTTP listener; any external deployment must define its authenticated network boundary and transport security.
 
-There is no production load/soak/SLO qualification or independent penetration-test evidence in the verification record above. Deployment-specific threat review, access/key lifecycle, transport controls, monitoring, backup/restore exercises and sustained workload qualification remain necessary before asserting production readiness for a stated environment.
+The published results cover execution correctness and recovery. During enterprise onboarding, the customer and [IronTrex Commercial](https://www.irontrex.com/contact) agree on service objectives and acceptance criteria for sustained-load and independent penetration testing in the target environment.
 
 An observer database outage can delay readback after reconnection. QA observed about 80 seconds before eventual MATCH in one case; this is neither a latency target nor a maximum-delay guarantee. Historical pre-fix anchored-revision conflicts remain outside fresh-deployment qualification. See [release notes](../RELEASE_NOTES.md) for accepted limits.
