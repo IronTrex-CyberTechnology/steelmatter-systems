@@ -2,7 +2,7 @@
 
 R1 delivers exact-action purchase-order admission, conserved spending allowances and destination-outcome reconciliation for Odoo 18. It extends the R0 transactional engine with external execution, recovery anchoring and verifiable outcome evidence.
 
-The supported deployment scope is controlled evaluation with synthetic data and isolated infrastructure. General production readiness has not been established.
+R1 is qualified for controlled evaluation with synthetic data on isolated infrastructure. For a customer production deployment, contact IronTrex Commercial to define connector, infrastructure and support requirements.
 
 ## Included behaviour
 
