@@ -22,7 +22,9 @@ Coverage includes concurrent budget contention, replay and tampering, process cr
 
 ## Deployment scope
 
-R1 supports controlled evaluation with synthetic data and isolated infrastructure: one tenant, one Odoo company, one active backend and INR integer paise. Start external integration evaluation in observe-only mode. General production readiness has not been established; the deployment limits and remaining security work are documented in [R1 decisions](docs/r1-decisions.md) and [release notes](RELEASE_NOTES.md).
+This repository provides the Apache-2.0 R1 execution engine for protected purchasing. For production connectors, session controls, support SLAs and managed deployments in a private VPC or on premises, contact IronTrex Commercial to scope the integration and qualify it for your environment.
+
+R1 supports controlled evaluation with synthetic data and isolated infrastructure: one tenant, one Odoo company, one active backend and INR integer paise. Start external integration evaluation in observe-only mode. The [R1 decisions](docs/r1-decisions.md) and [release notes](RELEASE_NOTES.md) document deployment limits and remaining security work.
 
 The local quickstart uses the R0 synthetic destination. The R1 sandbox exercises external Odoo execution separately. MCP purchase creation remains outside R1 scope.
 
