@@ -1,10 +1,10 @@
 # IronTrex Steelmatter Systems R1
 
-R1 delivers exact-action purchase-order admission, conserved spending allowances and destination-outcome reconciliation for Odoo 18. It extends the R0 transactional engine with external execution, recovery anchoring and verifiable outcome evidence.
+R1 is the first public implementation of Steelmatter’s action safety runtime. It binds approval to an exact change, reserves shared capacity, and verifies the recorded outcome after a lost reply. The reference connector exercises those controls against Odoo 18 purchasing.
 
 ## Release direction
 
-Steelmatter Module 1 brings the R0 foundation, R1 protected execution and the work previously grouped under R2 into one open-source module. IronTrex plans to publish Module 1 on **20 November 2026**.
+The next planned publication is the open-source core of Module 1 on **20 November 2026**. IronTrex offers customer-specific integration, staging qualification, managed deployment and support separately. The checks below apply to the published R1 build.
 
 ## R1 deployment
 

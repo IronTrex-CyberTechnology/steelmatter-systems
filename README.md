@@ -1,14 +1,23 @@
-# IronTrex Steelmatter Systems
+# Steelmatter by IronTrex
 
-**Open-source execution authority for AI agents.**
+**Action safety for AI agents.** Steelmatter controls which changes an agent can execute and checks what actually happened in the target system. An approval belongs to one exact action. Concurrent agents share a limit. A lost reply keeps the operation open until destination evidence resolves it.
 
-Steelmatter binds machine actions to explicit mandates, exact-action permits and shared spending allowances. R1 implements protected purchase-order execution for Odoo 18: authorise the precise purchase, preserve its budget while the outcome is uncertain, and reconcile destination evidence before settlement.
+**Open source · Apache-2.0.** Run the R1 engine, TypeScript SDK, MCP adapter, recovery tools and offline evidence verifier. [Start the quickstart](docs/quickstart.md).
+**IronTrex Enterprise.** Bring a workflow to IronTrex for connector integration, staging qualification, managed deployment and ongoing recovery support. [Discuss a deployment](https://www.irontrex.com/steelmatter?interest=enterprise#evaluation-request).
 
-The execution path protects supplier, delivery, quantity, unit and tax details; rejects stale approvals and changed actions; and uses stable operation references to prevent duplicate purchases within the supported Odoo integration. Recovery anchoring detects restored state and keeps new writes fenced until reconciliation passes. Signed execution and observation records can be verified offline.
+## Module 1 · Protected Agent Actions
 
-## Module 1
+**What happens when the release agent loses the deploy response?** In the deployment sandbox, the team approves revision A for a specific service. The agent submits revision B and Steelmatter refuses it before dispatch. It then deploys A, but the reply is lost. The rollout slot stays reserved. Steelmatter checks the running revision and rollout count at the destination, confirms that A ran once, and releases the slot once. The operator can see which revision was approved, which ran, and what evidence closed the operation.
 
-Steelmatter Module 1 brings the R0 foundation, R1 protected execution and the work previously grouped under R2 into one open-source module. IronTrex plans to publish Module 1 on **20 November 2026**. The R1 release below shows this authority model in action: an agent can place an Odoo purchase order only on approved terms, within its spending allowance, with signed evidence of the outcome.
+| Workflow | What the control protects | Evidence scope |
+| --- | --- | --- |
+| Software deployment and service restart | Approved revision or service target, reserved rollout capacity and the outcome after a timeout | Engineering sandboxes |
+| Code merge and confidential file delivery | Reviewed commit and target branch, or exact file version and recipient | Local Git and file-delivery sandboxes |
+| AI spending and billing credits | Shared allowance or exact credit amount, with one business operation across retries | Sandbox accounting. External provider settlement requires separate qualification |
+| Credential rotation | The intended credential, replacement and observed cutover | Staging sandbox |
+| Purchasing | Approved order terms, shared spending capacity and recovery of a single order after a lost reply | Runnable public R1 reference with a separate destination test suite |
+
+The public download is the R1 developer preview. The deployment example and other engineering sandboxes illustrate the wider Module 1 build. Enterprise qualification applies to the named workflow, connector version and customer environment tested. IronTrex plans to publish the next **open-source core** release on **20 November 2026**.
 
 ## Verified results
 
@@ -25,8 +34,6 @@ The [31 October 2026 main-branch CI run](https://github.com/IronTrex-CyberTechno
 Coverage includes concurrent budget contention, replay and tampering, process crashes, lost responses, approval drift, destination changes and restore recovery. These are correctness and recovery results. See [validation evidence and measurement scope](docs/validation.md) for the test breakdown, reproducible entry points and performance limits.
 
 ## Deployment scope
-
-The Apache-2.0 R1 engine authorises Odoo 18 purchase orders, enforces spending limits and reconciles orders after interrupted execution. Contact [IronTrex Commercial](https://www.irontrex.com/contact) for enterprise connectors, session controls, support SLAs and managed VPC or on-premises deployment options.
 
 The R1 sandbox uses synthetic data on isolated infrastructure with one tenant, one Odoo company and one active backend. Amounts are recorded in integer paise (INR). Start external integration evaluation in observe-only mode. See [R1 configuration and security controls](docs/r1-decisions.md) and [release notes](RELEASE_NOTES.md).
 
